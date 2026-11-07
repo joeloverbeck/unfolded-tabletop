@@ -10,6 +10,15 @@ pub struct RequiredAssets {
     pub pending: Vec<String>,
 }
 
+/// FontLoader reads bytes; registration proves the text renderer decoded them.
+pub fn font_registered(font: &Font, context: &mut bevy::text::FontCx) -> bool {
+    !font.alias.is_empty()
+        && context
+            .collection
+            .family_by_name(&font.alias)
+            .is_some_and(|family| !family.fonts().is_empty())
+}
+
 /// `present` checks the real decoded resource, including consumer font rules.
 pub fn required_assets(
     server: &AssetServer,
