@@ -1,0 +1,21 @@
+[package]
+name = "unfolded-tabletop"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+
+[workspace]
+exclude = ["vendor/wgpu-hal"]
+
+[features]
+default = []
+render = ["dep:bevy"]
+
+[dependencies]
+rustix = { version = "1", features = ["fs"] }
+sha2 = "0.10"
+serde_json = "1"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+bevy = { version = "=0.20.0", optional = true, default-features = false, features = ["std", "bevy_asset", "3d_bevy_render", "bevy_picking", "ui_bevy_render"] }
