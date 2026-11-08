@@ -10,6 +10,20 @@ state reporting. Consumers own rules, observations, layout, materials, resource
 meanings, required artwork, renderer admission policy and native-operation policy.
 Enable `render` for the Bevy 0.20.0 modules; preparation works without Bevy.
 
+## Development checks
+
+Run `scripts/check` from a clean clone before publication. It checks full-workspace
+formatting first, then strict Clippy and tests with both default and `render`
+features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
+committed lockfile fixes this repository's verification dependencies. CI runs the
+same entry point on Ubuntu without game assets or a desktop. A focused command is
+only partial evidence. These checks do not replace either application's asset,
+GPU or native acceptance checks.
+
+The workspace's local Cargo patch exercises its owned `vendor/wgpu-hal` copy.
+Consumers still select their own immutable root patch and dependency lockfile;
+this verification setup does not change their pins.
+
 `vendor/wgpu-hal` retains Arkham's narrowly scoped NVIDIA Vulkan staging workaround
 and its upstream licensing. Applications must configure their own Cargo root
 `[patch.crates-io]`; a dependency's patch does not propagate. Pin both the library
@@ -22,7 +36,7 @@ Origin: `joeloverbeck/arkham-unfolded` at
 their respective adapters. There are no bundled game assets or live sibling
 checkout dependencies in the intended published contract.
 
-Active coordinated work and acceptance belong to
+The original coordinated extraction and consumer acceptance belong to
 [Netrunner issue #1](https://github.com/joeloverbeck/netrunner-unfolded/issues/1).
 Each consumer retains independent acceptance authority. Reverting both consumer
 dependency commits returns them to their prior producer; Arkham's prior commit
