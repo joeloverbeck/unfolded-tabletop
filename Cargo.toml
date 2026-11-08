@@ -19,3 +19,8 @@ sha2 = "0.10"
 serde_json = "1"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 bevy = { version = "=0.20.0", optional = true, default-features = false, features = ["std", "bevy_asset", "3d_bevy_render", "bevy_picking", "ui_bevy_render"] }
+
+# Exercise the same owned workaround as both consumers when checking this workspace.
+# Dependency patches do not propagate; consumers still pin their own root patch.
+[patch.crates-io]
+wgpu-hal = { path = "vendor/wgpu-hal" }

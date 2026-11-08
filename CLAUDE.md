@@ -1,7 +1,8 @@
 # Shared tabletop candidate
 
-Read `README.md` before work. Active work is the bounded coordinated extraction
-in https://github.com/joeloverbeck/netrunner-unfolded/issues/1. Preserve consumer
+Read `README.md` before work. Issues in this repository own current work; the
+original coordinated extraction is recorded in
+https://github.com/joeloverbeck/netrunner-unfolded/issues/1. Preserve consumer
 rules, layout, asset policy and native-operation policy in their repositories.
 
 This repository adopts `docs/principles/principles-for-repos.md`, revision
