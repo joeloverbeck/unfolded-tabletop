@@ -5,7 +5,8 @@
 /// it in saved state and resume the same sequence from it.
 ///
 /// The numbers a state produces are a contract with consumers' saved games.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// It is not `Copy`: a silent copy would hand out the same numbers twice.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeededRandom {
     state: u64,
 }

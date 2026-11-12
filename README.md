@@ -18,8 +18,9 @@ preparation and `random` work without Bevy.
 `random` holds Arkham's SplitMix64 generator, its rejection-sampled index and its
 shuffle. Origin: `joeloverbeck/arkham-unfolded` at
 `4e7a014541ef46d8dc8185e2759a139480ea60e3`, `src/gathering.rs` and
-`src/gathering/runtime.rs`. Its consumers are Arkham and `mudsong`, a private
-repository of the same owner. No game's domain enters the module.
+`src/gathering/runtime.rs`. Arkham draws its setup and play randomness from it.
+`mudsong`, a private repository, pins it for its rules library. No game's domain
+enters the module.
 
 A generator's whole state is one `u64`, and the numbers a state produces are a
 contract: a consumer's saved game stores that state and continues only while it
