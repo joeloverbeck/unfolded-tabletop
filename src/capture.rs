@@ -123,18 +123,20 @@ pub enum Failure {
 enum Request {
     Waiting,
     Written(Result<(), String>),
-    /// The caller was told that no picture came back, so none is written later.
-    Withdrawn,
+    /// The caller has its answer, written or given up, so nothing that arrives
+    /// later is written.
+    Ended,
 }
 
 /// Capture `image` to `path`, returning once the file is written. `step` runs one
 /// update of the caller's host, on the caller's clock, and says whether the host
-/// can go on; two milliseconds pass between steps. The caller decides what must
-/// be ready before it asks.
+/// can go on; at least two milliseconds pass between steps. The caller decides
+/// what must be ready before it asks.
 ///
-/// A capture that ends [`Failure::Incomplete`] is withdrawn: a picture that
-/// arrives afterwards is not written. Its request stays in the world until Bevy
-/// has handed that picture back, because Bevy marks the request when it does.
+/// Once the capture has returned, a picture that arrives for it is not written.
+/// So one that ends [`Failure::Incomplete`] leaves no file behind later. Its
+/// request stays in the world until Bevy has handed that picture back, because
+/// Bevy marks the request when it does.
 pub fn image_to_file(
     app: &mut App,
     image: Handle<Image>,
@@ -147,9 +149,9 @@ pub fn image_to_file(
     let target = path.to_owned();
     app.world_mut().spawn(Screenshot::image(image)).observe(
         move |captured: On<ScreenshotCaptured>| {
-            let mut request = slot.lock().unwrap();
-            if matches!(*request, Request::Waiting) {
-                *request = Request::Written(write_image(captured.image.clone(), &target));
+            if matches!(*slot.lock().unwrap(), Request::Waiting) {
+                let written = write_image(captured.image.clone(), &target);
+                *slot.lock().unwrap() = Request::Written(written);
             }
         },
     );
@@ -163,8 +165,7 @@ pub fn image_to_file(
                 _ => None,
             };
             if let Some(outcome) = outcome {
-                // Whatever arrives from here on is not this capture's to write.
-                *request = Request::Withdrawn;
+                *request = Request::Ended;
                 return outcome;
             }
         }

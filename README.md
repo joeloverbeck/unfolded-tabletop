@@ -42,9 +42,10 @@ and the wording of a failure belong to each consumer.
 
 `tests/capture.rs` pins the pixels, the surface and the capture as Arkham had
 them before the move, without a graphics adapter. One behaviour differs on
-purpose: a capture given up as incomplete is withdrawn, so a picture that
-arrives afterwards is no longer written. A real render is each consumer's own
-check.
+purpose: once a capture has returned, a picture that arrives for it is not
+written. In Arkham a capture given up as incomplete still wrote its file when
+the picture came later, and a picture handed back twice was written twice,
+which Bevy does not do. A real render is each consumer's own check.
 
 ## Seeded randomness
 

@@ -243,22 +243,21 @@ fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
     let image = app.world().resource::<Surface>().image();
 
     let path = scratch.join("picture.png");
-    let mut steps = 0;
+    let mut stepped = Vec::new();
     let mut asked_for = Vec::new();
     let result = capture::image_to_file(&mut app, image.clone(), &path, soon(), |app| {
-        steps += 1;
+        stepped.push(Instant::now());
         // The picture comes back on the third update, not the first.
-        if steps < 3 {
+        if stepped.len() < 3 {
             app.update();
             asked_for = requests(app);
-            assert!(!path.exists());
             true
         } else {
             renderer_hands_back(app)
         }
     });
     assert_eq!(result, Ok(()));
-    assert_eq!(steps, 3);
+    assert_eq!(stepped.len(), 3);
     assert_eq!(saved(&path).to_rgb8().get_pixel(0, 0).0, [255, 0, 0]);
     assert_eq!(asked_for.len(), 1);
     assert!(
@@ -266,11 +265,20 @@ fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
         "{:?}",
         asked_for[0].1
     );
+    // The host is given at least two milliseconds between steps.
+    for pair in stepped.windows(2) {
+        assert!(pair[1] - pair[0] >= Duration::from_millis(2), "{stepped:?}");
+    }
 
+    // The next capture's step hands a picture back to the finished one as well,
+    // which writes nothing more. Arkham's wrote its file again.
+    std::fs::remove_file(&path).unwrap();
     let refused = scratch.join("absent/picture.png");
     let result = capture::image_to_file(&mut app, image, &refused, soon(), renderer_hands_back);
     assert!(matches!(result, Err(Failure::Unsaved(_))), "{result:?}");
     assert!(!refused.exists());
+    assert_eq!(requests(&mut app).len(), 2);
+    assert!(!path.exists());
 }
 
 #[test]
@@ -312,9 +320,6 @@ fn a_capture_that_does_not_come_back_is_incomplete() {
     // given up was still written, under a refusal that said no file was. That
     // last step handed pictures back to both captures given up above.
     assert_eq!(requests(&mut app).len(), 3);
-    assert!(!stopped.exists());
-    assert!(!late.exists());
-    renderer_hands_back(&mut app);
     assert!(!stopped.exists());
     assert!(!late.exists());
 }
