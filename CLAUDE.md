@@ -7,7 +7,9 @@ rules, layout, asset policy and native-operation policy in their repositories.
 
 This repository adopts `docs/principles/principles-for-repos.md`, revision
 2026-09-30.1. Its complete agent bootstrap is included below. The accepted
-two-consumer EVID-6 specialization is recorded in `README.md` and issue #1.
+two-consumer EVID-6 specialization is recorded in `README.md` and issue #1. The
+2026-11-11 waiver that admits `mudsong` as a third consumer is recorded in
+`README.md`.
 <!-- BEGIN PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-09-30.1 -->
 ## Repository constitution
 

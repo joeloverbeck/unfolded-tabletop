@@ -1,14 +1,35 @@
 # unfolded-tabletop
 
-Concrete Rust presentation mechanisms extracted from Arkham Unfolded for its
-Gathering table and Netrunner Unfolded's first Brân run. This is a bounded
-two-consumer candidate, not a general tabletop framework.
+Concrete Rust mechanisms extracted from Arkham Unfolded for named consumers:
+presentation mechanisms for its Gathering table and Netrunner Unfolded's first
+Brân run, and seeded randomness for Arkham and `mudsong`. This is a bounded
+candidate with real consumers, not a general tabletop framework.
 
 The library owns verified file reads, bounded PNG crops, atomic prepared-directory
-publication, rounded card geometry, solid textured-token assembly, and asset-load
-state reporting. Consumers own rules, observations, layout, materials, resource
-meanings, required artwork, renderer admission policy and native-operation policy.
-Enable `render` for the Bevy 0.20.0 modules; preparation works without Bevy.
+publication, rounded card geometry, solid textured-token assembly, asset-load
+state reporting, and a seeded generator with its index and shuffle. Consumers own
+rules, observations, layout, materials, resource meanings, required artwork,
+renderer admission policy, native-operation policy, what their randomness decides
+and how its state is saved. Enable `render` for the Bevy 0.20.0 modules;
+preparation and `random` work without Bevy.
+
+## Seeded randomness
+
+`random` holds Arkham's SplitMix64 generator, its rejection-sampled index and its
+shuffle. Origin: `joeloverbeck/arkham-unfolded` at
+`4e7a014541ef46d8dc8185e2759a139480ea60e3`, `src/gathering.rs` and
+`src/gathering/runtime.rs`. Arkham draws its setup and play randomness from it.
+`mudsong`, a private repository, pins it for its rules library. No game's domain
+enters the module.
+
+A generator's whole state is one `u64`, and the numbers a state produces are a
+contract: a consumer's saved game stores that state and continues only while it
+keeps producing the same numbers. `tests/random.rs` pins numbers recorded from
+Arkham before the move, so changing them is a breaking change for every consumer.
+
+Each consumer's pull request records its own migration, checks and acceptance.
+Reverting a consumer's dependency commit returns it to its prior producer;
+Arkham's prior commit contains its original generator.
 
 ## Development checks
 
@@ -17,8 +38,8 @@ formatting first, then strict Clippy and tests with both default and `render`
 features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
 committed lockfile fixes this repository's verification dependencies. CI runs the
 same entry point on Ubuntu without game assets or a desktop. A focused command is
-only partial evidence. These checks do not replace either application's asset,
-GPU or native acceptance checks.
+only partial evidence. These checks do not replace any consumer's own checks:
+asset, GPU, native acceptance or saved-game continuity.
 
 The workspace's local Cargo patch exercises its owned `vendor/wgpu-hal` copy.
 Consumers still select their own immutable root patch and dependency lockfile;
@@ -46,3 +67,26 @@ The accepted, task-scoped `EVID-6` specialization permits extraction on these tw
 actual consumers instead of requiring three contexts. It does not establish
 broad reuse fitness. Production adoption requires both consumer checks and the
 bounded native inspection recorded in the issue.
+
+## Third-consumer waiver
+
+The specialization above covers code used by both Arkham and Netrunner, and for
+any surface it ends when a third consumer appears. On 2026-11-11 the owner
+accepted a further scoped `EVID-6` waiver under `ADOPT-2`, which lets `mudsong`
+be that consumer. It does not edit the constitution. Its authoritative text is
+`docs/foundation/04-engineering-and-shared-code.md` in that private repository;
+this is its record here, carried by the first extraction made under it, the
+seeded randomness above.
+
+| Field | Accepted boundary |
+| --- | --- |
+| Exact rule | `EVID-6`: three materially different real cases and an independent holdout before cross-product adoption |
+| Scope | Concrete mechanisms, not specific to any game, owned in `unfolded-tabletop` and really used by `mudsong` and by at least one of `arkham-unfolded` and `netrunner-unfolded` |
+| Reason | These three are the only real products. Duplicating mechanisms or inventing nominal consumers would defeat the intended reuse |
+| Accepted risk | Two consumers can miss an incompatible assumption; a later case may force an interface change or a reversal |
+| Required evidence | A real path in each consuming application, each repository's own checks, game policy preserved in adapters, and a coordinated rollback |
+| Appetite | Two active hours per extraction attempt, then reassess. No extension into a framework project |
+| Ends | For a given mechanism: a consumer outside these three games, publication to crates.io or a promise of general reuse, or loss of its second real consumer. There is no milestone or date expiry. After that, further sharing needs the normal evidence or a new waiver |
+
+The waiver establishes neither general library fitness nor acceptance of an
+untested migration.
