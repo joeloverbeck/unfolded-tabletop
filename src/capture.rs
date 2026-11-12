@@ -1,7 +1,7 @@
-//! Screen capture extracted from Arkham: a Bevy screenshot written to an image
-//! file with timed diagnostics, and a surface without a window whose image can be
-//! captured. Consumers decide when a capture is taken, what must be ready first,
-//! how updates are stepped and what a failed capture means.
+//! Screen capture extracted from Arkham: a captured picture written to an image
+//! file, and a surface without a window whose image can be captured. Consumers
+//! decide when a capture is taken, what must be ready first, how updates are
+//! stepped, how long a capture may take and what a failed one means.
 use bevy::{
     camera::RenderTarget,
     prelude::*,
@@ -12,55 +12,10 @@ use bevy::{
     window::{ExitCondition, PrimaryWindow},
 };
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
-/// Write the picture when the renderer hands it back. `elapsed` is the consumer's
-/// clock at the request; the diagnostics count on from it.
-pub fn save_to_disk(path: PathBuf, elapsed: Duration) -> impl FnMut(On<ScreenshotCaptured>) {
-    let mut write = writer(path, elapsed);
-    move |captured| {
-        let _ = write(&captured.image);
-    }
-}
-
-/// Write the picture, then exit: successfully only when the file was saved.
-pub fn save_to_disk_and_exit(
-    path: PathBuf,
-    elapsed: Duration,
-) -> impl FnMut(On<ScreenshotCaptured>, MessageWriter<AppExit>) {
-    let mut write = writer(path, elapsed);
-    move |captured, mut exit| {
-        exit.write(if write(&captured.image).is_ok() {
-            AppExit::Success
-        } else {
-            AppExit::error()
-        });
-    }
-}
-
-/// The timed write behind both observers, for a consumer whose exit has further
-/// conditions. It logs the request now and the actual outcome of each write.
-pub fn writer(path: PathBuf, elapsed: Duration) -> impl FnMut(&Image) -> Result<(), String> {
-    let requested = Instant::now();
-    info!(elapsed_seconds = elapsed.as_secs_f64(), path = %path.display(), "Screenshot requested");
-    move |image| {
-        let span = info_span!("Screenshot write", write_started_seconds = (elapsed + requested.elapsed()).as_secs_f64(), path = %path.display());
-        let _entered = span.enter();
-        let result = write_image(image.clone(), &path);
-        match &result {
-            Ok(()) => info!("Screenshot saved to {}", path.display()),
-            Err(error) => error!("Cannot save screenshot: {error}"),
-        }
-        info!(
-            elapsed_seconds = (elapsed + requested.elapsed()).as_secs_f64(),
-            "Screenshot writer returned"
-        );
-        result
-    }
-}
 
 /// Write a captured picture as 8-bit RGB, in the format the path's extension names.
 pub fn write_image(image: Image, path: &Path) -> Result<(), String> {
@@ -164,9 +119,22 @@ pub enum Failure {
     Incomplete,
 }
 
+/// What a capture's observer may still do, and what it did.
+enum Request {
+    Waiting,
+    Written(Result<(), String>),
+    /// The caller was told that no picture came back, so none is written later.
+    Withdrawn,
+}
+
 /// Capture `image` to `path`, returning once the file is written. `step` runs one
 /// update of the caller's host, on the caller's clock, and says whether the host
-/// can go on. The caller decides what must be ready before it asks.
+/// can go on; two milliseconds pass between steps. The caller decides what must
+/// be ready before it asks.
+///
+/// A capture that ends [`Failure::Incomplete`] is withdrawn: a picture that
+/// arrives afterwards is not written. Its request stays in the world until Bevy
+/// has handed that picture back, because Bevy marks the request when it does.
 pub fn image_to_file(
     app: &mut App,
     image: Handle<Image>,
@@ -174,21 +142,31 @@ pub fn image_to_file(
     deadline: Instant,
     mut step: impl FnMut(&mut App) -> bool,
 ) -> Result<(), Failure> {
-    let written: Arc<Mutex<Option<Result<(), String>>>> = Arc::default();
-    let slot = written.clone();
+    let request = Arc::new(Mutex::new(Request::Waiting));
+    let slot = request.clone();
     let target = path.to_owned();
     app.world_mut().spawn(Screenshot::image(image)).observe(
         move |captured: On<ScreenshotCaptured>| {
-            *slot.lock().unwrap() = Some(write_image(captured.image.clone(), &target));
+            let mut request = slot.lock().unwrap();
+            if matches!(*request, Request::Waiting) {
+                *request = Request::Written(write_image(captured.image.clone(), &target));
+            }
         },
     );
     loop {
         let proceed = step(app);
-        if let Some(result) = written.lock().unwrap().take() {
-            return result.map_err(Failure::Unsaved);
-        }
-        if !proceed || Instant::now() >= deadline {
-            return Err(Failure::Incomplete);
+        {
+            let mut request = request.lock().unwrap();
+            let outcome = match &*request {
+                Request::Written(result) => Some(result.clone().map_err(Failure::Unsaved)),
+                _ if !proceed || Instant::now() >= deadline => Some(Err(Failure::Incomplete)),
+                _ => None,
+            };
+            if let Some(outcome) = outcome {
+                // Whatever arrives from here on is not this capture's to write.
+                *request = Request::Withdrawn;
+                return outcome;
+            }
         }
         std::thread::sleep(Duration::from_millis(2));
     }

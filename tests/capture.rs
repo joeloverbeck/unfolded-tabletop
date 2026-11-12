@@ -1,5 +1,6 @@
-//! What Arkham's screen capture did at `6179043`, before it moved here: its
-//! pixels, its exits and its windowless surface. No test here needs a graphics
+//! What Arkham's screen capture did at `6179043`, before it moved here: the
+//! pixels it wrote, its windowless surface and its capture of that surface. One
+//! thing differs on purpose and is marked below. No test here needs a graphics
 //! adapter; each consumer's own checks cover a real render.
 #![cfg(feature = "render")]
 
@@ -11,7 +12,7 @@ use bevy::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
         view::screenshot::{Screenshot, ScreenshotCaptured},
     },
-    window::{ExitCondition, PrimaryWindow},
+    window::{PrimaryWindow, WindowPlugin},
 };
 use std::{
     path::{Path, PathBuf},
@@ -99,88 +100,54 @@ fn a_floating_point_picture_is_converted_from_linear_light() {
 }
 
 #[test]
-fn a_picture_that_cannot_be_written_leaves_the_older_file() {
+fn a_picture_whose_file_ending_names_no_format_is_refused_and_leaves_the_older_file() {
     let scratch = Scratch::new("refused");
     let unsupported = scratch.join("picture.unsupported");
     std::fs::write(&unsupported, "older file").unwrap();
     assert!(capture::write_image(red(), &unsupported).is_err());
     assert_eq!(std::fs::read_to_string(&unsupported).unwrap(), "older file");
-    assert!(capture::write_image(red(), &scratch.join("absent/picture.png")).is_err());
+
+    let absent = scratch.join("absent/picture.png");
+    assert!(capture::write_image(red(), &absent).is_err());
+    assert!(!absent.parent().unwrap().exists());
 }
 
-fn hand_back(world: &mut World, entity: Entity) {
-    world.trigger(ScreenshotCaptured {
-        entity,
-        image: red(),
-    });
-}
-
-#[test]
-fn the_observers_write_the_file_and_exit_on_the_actual_result() {
-    let scratch = Scratch::new("observers");
-    let mut world = World::new();
-    world.init_resource::<Messages<AppExit>>();
-    for (name, succeeds) in [("saved.png", true), ("stale.unsupported", false)] {
-        let path = scratch.join(name);
-        std::fs::write(&path, "older file").unwrap();
-        world.resource_mut::<Messages<AppExit>>().clear();
-        let entity = world
-            .spawn_empty()
-            .observe(capture::save_to_disk_and_exit(path.clone(), Duration::ZERO))
-            .id();
-        hand_back(&mut world, entity);
-        let exits: Vec<_> = world
-            .resource::<Messages<AppExit>>()
-            .iter_current_update_messages()
-            .collect();
-        assert_eq!(exits.len(), 1, "{name}");
-        assert_eq!(exits[0].is_success(), succeeds, "{name}");
-        assert_eq!(
-            std::fs::read(&path)
-                .unwrap()
-                .starts_with(b"\x89PNG\r\n\x1a\n"),
-            succeeds,
-            "{name}"
-        );
-    }
-
-    // Without an exit, the file is written and nothing else is asked of the host.
-    world.resource_mut::<Messages<AppExit>>().clear();
-    let path = scratch.join("kept-open.png");
-    let entity = world
-        .spawn_empty()
-        .observe(capture::save_to_disk(path.clone(), Duration::from_secs(5)))
-        .id();
-    hand_back(&mut world, entity);
-    assert!(
-        std::fs::read(&path)
-            .unwrap()
-            .starts_with(b"\x89PNG\r\n\x1a\n")
-    );
-    assert!(world.resource::<Messages<AppExit>>().is_empty());
-
-    // A consumer with further exit conditions uses the same timed write.
-    let mut write = capture::writer(scratch.join("own-policy.png"), Duration::ZERO);
-    assert_eq!(write(&red()), Ok(()));
-    let mut write = capture::writer(scratch.join("absent/own-policy.png"), Duration::ZERO);
-    assert!(write(&red()).is_err());
-}
-
-#[derive(Component)]
-struct Seen;
-
-fn host() -> App {
+/// A host with Bevy's window bookkeeping and no window event loop.
+fn windowless(window: WindowPlugin) -> App {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
-        .init_asset::<Image>();
+    app.add_plugins((MinimalPlugins, window));
+    app.finish();
+    app.cleanup();
+    for _ in 0..3 {
+        app.update();
+    }
     app
 }
 
 #[test]
 fn a_windowless_host_makes_no_window_and_does_not_exit_for_the_lack_of_one() {
-    let plugin = capture::no_window();
-    assert!(plugin.primary_window.is_none());
-    assert!(matches!(plugin.exit_condition, ExitCondition::DontExit));
+    let mut app = windowless(capture::no_window());
+    let mut windows = app.world_mut().query::<&Window>();
+    assert_eq!(windows.iter(app.world()).count(), 0);
+    assert!(app.should_exit().is_none());
+
+    // Bevy's own settings without a window ask the host to exit at once.
+    let app = windowless(WindowPlugin {
+        primary_window: None,
+        ..default()
+    });
+    assert!(app.should_exit().is_some());
+}
+
+#[derive(Component)]
+struct Seen;
+
+/// A host with no renderer: what Bevy needs to hold an image and run startup.
+fn host() -> App {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+        .init_asset::<Image>();
+    app
 }
 
 #[test]
@@ -213,13 +180,12 @@ fn the_surface_gives_the_named_camera_an_image_and_the_host_a_logical_window() {
         "only the named camera renders the surface"
     );
 
-    let size = app
-        .world()
-        .resource::<Assets<Image>>()
-        .get(&image)
-        .unwrap()
-        .size();
-    assert_eq!(size, UVec2::new(640, 360));
+    let texture = app.world().resource::<Assets<Image>>().get(&image).unwrap();
+    assert_eq!(texture.size(), UVec2::new(640, 360));
+    assert_eq!(
+        texture.texture_descriptor.format,
+        TextureFormat::Rgba8UnormSrgb
+    );
     let mut windows = app
         .world_mut()
         .query_filtered::<&Window, With<PrimaryWindow>>();
@@ -228,14 +194,39 @@ fn the_surface_gives_the_named_camera_an_image_and_the_host_a_logical_window() {
     assert!(window.focused);
 }
 
-/// One update of a host with no renderer: hand back each requested capture, as
-/// Bevy's renderer does a frame or more after the request.
+#[test]
+fn a_host_without_the_named_camera_keeps_running_and_reports_no_camera() {
+    let mut app = host();
+    capture::install::<Seen>(&mut app, UVec2::new(640, 360));
+    let other = app.world_mut().spawn(Camera3d::default()).id();
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Surface>().camera(), None);
+    assert!(!matches!(
+        app.world().get::<RenderTarget>(other),
+        Some(RenderTarget::Image(_))
+    ));
+}
+
+/// The captures this host has been asked for, with what each one captures.
+fn requests(app: &mut App) -> Vec<(Entity, RenderTarget)> {
+    let mut requests = app.world_mut().query::<(Entity, &Screenshot)>();
+    requests
+        .iter(app.world())
+        .map(|(entity, screenshot)| (entity, screenshot.0.clone()))
+        .collect()
+}
+
+/// One update of a host with no renderer: hand a picture back to every capture
+/// asked for so far, as Bevy's renderer does a frame or more after the request.
 fn renderer_hands_back(app: &mut App) -> bool {
     app.update();
-    let mut requests = app.world_mut().query_filtered::<Entity, With<Screenshot>>();
-    let requests: Vec<Entity> = requests.iter(app.world()).collect();
-    for entity in requests {
-        hand_back(app.world_mut(), entity);
+    for (entity, _) in requests(app) {
+        app.world_mut().trigger(ScreenshotCaptured {
+            entity,
+            image: red(),
+        });
     }
     true
 }
@@ -245,7 +236,7 @@ fn soon() -> Instant {
 }
 
 #[test]
-fn a_capture_returns_once_its_file_is_written() {
+fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
     let scratch = Scratch::new("image-to-file");
     let mut app = host();
     capture::install::<Seen>(&mut app, UVec2::new(2, 1));
@@ -253,11 +244,14 @@ fn a_capture_returns_once_its_file_is_written() {
 
     let path = scratch.join("picture.png");
     let mut steps = 0;
+    let mut asked_for = Vec::new();
     let result = capture::image_to_file(&mut app, image.clone(), &path, soon(), |app| {
         steps += 1;
         // The picture comes back on the third update, not the first.
         if steps < 3 {
             app.update();
+            asked_for = requests(app);
+            assert!(!path.exists());
             true
         } else {
             renderer_hands_back(app)
@@ -266,6 +260,12 @@ fn a_capture_returns_once_its_file_is_written() {
     assert_eq!(result, Ok(()));
     assert_eq!(steps, 3);
     assert_eq!(saved(&path).to_rgb8().get_pixel(0, 0).0, [255, 0, 0]);
+    assert_eq!(asked_for.len(), 1);
+    assert!(
+        matches!(&asked_for[0].1, RenderTarget::Image(target) if target.handle == image),
+        "{:?}",
+        asked_for[0].1
+    );
 
     let refused = scratch.join("absent/picture.png");
     let result = capture::image_to_file(&mut app, image, &refused, soon(), renderer_hands_back);
@@ -274,7 +274,7 @@ fn a_capture_returns_once_its_file_is_written() {
 }
 
 #[test]
-fn a_capture_that_never_comes_back_is_incomplete_and_writes_nothing() {
+fn a_capture_that_does_not_come_back_is_incomplete() {
     let scratch = Scratch::new("incomplete");
     let mut app = host();
     capture::install::<Seen>(&mut app, UVec2::new(2, 1));
@@ -289,7 +289,6 @@ fn a_capture_that_never_comes_back_is_incomplete_and_writes_nothing() {
     });
     assert_eq!(result, Err(Failure::Incomplete));
     assert_eq!(steps, 1);
-    assert!(!stopped.exists());
 
     // The deadline passes while the host keeps stepping.
     let late = scratch.join("late.png");
@@ -299,7 +298,6 @@ fn a_capture_that_never_comes_back_is_incomplete_and_writes_nothing() {
         true
     });
     assert_eq!(result, Err(Failure::Incomplete));
-    assert!(!late.exists());
 
     // A picture that arrives on the last permitted step is still written.
     let last = scratch.join("last.png");
@@ -309,4 +307,14 @@ fn a_capture_that_never_comes_back_is_incomplete_and_writes_nothing() {
     });
     assert_eq!(result, Ok(()));
     assert!(last.exists());
+
+    // Not as Arkham had it: there, a picture that arrived after the capture was
+    // given up was still written, under a refusal that said no file was. That
+    // last step handed pictures back to both captures given up above.
+    assert_eq!(requests(&mut app).len(), 3);
+    assert!(!stopped.exists());
+    assert!(!late.exists());
+    renderer_hands_back(&mut app);
+    assert!(!stopped.exists());
+    assert!(!late.exists());
 }
