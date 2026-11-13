@@ -55,20 +55,31 @@ the environment variable that marks a launched seat, and how long a held
 session may idle.
 
 Some things are fixed here and were sized or worded by Arkham, the first table
-to use the seat. No second use has shaped them yet, and Arkham's tests pin them,
-so changing one is a breaking change for it:
+to use the seat. No second use has shaped them yet. A test holds some of them
+and not others, so a change to the rest would pass every check:
 
 - The numbers: a step of one sixtieth of a second, settling for 1,800 steps
   unless a request asks otherwise and for 7,200 at most, and 30 seconds for a
   capture. Admission settles the admitted table for at most 1,800 steps and
-  then returns, settled or not.
+  then returns, settled or not. `tests/seat.rs` holds the step. The settling
+  limits and the capture's 30 seconds are fixed in `src/seat.rs` and held by no
+  test, here or in Arkham.
 - The protocol's vocabulary and wording: an agent names a `component` or a
   `choice`, responses carry `"mode": "seat"`, and refusals speak of a choice
-  identity, a reading, a menu row and the attempt's revision.
+  identity, a reading, a menu row and the attempt's revision. Arkham's own seat
+  tests activate by both request fields and hold the mode; `tests/seat.rs`
+  activates by `component` and holds the mode. `tests/seat.rs` holds, word for
+  word, the refusals of an outdated revision, a committing key, an unknown key,
+  a busy table, a skipped request, a missed activation and a capture on a host
+  with no image, and Arkham's tests assert parts of some of those. The other
+  refusals of a capture, and the wording for a focus that is no control or menu
+  row, are held by no test.
 - The held session is Linux only. Its launcher starts the running executable
   again through `/proc/self/exe`, a socket path holds at most 107 bytes, and the
   held seat's standard error goes to a log at the socket's path with `.log`
-  added.
+  added. `tests/seat.rs` holds the 107 bytes, and Arkham's tests read the log at
+  that path. No test here starts a launched seat: a held start in a consumer
+  exercises the launcher.
 
 `tests/seat.rs` pins the protocol's responses and refusals as Arkham worded
 them, on a table that belongs to no game and without a graphics adapter: its
