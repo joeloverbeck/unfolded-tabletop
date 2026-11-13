@@ -9,7 +9,7 @@ use bevy::{
     app::AppExit,
     asset::RenderAssetUsages,
     camera::RenderTarget,
-    input::InputPlugin,
+    input::{InputPlugin, keyboard::Key},
     picking::{
         backend::HitData,
         hover::HoverMap,
@@ -33,7 +33,8 @@ use std::{
     time::Duration,
 };
 use unfolded_tabletop::seat::{
-    Admission, Focus, Game, Hit, Name, Observed, Seat, SeatedAgent, Unadmitted, socket::Listener,
+    Admission, Focus, Game, Hit, Logical, Name, Observed, Seat, SeatKey, SeatedAgent, Unadmitted,
+    socket::Listener,
 };
 
 /// One sixtieth of a second: the seat's step of the table's clock.
@@ -174,6 +175,30 @@ impl Game for Plain {
     fn pipelines_ready(&self, world: &World) -> bool {
         world.resource::<Table>().compiling == 0
     }
+
+    fn keys(&self) -> &[SeatKey] {
+        &KEYS
+    }
+}
+
+/// The keys this table reads, which are the keys the seat may press at it. Enter,
+/// Space and Y commit here: which keys do is each table's own.
+static KEYS: [SeatKey; 6] = [
+    key("Tab", KeyCode::Tab, Logical::Named(Key::Tab), false),
+    key("Enter", KeyCode::Enter, Logical::Named(Key::Enter), true),
+    key("Space", KeyCode::Space, Logical::Named(Key::Space), true),
+    key("KeyY", KeyCode::KeyY, Logical::Typed("y"), true),
+    key("Home", KeyCode::Home, Logical::Named(Key::Home), false),
+    key("End", KeyCode::End, Logical::Named(Key::End), false),
+];
+
+const fn key(name: &'static str, code: KeyCode, logical: Logical, commits: bool) -> SeatKey {
+    SeatKey {
+        name,
+        code,
+        logical,
+        commits,
+    }
 }
 
 /// The table's own key handling, behind Bevy's keyboard input. Enter and Space
@@ -187,7 +212,7 @@ fn read_keys(
     for key in keys.get_just_pressed() {
         table.keys.push(format!("{key:?}"));
         match key {
-            KeyCode::Enter | KeyCode::Space => table.revision += 1,
+            KeyCode::Enter | KeyCode::Space | KeyCode::KeyY => table.revision += 1,
             KeyCode::End => {
                 exit.write(AppExit::error());
             }
@@ -429,16 +454,39 @@ fn a_key_that_can_commit_presses_only_the_control_it_names() {
 }
 
 #[test]
-fn an_unknown_key_is_refused_with_the_keys_the_seat_can_press() {
+fn a_key_the_table_does_not_read_is_refused_with_the_keys_it_does() {
     let mut seat = sit();
 
-    let response = seat.ask(json!({"op": "key", "revision": 0, "key": "F1"}));
+    // Bevy knows Escape, and this table does not read it.
+    let response = seat.ask(json!({"op": "key", "revision": 0, "key": "Escape"}));
 
     assert_eq!(response["status"], "refused");
     assert_eq!(
         response["error"],
-        "Unknown key \"F1\". Known keys: Escape, Enter, Space, Tab, Home, End, PageUp, PageDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, KeyW, KeyA, KeyS, KeyD, Minus, Equal."
+        "Unknown key \"Escape\". Known keys: Tab, Enter, Space, KeyY, Home, End."
     );
+    assert_eq!(response["observation"]["keys"], json!([]));
+}
+
+#[test]
+fn which_keys_can_commit_is_the_tables_own() {
+    let mut seat = sit();
+    seat.table().focus = Some((Some("wager:yes".into()), "Yes".into()));
+
+    // Y commits at this table, so it must name the control it expects to press.
+    let unnamed = seat.ask(json!({"op": "key", "revision": 0, "key": "KeyY"}));
+    assert_eq!(unnamed["status"], "refused");
+    assert_eq!(
+        unnamed["error"],
+        "KeyY can commit a choice or dismiss a reading, so its request must name the control it expects to press in \"focused\": the control's choice identity, or its label when it has none. Nothing was pressed; focus is on choice wager:yes (\"Yes\")."
+    );
+    assert_eq!(unnamed["observation"]["keys"], json!([]));
+
+    let named =
+        seat.ask(json!({"op": "key", "revision": 0, "key": "KeyY", "focused": "wager:yes"}));
+    assert_eq!(named["status"], "pressed", "{named}");
+    assert_eq!(named["observation"]["keys"], json!(["KeyY"]));
+    assert_eq!(named["observation"]["revision"], 1);
 }
 
 #[test]

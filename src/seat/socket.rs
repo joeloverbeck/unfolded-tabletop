@@ -9,6 +9,10 @@
 //! waits for admission and prints its result; the seat then answers one connection at a
 //! time, in arrival order, through the same serving loop as batch form, until `quit`,
 //! the table's own exit or its idle end.
+//!
+//! Linux only: the launcher starts the running executable again through
+//! `/proc/self/exe`, and a socket path holds at most 107 bytes. The held seat's
+//! standard error goes to a log beside the socket, at its path with `.log` added.
 
 use super::{ConnectionEnd, Game, Seat, Status, emit};
 use bevy::prelude::App;
@@ -348,7 +352,9 @@ fn period_in_words(period: Duration) -> String {
 }
 
 /// Start the seat held on `socket`, marked by the environment variable `marker`
-/// ([`detached`]), and wait for its admission. On success print its
+/// ([`detached`]), and wait for its admission. The seat it starts says how its
+/// start went in its first line of standard output: its `ready` response
+/// ([`announce`]), or one `refused` response ([`super::refuse`]). On success print its
 /// `ready` response unchanged and leave it serving; otherwise return why it could not
 /// start, with no socket left and no seat running.
 pub fn launch(socket: &Path, marker: &str) -> Result<(), String> {

@@ -1,17 +1,23 @@
-//! The agent seat extracted from Arkham: its game-neutral half. An agent sits at a
-//! game's real table through one JSON request per line and one JSON response per line,
-//! with no window: on standard input and output in batch form, or held across shell
+//! The agent seat: an agent sits at a game's real table through one JSON request per
+//! line and one JSON response per line, with no window: on standard input and output in batch form, or held across shell
 //! commands on a local socket ([`socket`]). This module owns fixed-step stepping,
 //! pointer and key synthesis, capture and the protocol loop both forms share. It reaches
 //! the game only through [`Game`]: produce an observation and its revision, resolve a
 //! name to a screen position (and a hit back to a name), say what has keyboard focus,
 //! report whether the table is settled, advance the table's own clock, and say whether
-//! the table is admitted to play and its render pipelines are ready. The table's
-//! surface and the capture of its image come from [`crate::capture`].
+//! the table is admitted to play and its render pipelines are ready, and name the keys
+//! the seat may press. The table's surface and the capture of its image come from
+//! [`crate::capture`].
 //!
-//! Each game keeps its policy in its adapter: what it observes and names, its clock,
-//! its admission and the words of an admission that ran out of time, the plugins of
-//! its windowless host, how it is launched, and how long a held session may idle.
+//! Each game keeps its policy in its adapter: what it observes and names, the keys
+//! it reads and which of them can commit, its clock, its admission and the words of
+//! an admission that ran out of time, the plugins of its windowless host, how it is
+//! launched, and how long a held session may idle.
+//!
+//! The module was extracted from Arkham, its first table. The protocol's vocabulary
+//! and the wording of its responses are as Arkham had them, and so are its fixed
+//! numbers: the step, the settling limits and the time a capture may take. No second
+//! use has shaped them yet.
 //!
 //! The protocol's guards live here, so every transport gets them: activations and
 //! keys act only on the revision they were decided on, a key that can commit presses
@@ -154,6 +160,26 @@ pub enum Unadmitted {
     Unfinished,
 }
 
+/// A key a game lets the seat press.
+pub struct SeatKey {
+    /// The name a request gives it: its `KeyCode` name.
+    pub name: &'static str,
+    /// The physical key.
+    pub code: KeyCode,
+    /// The logical key a keyboard would send with it.
+    pub logical: Logical,
+    /// Whether it can commit a choice or dismiss a reading at this table. A request
+    /// for such a key must name the control it expects to press.
+    pub commits: bool,
+}
+
+/// The logical key a keyboard sends with a physical one.
+pub enum Logical {
+    Named(Key),
+    /// A character key, by the text it types.
+    Typed(&'static str),
+}
+
 /// The whole game-facing interface of the seat.
 pub trait Game {
     fn observe(&self, world: &mut World) -> Observed;
@@ -177,6 +203,9 @@ pub trait Game {
     /// Whether the render pipelines of what the table shows are ready, so that a
     /// capture omits nothing.
     fn pipelines_ready(&self, world: &World) -> bool;
+    /// The keys the seat may press at this table, in the order a refusal lists them.
+    /// Any other key is refused as unknown.
+    fn keys(&self) -> &[SeatKey];
 }
 
 #[derive(Deserialize)]
@@ -314,8 +343,8 @@ impl Connection {
 }
 
 /// Present while an agent sits at the table. The agent operates the table, never the
-/// owner's desktop, so a game refuses what native play hands to the desktop, such as
-/// an address for the desktop's opener.
+/// desktop it runs on, so a game can refuse to the agent what it would otherwise hand
+/// to the desktop, such as an address to open.
 #[derive(Resource)]
 pub struct SeatedAgent;
 
@@ -709,8 +738,16 @@ impl<G: Game> Seat<G> {
     /// Press and release one key decided on `revision`. A key that can commit, or any
     /// key given `focused`, presses only when the named control has focus.
     fn key(&mut self, app: &mut App, name: &str, revision: u64, focused: Option<&str>) -> Response {
-        let Some((code, logical)) = key_named(name) else {
-            let known: Vec<&str> = KEYS.iter().map(|(known, ..)| *known).collect();
+        let pressable = self.game.keys().iter().find(|key| key.name == name);
+        let pressable = pressable.map(|key| {
+            let logical = match &key.logical {
+                Logical::Named(key) => key.clone(),
+                Logical::Typed(text) => Key::Character((*text).into()),
+            };
+            (key.code, logical, key.commits)
+        });
+        let Some((code, logical, commits)) = pressable else {
+            let known: Vec<&str> = self.game.keys().iter().map(|key| key.name).collect();
             return self.refused(
                 app,
                 format!("Unknown key {name:?}. Known keys: {}.", known.join(", ")),
@@ -719,7 +756,7 @@ impl<G: Game> Seat<G> {
         if let Some(refusal) = self.unready(app, revision) {
             return refusal;
         }
-        if COMMITTING.contains(&code) || focused.is_some() {
+        if commits || focused.is_some() {
             let focus = self.game.focus(app.world_mut());
             let error = match focused {
                 None => Some(format!(
@@ -840,6 +877,17 @@ impl<G: Game> Seat<G> {
     }
 }
 
+/// Refuse to start: one `refused` response on standard output, which the agent or a
+/// launching command ([`socket::launch`]) reads as the seat's first line. The error
+/// is returned for the caller's standard error and unsuccessful exit.
+pub fn refuse<T>(error: String) -> Result<T, String> {
+    println!(
+        "{}",
+        json!({"ok": false, "mode": "seat", "status": "refused", "error": error})
+    );
+    Err(error)
+}
+
 fn emit(output: &mut impl Write, value: &Value) -> Result<(), String> {
     serde_json::to_writer(&mut *output, value).map_err(|error| error.to_string())?;
     output.write_all(b"\n").map_err(|error| error.to_string())?;
@@ -858,65 +906,5 @@ fn adapter(world: &World) -> Value {
                 "driver": info.driver,
                 "driver_info": info.driver_info,
             })
-        })
-}
-
-enum Logical {
-    Named(Key),
-    Typed(&'static str),
-}
-
-/// The keys the seat can press: the protocol name (its `KeyCode` name), the physical key and
-/// the logical key a keyboard would send with it.
-static KEYS: [(&str, KeyCode, Logical); 18] = [
-    ("Escape", KeyCode::Escape, Logical::Named(Key::Escape)),
-    ("Enter", KeyCode::Enter, Logical::Named(Key::Enter)),
-    ("Space", KeyCode::Space, Logical::Named(Key::Space)),
-    ("Tab", KeyCode::Tab, Logical::Named(Key::Tab)),
-    ("Home", KeyCode::Home, Logical::Named(Key::Home)),
-    ("End", KeyCode::End, Logical::Named(Key::End)),
-    ("PageUp", KeyCode::PageUp, Logical::Named(Key::PageUp)),
-    ("PageDown", KeyCode::PageDown, Logical::Named(Key::PageDown)),
-    ("ArrowUp", KeyCode::ArrowUp, Logical::Named(Key::ArrowUp)),
-    (
-        "ArrowDown",
-        KeyCode::ArrowDown,
-        Logical::Named(Key::ArrowDown),
-    ),
-    (
-        "ArrowLeft",
-        KeyCode::ArrowLeft,
-        Logical::Named(Key::ArrowLeft),
-    ),
-    (
-        "ArrowRight",
-        KeyCode::ArrowRight,
-        Logical::Named(Key::ArrowRight),
-    ),
-    ("KeyW", KeyCode::KeyW, Logical::Typed("w")),
-    ("KeyA", KeyCode::KeyA, Logical::Typed("a")),
-    ("KeyS", KeyCode::KeyS, Logical::Typed("s")),
-    ("KeyD", KeyCode::KeyD, Logical::Typed("d")),
-    ("Minus", KeyCode::Minus, Logical::Typed("-")),
-    ("Equal", KeyCode::Equal, Logical::Typed("=")),
-];
-
-/// Keys that can commit a choice or dismiss a reading, so a request for one names the
-/// control it expects to press. A focused Bevy button activates on Enter or Space, and
-/// a table's own keyboard handling may confirm with Enter. Every other key in [`KEYS`]
-/// moves focus, the camera, a scroll position or a stepper, or closes without deciding.
-const COMMITTING: [KeyCode; 2] = [KeyCode::Enter, KeyCode::Space];
-
-fn key_named(name: &str) -> Option<(KeyCode, Key)> {
-    KEYS.iter()
-        .find(|(known, ..)| *known == name)
-        .map(|(_, code, logical)| {
-            (
-                *code,
-                match logical {
-                    Logical::Named(key) => key.clone(),
-                    Logical::Typed(text) => Key::Character((*text).into()),
-                },
-            )
         })
 }
