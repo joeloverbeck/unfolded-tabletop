@@ -37,8 +37,9 @@ across shell commands on a local socket.
   `observe`, `activate`, `point`, `key`, `settle`, `capture` and `quit`.
   `point` rests the pointer on a named component or choice as `activate` does,
   and leaves it there without pressing; its response says where it rests and
-  what is under it. It was added for `mudsong`, whose table shows what a pointer
-  rests on, and a game that does not use it changes nothing.
+  what is under it. `mudsong`, a private repository that pins the library for
+  its application, is the consumer that sends it; a game that does not send it
+  changes nothing.
 - The guards are the protocol's, so both forms have them. An activation, a point
   or a key acts only on the revision it names. A key that the game marks as able
   to commit presses only the control the request names. A connection stops
@@ -208,3 +209,7 @@ seeded randomness above.
 
 The waiver establishes neither general library fitness nor acceptance of an
 untested migration.
+
+On 2026-11-13 the owner read the waiver as covering the agent seat as one
+mechanism: an operation of the seat that one consumer uses, such as `point`,
+is covered while the seat itself is used by two.

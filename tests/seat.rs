@@ -702,6 +702,45 @@ fn a_point_presses_nothing_so_a_refusal_before_it_does_not_skip_it() {
 }
 
 #[test]
+fn after_a_missed_point_a_point_is_served_and_activations_and_keys_are_skipped() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("lid", Rect::new(0., 0., 20., 20.), 0.));
+    let input = concat!(
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"card\"}\n",
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"lid\"}\n",
+        "{\"op\":\"activate\",\"revision\":0,\"component\":\"lid\"}\n",
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"Tab\"}\n",
+    );
+    let mut output = Vec::new();
+
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+
+    let responses = lines(&output);
+    let statuses: Vec<&str> = responses
+        .iter()
+        .map(|response| response["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        statuses,
+        ["ready", "missed", "pointed", "skipped", "skipped"]
+    );
+    assert!(
+        responses[3]["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("Skipped: an earlier request on this connection missed its target"),
+        "{}",
+        responses[3]["error"]
+    );
+    // Nothing was pressed, so nothing was clicked.
+    assert_eq!(responses[4]["observation"]["clicked"], json!([]));
+    assert_eq!(responses[4]["observation"]["keys"], json!([]));
+}
+
+#[test]
 fn a_covered_component_is_missed_and_a_partly_covered_one_is_pressed_where_it_shows() {
     let mut seat = sit();
     seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));

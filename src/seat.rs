@@ -18,8 +18,9 @@
 //! and the wording of its responses are as Arkham had them, and so are its fixed
 //! numbers: the step, the settling limits and the time a capture may take. No second
 //! use has shaped them yet. `point`, which rests the pointer on a named target as an
-//! activation does and presses nothing, was added for `mudsong`, whose table shows
-//! what a pointer rests on.
+//! activation does and presses nothing, was added later; `mudsong`, a private
+//! repository that pins the library for its application, is the consumer that
+//! sends it.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! and keys act only on the revision they were decided on, a key that can commit
@@ -310,9 +311,10 @@ enum ConnectionEnd {
 }
 
 /// One connection's requests: standard input in batch form, or one connection to the
-/// seat. After its first refused or missed response the connection stops acting: every
-/// later activation and key is skipped, so one wrong assumption cannot cascade into
-/// several commits. Observing, settling, capturing and quitting are still served.
+/// seat. After its first refused or missed response the connection stops pressing:
+/// every later activation and key is skipped, so one wrong assumption cannot cascade
+/// into several commits. Observing, pointing, settling, capturing and quitting are
+/// still served; a point presses nothing.
 #[derive(Default)]
 struct Connection {
     stopped: Option<Stop>,
