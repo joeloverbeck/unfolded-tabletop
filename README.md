@@ -36,24 +36,43 @@ across shell commands on a local socket.
   settles the table, captures its image through `capture`, and answers
   `observe`, `activate`, `key`, `settle`, `capture` and `quit`.
 - The guards are the protocol's, so both forms have them. An activation or a key
-  acts only on the revision it names. `Enter` and `Space` press only the control
-  the request names. A connection stops acting after its first refusal or missed
-  activation.
+  acts only on the revision it names. A key that the game marks as able to
+  commit presses only the control the request names. A connection stops acting
+  after its first refusal or missed activation.
 - `socket` holds one session on a Unix-domain socket that only its owner can
   reach: the launcher that starts the seat as a process of its own, the
-  listener, and the session's idle end.
+  listener, and the session's idle end. The launcher reads the starting seat's
+  first line, which is its `ready` response or the one `refused` response that
+  `seat::refuse` prints.
 
 Each game implements `Game` in its own adapter: its observation and revision,
 the names it resolves to screen positions and back, what has keyboard focus,
-whether its table is settled, its clock, its admission to play, and whether its
-render pipelines are ready. These are each game's too: the words of an admission
+whether its table is settled, its clock, its admission to play, whether its
+render pipelines are ready, and the keys the seat may press with those among
+them that can commit. These are each game's too: the words of an admission
 that ran out of time, the plugins of its windowless host, its launch options,
 the environment variable that marks a launched seat, and how long a held
 session may idle.
 
+Some things are fixed here and were sized or worded by Arkham, the first table
+to use the seat. No second use has shaped them yet, and Arkham's tests pin them,
+so changing one is a breaking change for it:
+
+- The numbers: a step of one sixtieth of a second, settling for 1,800 steps
+  unless a request asks otherwise and for 7,200 at most, and 30 seconds for a
+  capture. Admission settles the admitted table for at most 1,800 steps and
+  then returns, settled or not.
+- The protocol's vocabulary and wording: an agent names a `component` or a
+  `choice`, responses carry `"mode": "seat"`, and refusals speak of a choice
+  identity, a reading, a menu row and the attempt's revision.
+- The held session is Linux only. Its launcher starts the running executable
+  again through `/proc/self/exe`, a socket path holds at most 107 bytes, and the
+  held seat's standard error goes to a log at the socket's path with `.log`
+  added.
+
 `tests/seat.rs` pins the protocol's responses and refusals as Arkham worded
 them, on a table that belongs to no game and without a graphics adapter: its
-picking and its renderer are stand-ins. Arkham's own tests hold the same
+picking and its renderer are stand-ins, and its keys are its own. Arkham's own tests hold the same
 protocol on its real table. A real render through the seat is each consumer's
 own check.
 
