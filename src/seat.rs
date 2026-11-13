@@ -329,12 +329,7 @@ pub struct Seat<G> {
 impl<G: Game> Seat<G> {
     /// Sit at a table whose camera already has a render target. Without an image
     /// (the no-GPU test host) every operation but `capture` is available.
-    pub fn new(
-        game: G,
-        app: &mut App,
-        camera: Entity,
-        image: Option<Handle<Image>>,
-    ) -> Self {
+    pub fn new(game: G, app: &mut App, camera: Entity, image: Option<Handle<Image>>) -> Self {
         app.insert_resource(SeatedAgent);
         Self {
             game,
