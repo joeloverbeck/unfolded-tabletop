@@ -2,17 +2,60 @@
 
 Concrete Rust mechanisms extracted from Arkham Unfolded for named consumers:
 presentation mechanisms for its Gathering table and Netrunner Unfolded's first
-Brân run, and seeded randomness and screen capture for Arkham and `mudsong`. This
-is a bounded candidate with real consumers, not a general tabletop framework.
+Brân run, and seeded randomness, screen capture and the agent seat for Arkham and
+`mudsong`. This is a bounded candidate with real consumers, not a general
+tabletop framework.
 
 The library owns verified file reads, bounded PNG crops, atomic prepared-directory
 publication, rounded card geometry, solid textured-token assembly, asset-load
-state reporting, a seeded generator with its index and shuffle, and screen
-capture with its windowless surface. Consumers own rules, observations, layout,
-materials, resource meanings, required artwork, renderer admission policy,
-native-operation policy, what their randomness decides and how its state is
-saved, and when a capture is taken and what a failed one means. Enable `render`
-for the Bevy 0.20.0 modules; preparation and `random` work without Bevy.
+state reporting, a seeded generator with its index and shuffle, screen capture
+with its windowless surface, and the agent seat's protocol, input synthesis and
+held session. Consumers own rules, observations, layout, materials, resource
+meanings, required artwork, renderer admission policy, native-operation policy,
+what their randomness decides and how its state is saved, when a capture is
+taken and what a failed one means, and what an agent observes and names at their
+table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
+it, for the agent seat; preparation and `random` work without Bevy.
+
+## Agent seat
+
+`seat`, behind the feature of the same name, holds the game-neutral half of
+Arkham's agent seat. Origin: `joeloverbeck/arkham-unfolded` at
+`0b8e6fb3425174110446d6956cfa9bc38008e279`, `src/agent_seat.rs` and
+`src/agent_seat/socket.rs`. Arkham's migration, in its own pull request, sits
+its Gathering table at it. `mudsong`, a private repository, pins it for its
+application. No game's domain enters the module, and a consumer that does not
+enable the feature compiles nothing of it.
+
+An agent sits at a game's real table with no window, through one JSON request
+per line and one JSON response per line: on standard input and output, or held
+across shell commands on a local socket.
+
+- `Seat` alone steps the table, in fixed steps of one sixtieth of a second. It
+  writes pointer and key input where Bevy's window-event conversion writes it,
+  settles the table, captures its image through `capture`, and answers
+  `observe`, `activate`, `key`, `settle`, `capture` and `quit`.
+- The guards are the protocol's, so both forms have them. An activation or a key
+  acts only on the revision it names. `Enter` and `Space` press only the control
+  the request names. A connection stops acting after its first refusal or missed
+  activation.
+- `socket` holds one session on a Unix-domain socket that only its owner can
+  reach: the launcher that starts the seat as a process of its own, the
+  listener, and the session's idle end.
+
+Each game implements `Game` in its own adapter: its observation and revision,
+the names it resolves to screen positions and back, what has keyboard focus,
+whether its table is settled, its clock, its admission to play, and whether its
+render pipelines are ready. These are each game's too: the words of an admission
+that ran out of time, the plugins of its windowless host, its launch options,
+the environment variable that marks a launched seat, and how long a held
+session may idle.
+
+`tests/seat.rs` pins the protocol's responses and refusals as Arkham worded
+them, on a table that belongs to no game and without a graphics adapter: its
+picking and its renderer are stand-ins. Arkham's own tests hold the same
+protocol on its real table. A real render through the seat is each consumer's
+own check.
 
 ## Screen capture
 
@@ -68,8 +111,8 @@ Arkham's prior commit contains its original generator.
 ## Development checks
 
 Run `scripts/check` from a clean clone before publication. It checks full-workspace
-formatting first, then strict Clippy and tests with both default and `render`
-features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
+formatting first, then strict Clippy and tests with the default, `render` and
+`seat` features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
 committed lockfile fixes this repository's verification dependencies. CI runs the
 same entry point on Ubuntu without game assets or a desktop. A focused command is
 only partial evidence. These checks do not replace any consumer's own checks:
