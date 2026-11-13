@@ -17,12 +17,16 @@
 //! The module was extracted from Arkham, its first table. The protocol's vocabulary
 //! and the wording of its responses are as Arkham had them, and so are its fixed
 //! numbers: the step, the settling limits and the time a capture may take. No second
-//! use has shaped them yet.
+//! use has shaped them yet. `point`, which rests the pointer on a named target as an
+//! activation does and presses nothing, was added for `mudsong`, whose table shows
+//! what a pointer rests on.
 //!
-//! The protocol's guards live here, so every transport gets them: activations and
-//! keys act only on the revision they were decided on, a key that can commit presses
-//! only the control it names, and a connection stops acting after its first refusal or
-//! missed activation.
+//! The protocol's guards live here, so every transport gets them: activations, points
+//! and keys act only on the revision they were decided on, a key that can commit
+//! presses only the control it names, and a connection stops pressing after its first
+//! refusal or miss: its later activations and keys are skipped. A point presses
+//! nothing, so it is served after a refusal or a miss, and a missed point stops the
+//! connection's later activations and keys as a missed activation does.
 //!
 //! Input enters where Bevy's own window-event conversion writes it: `PointerInput` and
 //! `KeyboardInput` messages plus the logical window's cursor position. Everything after
@@ -219,6 +223,13 @@ enum Request {
         #[serde(default)]
         choice: Option<String>,
     },
+    Point {
+        revision: u64,
+        #[serde(default)]
+        component: Option<String>,
+        #[serde(default)]
+        choice: Option<String>,
+    },
     Key {
         key: String,
         revision: u64,
@@ -243,14 +254,16 @@ enum Status {
     Ready,
     Observed,
     Activated,
+    /// The pointer rests on the named target, and nothing was pressed.
+    Pointed,
     Pressed,
     Settled,
     Unsettled,
     Captured,
     /// The request was not acted on, for the reason in its error.
     Refused,
-    /// Something else was over the activation's target: nothing was pressed, or the
-    /// press was cancelled before release.
+    /// Something else was over the target of an activation or a point: nothing was
+    /// pressed, or the press was cancelled before release.
     Missed,
     /// An earlier refusal or miss on the connection stopped its activations and keys.
     Skipped,
@@ -526,6 +539,15 @@ impl<G: Game> Seat<G> {
                     "activate needs exactly one of component or choice".into(),
                 ),
             },
+            Request::Point {
+                revision,
+                component,
+                choice,
+            } => match (component, choice) {
+                (Some(name), None) => self.point(app, Name::Component(name), revision),
+                (None, Some(id)) => self.point(app, Name::Choice(id), revision),
+                _ => self.refused(app, "point needs exactly one of component or choice".into()),
+            },
             Request::Key {
                 key,
                 revision,
@@ -577,38 +599,73 @@ impl<G: Game> Seat<G> {
         })
     }
 
-    fn activate(&mut self, app: &mut App, name: Name, revision: u64) -> Response {
+    /// Rest the pointer on the named target as a player would: on a part of it that
+    /// nothing covers. One update per point establishes real hover. The response is
+    /// the refusal or the miss when the pointer cannot rest on it.
+    fn rest_on(&mut self, app: &mut App, name: &Name, revision: u64) -> Result<Rest, Response> {
         if let Some(refusal) = self.unready(app, revision) {
-            return refusal;
+            return Err(refusal);
         }
-        let candidates = match self.game.resolve(app.world_mut(), &name) {
+        let candidates = match self.game.resolve(app.world_mut(), name) {
             Ok(candidates) => candidates,
-            Err(error) => return self.refused(app, error),
+            Err(error) => return Err(self.refused(app, error)),
         };
-        // Rest the pointer on the named target as a player would: on a part of it
-        // that nothing covers. One update per point establishes real hover.
         let mut covered = None;
-        let mut reached = None;
         for position in candidates {
             if let Err(error) =
                 self.pointer(app, position, PointerAction::Move { delta: Vec2::ZERO })
             {
-                return self.refused(app, error);
+                return Err(self.refused(app, error));
             }
             self.step(app, STEP);
             let hovered = self.under_pointer(app);
-            if hovered.iter().any(|hit| hit.name.as_ref() == Some(&name)) {
-                reached = Some(position);
-                break;
+            if hovered.iter().any(|hit| hit.name.as_ref() == Some(name)) {
+                return Ok(Rest {
+                    position,
+                    hovered,
+                    covered,
+                });
             }
             covered.get_or_insert((position, hovered));
         }
-        let Some(position) = reached else {
-            // Pressing here would act on whatever covers the named target.
-            let Some((position, hovered)) = covered else {
-                return self.refused(app, format!("{} has no screen position.", name.describe()));
-            };
-            return self.missed(app, &name, position, hovered, false);
+        // Pressing here would act on whatever covers the named target.
+        let Some((position, hovered)) = covered else {
+            return Err(self.refused(app, format!("{} has no screen position.", name.describe())));
+        };
+        Err(self.missed(app, name, position, hovered, false))
+    }
+
+    /// Rest the pointer on the named target and leave it there, pressing nothing, as
+    /// a player points at something to read it.
+    fn point(&mut self, app: &mut App, name: Name, revision: u64) -> Response {
+        let Rest {
+            position,
+            hovered,
+            covered,
+        } = match self.rest_on(app, &name, revision) {
+            Ok(rest) => rest,
+            Err(response) => return response,
+        };
+        let mut response = self.response(app, Status::Pointed, None);
+        response.json["position"] = json!([position.x, position.y]);
+        response.json["hit"] = json!(
+            hovered
+                .into_iter()
+                .map(|hit| hit.description)
+                .collect::<Vec<_>>()
+        );
+        if let Some(covered) = covered {
+            response.json["covered"] = covered_at(covered);
+        }
+        response
+    }
+
+    fn activate(&mut self, app: &mut App, name: Name, revision: u64) -> Response {
+        let Rest {
+            position, covered, ..
+        } = match self.rest_on(app, &name, revision) {
+            Ok(rest) => rest,
+            Err(response) => return response,
         };
         for action in [
             PointerAction::Press(PointerButton::Primary),
@@ -637,13 +694,8 @@ impl<G: Game> Seat<G> {
         }
         let mut response = self.response(app, Status::Activated, None);
         response.json["position"] = json!([position.x, position.y]);
-        if let Some((tried, hits)) = covered {
-            // Pressed at a later point: say what the pointer found at the first one,
-            // so a partly covered target is reported, not hidden by the success.
-            response.json["covered"] = json!({
-                "position": [tried.x, tried.y],
-                "hit": hits.into_iter().map(|hit| hit.description).collect::<Vec<_>>(),
-            });
+        if let Some(covered) = covered {
+            response.json["covered"] = covered_at(covered);
         }
         response
     }
@@ -875,6 +927,25 @@ impl<G: Game> Seat<G> {
             ),
         }
     }
+}
+
+/// Where the pointer came to rest on a named target.
+struct Rest {
+    position: Vec2,
+    /// Everything under the pointer there, nearest first.
+    hovered: Vec<Hit>,
+    /// Where the pointer tried first and what it found over the target there, when it
+    /// came to rest at a later point.
+    covered: Option<(Vec2, Vec<Hit>)>,
+}
+
+/// What the pointer found at the first point it tried, when it came to rest at a
+/// later one: a partly covered target is reported, not hidden by the success.
+fn covered_at((tried, hits): (Vec2, Vec<Hit>)) -> Value {
+    json!({
+        "position": [tried.x, tried.y],
+        "hit": hits.into_iter().map(|hit| hit.description).collect::<Vec<_>>(),
+    })
 }
 
 /// Refuse to start: one `refused` response on standard output, which the agent or a
