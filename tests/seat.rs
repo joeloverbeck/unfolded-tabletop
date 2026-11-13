@@ -890,3 +890,32 @@ fn a_socket_path_is_claimed_only_where_no_seat_answers() {
     assert!(UnixStream::connect(&leftover).is_ok());
     drop(replaced);
 }
+
+#[test]
+fn a_claimed_path_answers_a_protocol_of_the_games_own_until_its_listener_drops() {
+    let scratch = Scratch::new("own");
+    let socket = scratch.join("own.sock");
+    let listener = Listener::claim(&socket).unwrap();
+
+    // The game's own loop, on a thread of its own instead of the seat's serving loop.
+    let host = std::thread::spawn(move || {
+        let (stream, _) = listener.unix_listener().accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(&stream).read_line(&mut line).unwrap();
+        writeln!(&stream, "heard {}", line.trim_end()).unwrap();
+        listener
+    });
+    let mut stream = UnixStream::connect(&socket).unwrap();
+    writeln!(stream, "hello").unwrap();
+    let mut answer = String::new();
+    BufReader::new(&stream).read_line(&mut answer).unwrap();
+    let listener = host.join().unwrap();
+
+    assert_eq!(answer, "heard hello\n");
+    assert!(
+        socket.exists(),
+        "the path stays claimed while its listener lives"
+    );
+    drop(listener);
+    assert!(!socket.exists(), "the path goes with its listener");
+}

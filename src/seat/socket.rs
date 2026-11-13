@@ -70,6 +70,9 @@ impl FileIdentity {
 
 /// A socket path one seat listens on, accessible only to its owner. The path is removed
 /// when the listener ends, unless something else has replaced it there.
+///
+/// A game that answers a protocol of its own on such a path claims it here and accepts
+/// through [`unix_listener`](Self::unix_listener) instead of [`serve`](Self::serve).
 pub struct Listener {
     listener: UnixListener,
     path: PathBuf,
@@ -161,6 +164,13 @@ impl Listener {
         }
         let file = fs::symlink_metadata(path).map_err(|error| cannot(&error))?;
         Ok(Self::owning(listener, path, &file))
+    }
+
+    /// The listening socket, for a game that accepts and answers connections with a loop
+    /// of its own rather than [`serve`](Self::serve). The path stays claimed while this
+    /// listener lives and is removed when it drops, as with `serve`.
+    pub fn unix_listener(&self) -> &UnixListener {
+        &self.listener
     }
 
     /// The listener a launcher handed this seat as its standard input, for `path`.

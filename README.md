@@ -43,7 +43,11 @@ across shell commands on a local socket.
   reach: the launcher that starts the seat as a process of its own, the
   listener, and the session's idle end. The launcher reads the starting seat's
   first line, which is its `ready` response or the one `refused` response that
-  `seat::refuse` prints.
+  `seat::refuse` prints. A game that answers a protocol of its own on such a
+  socket claims the path with `Listener::claim` and accepts through
+  `Listener::unix_listener` with a loop of its own instead of the seat's. The
+  path is removed when its `Listener` drops, as with the seat's; `tests/seat.rs`
+  holds both. The claim's refusals still speak of a seat.
 
 Each game implements `Game` in its own adapter: its observation and revision,
 the names it resolves to screen positions and back, what has keyboard focus,
