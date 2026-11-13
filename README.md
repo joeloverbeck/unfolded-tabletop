@@ -2,16 +2,50 @@
 
 Concrete Rust mechanisms extracted from Arkham Unfolded for named consumers:
 presentation mechanisms for its Gathering table and Netrunner Unfolded's first
-Brân run, and seeded randomness for Arkham and `mudsong`. This is a bounded
-candidate with real consumers, not a general tabletop framework.
+Brân run, and seeded randomness and screen capture for Arkham and `mudsong`. This
+is a bounded candidate with real consumers, not a general tabletop framework.
 
 The library owns verified file reads, bounded PNG crops, atomic prepared-directory
 publication, rounded card geometry, solid textured-token assembly, asset-load
-state reporting, and a seeded generator with its index and shuffle. Consumers own
-rules, observations, layout, materials, resource meanings, required artwork,
-renderer admission policy, native-operation policy, what their randomness decides
-and how its state is saved. Enable `render` for the Bevy 0.20.0 modules;
-preparation and `random` work without Bevy.
+state reporting, a seeded generator with its index and shuffle, and screen
+capture with its windowless surface. Consumers own rules, observations, layout,
+materials, resource meanings, required artwork, renderer admission policy,
+native-operation policy, what their randomness decides and how its state is
+saved, and when a capture is taken and what a failed one means. Enable `render`
+for the Bevy 0.20.0 modules; preparation and `random` work without Bevy.
+
+## Screen capture
+
+`capture` holds the part of Arkham's screen capture that both consumers use.
+Origin: `joeloverbeck/arkham-unfolded` at
+`617904319a7b260e496af61cc5390458c2b1ff6b`, `write_image` of
+`src/tabletop_capture.rs` and the windowless surface and capture loop of
+`src/agent_seat.rs`. Arkham's migration, in its own pull request, writes its
+native captures and its agent seat's pictures through it. `mudsong`, a private
+repository, pins it for its application. No game's domain enters the module.
+
+- `write_image` writes a captured picture as 8-bit RGB: alpha is dropped, and a
+  floating-point picture is converted from linear light.
+- `no_window`, `install` and `Surface` give a host with no operating-system
+  window a focused logical primary window and an image for one camera to render,
+  as the default UI camera.
+- `image_to_file` asks Bevy for a capture of an image and returns once the file
+  is written. The caller supplies the step that runs one update of its host and
+  the deadline; the module waits two milliseconds between steps.
+
+What is not here stays with its one consumer. Arkham keeps its screenshot
+observers, their timed diagnostics and its exits, and frame pacing, on which no
+capture here depends. The module does not enable Bevy's window event loop, so
+the application that enabled it leaves it out of a windowless host itself. What
+must be ready before a capture, the clock the step advances, the time allowed
+and the wording of a failure belong to each consumer.
+
+`tests/capture.rs` pins the pixels, the surface and the capture as Arkham had
+them before the move, without a graphics adapter. One behaviour differs on
+purpose: once a capture has returned, a picture that arrives for it is not
+written. In Arkham a capture given up as incomplete still wrote its file when
+the picture came later, and a picture handed back twice was written twice,
+which Bevy does not do. A real render is each consumer's own check.
 
 ## Seeded randomness
 

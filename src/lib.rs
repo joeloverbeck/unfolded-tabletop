@@ -1,6 +1,8 @@
-//! Concrete mechanisms shared by named consumer games: presentation, and seeded
-//! randomness.
+//! Concrete mechanisms shared by named consumer games: presentation, screen
+//! capture, and seeded randomness.
 pub mod assets;
+#[cfg(feature = "render")]
+pub mod capture;
 #[cfg(feature = "render")]
 pub mod card;
 #[cfg(feature = "render")]
