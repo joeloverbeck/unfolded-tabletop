@@ -12,11 +12,16 @@ exclude = ["vendor/wgpu-hal"]
 [features]
 default = []
 render = ["dep:bevy"]
+# The agent seat: its protocol reads and writes JSON lines, and its held session
+# starts its own session with `setsid` and waits for requests with `poll`.
+seat = ["render", "dep:serde", "dep:tempfile", "rustix/process", "rustix/event"]
 
 [dependencies]
 rustix = { version = "1", features = ["fs"] }
 sha2 = "0.10"
 serde_json = "1"
+serde = { version = "1", features = ["derive"], optional = true }
+tempfile = { version = "3", optional = true }
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 bevy = { version = "=0.20.0", optional = true, default-features = false, features = ["std", "bevy_asset", "3d_bevy_render", "bevy_picking", "ui_bevy_render"] }
 
