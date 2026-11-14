@@ -2,6 +2,8 @@
 //! capture, the agent seat, and seeded randomness.
 pub mod assets;
 #[cfg(feature = "render")]
+pub mod camera;
+#[cfg(feature = "render")]
 pub mod capture;
 #[cfg(feature = "render")]
 pub mod card;
