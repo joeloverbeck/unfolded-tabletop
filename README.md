@@ -9,8 +9,9 @@ tabletop framework.
 The library owns verified file reads, bounded PNG crops, atomic prepared-directory
 publication, rounded card geometry, solid textured-token assembly, asset-load
 state reporting, a seeded generator with its index and shuffle, screen capture
-with its windowless surface, and the agent seat's protocol, input synthesis and
-held session, and recoverable file replacement. Consumers own rules, observations, layout, materials, resource
+with its windowless surface, the agent seat's protocol, input synthesis and
+held session, recoverable file replacement, and table camera motion and input
+capture. Consumers own rules, observations, layout, materials, resource
 meanings, required artwork, renderer admission policy, native-operation policy,
 what their randomness decides and how its state is saved, when a capture is
 taken and what a failed one means, and what an agent observes and names at their
@@ -47,6 +48,31 @@ Reverting the consumer adapter and dependency pin restores Arkham's prior local
 implementation. Revert the producer addition only after every adopting consumer
 has returned to its previous producer; no personal saves are rewritten by that
 rollback.
+
+## Table camera
+
+`camera`, behind `render`, owns the orbit, camera-relative WASD pan, wheel
+normalization, scene-drag capture and follow interpolation extracted from
+`joeloverbeck/arkham-unfolded` at
+`89be726a81f73f3d5828683a72ee16eb3de2f66a`, `src/tabletop_camera.rs`.
+The consumer supplies its home target and distance, focus/follow targets, and
+UI capture facts through `FrameInput`. Named views, table framing, visibility,
+modal lifecycle and when an action changes the follow target stay local.
+
+The existing motion settings remain: pitch 0.35–1.35 radians, manual distance
+6–90 world units, wheel distance multiplied by 0.95 per line, and follow
+interpolation after the manual distance clamp. Focus and follow targets are
+consumer-supplied and are not admission-validated here. These are the inherited
+camera's bounds, not a promise to fit arbitrary tables.
+
+Arkham retains its camera and real-table navigation tests around its adapter;
+`tests/camera.rs` exercises the public input-to-transform path with a different
+consumer home. Netrunner's complete-table consumer and its native acceptance
+remain due under [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11)
+and [#13](https://github.com/joeloverbeck/netrunner-unfolded/issues/13).
+Mudsong's fixed orthographic presentation does not consume this mechanism.
+Reverting Arkham's adapter and dependency pin restores its original local
+camera. This candidate makes no general camera-platform claim.
 
 ## Agent seat
 
