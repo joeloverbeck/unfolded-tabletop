@@ -18,6 +18,28 @@ taken and what a failed one means, and what an agent observes and names at their
 table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
 it, for the agent seat; preparation, `random` and `record_replacement` work without Bevy.
 
+## Token count labels
+
+`count_label`, behind `render`, holds numeric label creation and camera tracking
+from Arkham `d7a6f2ea46fbf97719cc352ee8b94270857b9bcd`,
+`src/tabletop_counters.rs`. [Issue #11](https://github.com/joeloverbeck/unfolded-tabletop/issues/11)
+coordinates Arkham's existing counter migration with Netrunner's compact credit
+and click totals under [Netrunner #12](https://github.com/joeloverbeck/netrunner-unfolded/issues/12).
+Consumers create the token and supply its count, offset and label presentation.
+Resource meanings, zero-count visibility, token geometry, fonts, colors,
+accessibility names and count updates stay with each game.
+
+Install `CountLabelPlugin` and call `spawn` for each label. Tracking requires one
+`Camera3d` and a root token `Transform`; it scales the offset without rotating it,
+centers by the measured label width, hides failed projections and removes labels
+whose token no longer has a transform. With no unique camera it changes nothing.
+This preserves Arkham's behavior; it does not support arbitrary hierarchies or
+multiple views. Mudsong has no corresponding counter-label consumer to migrate.
+
+Each consumer retains its own checks and rendered inspection. Revert consumer
+adapters and dependency pins before withdrawing this producer addition; Arkham's
+prior revision contains the original implementation. No saved state changes.
+
 ## Recoverable file replacement
 
 `record_replacement` owns Arkham's bounded reads, persistent sidecar lock,
