@@ -8,6 +8,8 @@ pub mod capture;
 #[cfg(feature = "render")]
 pub mod card;
 #[cfg(feature = "render")]
+pub mod count_label;
+#[cfg(feature = "render")]
 pub mod loading;
 pub mod random;
 pub mod record_replacement;
