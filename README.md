@@ -9,13 +9,70 @@ tabletop framework.
 The library owns verified file reads, bounded PNG crops, atomic prepared-directory
 publication, rounded card geometry, solid textured-token assembly, asset-load
 state reporting, a seeded generator with its index and shuffle, screen capture
-with its windowless surface, and the agent seat's protocol, input synthesis and
-held session. Consumers own rules, observations, layout, materials, resource
+with its windowless surface, the agent seat's protocol, input synthesis and
+held session, recoverable file replacement, and table camera motion and input
+capture. Consumers own rules, observations, layout, materials, resource
 meanings, required artwork, renderer admission policy, native-operation policy,
 what their randomness decides and how its state is saved, when a capture is
 taken and what a failed one means, and what an agent observes and names at their
 table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
-it, for the agent seat; preparation and `random` work without Bevy.
+it, for the agent seat; preparation, `random` and `record_replacement` work without Bevy.
+
+## Recoverable file replacement
+
+`record_replacement` owns Arkham's bounded reads, persistent sidecar lock,
+staged and synced replacement, previous-record retention, exclusive creation,
+and restart archiving. Origin: `joeloverbeck/arkham-unfolded` at
+`89be726a81f73f3d5828683a72ee16eb3de2f66a`, `src/record_replacement.rs`.
+The coordinated extraction belongs to
+[Netrunner issue #9](https://github.com/joeloverbeck/netrunner-unfolded/issues/9).
+Arkham's adapter keeps its actual save, reload and restart paths; Netrunner's
+save/resume ticket must still establish its own real consumer before coordinated
+adoption is complete. Mudsong has no saved-game consumer and needs no migration.
+
+Consumers supply their record-size bound, error conversion, replacement admission
+and recovery validation. Schemas, checksums, content identities, freshness and
+replay policy stay in each game. Admission and recovery validation run under the
+same lock as installation; the lock's inode is never truncated or removed.
+An unchanged decision writes no record bytes and does not validate recovery.
+
+This preserves the original filesystem behavior and diagnostics. It is not a
+multi-file transaction: a later failure can retain a restart archive or rotate
+the previous record. Staged files are synced, but parent-directory metadata is
+not; this does not promise universal power-loss durability or automatic repair
+of corrupt records. `tests/record_replacement.rs` retains the original mechanism
+cases at the public interface. Arkham owns its admission, lock-tracing and real
+driver restart tests, and both consumers retain their required checks.
+
+Reverting the consumer adapter and dependency pin restores Arkham's prior local
+implementation. Revert the producer addition only after every adopting consumer
+has returned to its previous producer; no personal saves are rewritten by that
+rollback.
+
+## Table camera
+
+`camera`, behind `render`, owns the orbit, camera-relative WASD pan, wheel
+normalization, scene-drag capture and follow interpolation extracted from
+`joeloverbeck/arkham-unfolded` at
+`89be726a81f73f3d5828683a72ee16eb3de2f66a`, `src/tabletop_camera.rs`.
+The consumer supplies its home target and distance, focus/follow targets, and
+UI capture facts through `FrameInput`. Named views, table framing, visibility,
+modal lifecycle and when an action changes the follow target stay local.
+
+The existing motion settings remain: pitch 0.35–1.35 radians, manual distance
+6–90 world units, wheel distance multiplied by 0.95 per line, and follow
+interpolation after the manual distance clamp. Focus and follow targets are
+consumer-supplied and are not admission-validated here. These are the inherited
+camera's bounds, not a promise to fit arbitrary tables.
+
+Arkham retains its camera and real-table navigation tests around its adapter;
+`tests/camera.rs` exercises the public input-to-transform path with a different
+consumer home. Netrunner's complete-table consumer and its native acceptance
+remain due under [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11)
+and [#13](https://github.com/joeloverbeck/netrunner-unfolded/issues/13).
+Mudsong's fixed orthographic presentation does not consume this mechanism.
+Reverting Arkham's adapter and dependency pin restores its original local
+camera. This candidate makes no general camera-platform claim.
 
 ## Agent seat
 
