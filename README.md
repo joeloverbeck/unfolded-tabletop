@@ -34,11 +34,18 @@ across shell commands on a local socket.
 - `Seat` alone steps the table, in fixed steps of one sixtieth of a second. It
   writes pointer and key input where Bevy's window-event conversion writes it,
   settles the table, captures its image through `capture`, and answers
-  `observe`, `activate`, `key`, `settle`, `capture` and `quit`.
-- The guards are the protocol's, so both forms have them. An activation or a key
-  acts only on the revision it names. A key that the game marks as able to
-  commit presses only the control the request names. A connection stops acting
-  after its first refusal or missed activation.
+  `observe`, `activate`, `point`, `key`, `settle`, `capture` and `quit`.
+  `point` rests the pointer on a named component or choice as `activate` does,
+  and leaves it there without pressing; its response says where it rests and
+  what is under it. `mudsong`, a private repository that pins the library for
+  its application, is the consumer that sends it; a game that does not send it
+  changes nothing.
+- The guards are the protocol's, so both forms have them. An activation, a point
+  or a key acts only on the revision it names. A key that the game marks as able
+  to commit presses only the control the request names. A connection stops
+  pressing after its first refusal or miss: its later activations and keys are
+  skipped. A point presses nothing, so it is still served, and a missed point
+  stops the later activations and keys as a missed activation does.
 - `socket` holds one session on a Unix-domain socket that only its owner can
   reach: the launcher that starts the seat as a process of its own, the
   listener, and the session's idle end. The launcher reads the starting seat's
@@ -74,8 +81,9 @@ and not others, so a change to the rest would pass every check:
   tests activate by both request fields and hold the mode; `tests/seat.rs`
   activates by `component` and holds the mode. `tests/seat.rs` holds, word for
   word, the refusals of an outdated revision, a committing key, an unknown key,
-  a busy table, a skipped request, a missed activation and a capture on a host
-  with no image, and Arkham's tests assert parts of some of those. The other
+  a busy table, a skipped request, a missed activation, a missed point and a
+  capture on a host with no image, and Arkham's tests assert parts of some of
+  those. No Arkham test points. The other
   refusals of a capture, and the wording for a focus that is no control or menu
   row, are held by no test.
 - The held session is Linux only. Its launcher starts the running executable
@@ -201,3 +209,7 @@ seeded randomness above.
 
 The waiver establishes neither general library fitness nor acceptance of an
 untested migration.
+
+On 2026-11-13 the owner read the waiver as covering the agent seat as one
+mechanism: an operation of the seat that one consumer uses, such as `point`,
+is covered while the seat itself is used by two.

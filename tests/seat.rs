@@ -13,7 +13,7 @@ use bevy::{
     picking::{
         backend::HitData,
         hover::HoverMap,
-        pointer::{PointerAction, PointerInput},
+        pointer::{PointerAction, PointerId, PointerInput},
     },
     prelude::*,
     render::{
@@ -596,6 +596,148 @@ fn an_activation_rests_on_the_named_component_then_presses_and_releases() {
     assert_eq!(activated["observation"]["clicked"], json!(["card"]));
     // One step to rest the pointer, one to press and one to release.
     assert_eq!(activated["table"]["clock_nanos"], 3 * STEP_NANOS);
+}
+
+#[test]
+fn a_point_rests_the_pointer_on_the_named_component_and_presses_nothing() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+
+    let absent = seat.ask(json!({"op": "point", "revision": 0, "component": "coin"}));
+    assert_eq!(absent["status"], "refused");
+    assert_eq!(absent["error"], "No shown component is named coin.");
+    let outdated = seat.ask(json!({"op": "point", "revision": 3, "component": "card"}));
+    assert_eq!(
+        outdated["error"],
+        "Outdated: the request names revision 3, but the attempt is at revision 0. Observe again."
+    );
+    let both = seat.ask(json!({"op": "point", "revision": 0, "component": "a", "choice": "b"}));
+    assert_eq!(
+        both["error"],
+        "point needs exactly one of component or choice"
+    );
+
+    let pointed = seat.ask(json!({"op": "point", "revision": 0, "component": "card"}));
+
+    assert_eq!(pointed["status"], "pointed", "{pointed}");
+    assert_eq!(pointed["ok"], true);
+    assert_eq!(pointed["position"], json!([10.0, 10.0]));
+    // Everything under the pointer, nearest first, as the game describes it.
+    assert_eq!(pointed["hit"], json!(["card"]));
+    assert_eq!(pointed["covered"], Value::Null);
+    assert_eq!(pointed["observation"]["clicked"], json!([]));
+    assert_eq!(pointed["observation"]["revision"], 0);
+    // One step to rest the pointer, and none to press.
+    assert_eq!(pointed["table"]["clock_nanos"], STEP_NANOS);
+    // The pointer stays where it rests: the table sees it over the card.
+    let hovered = seat.app.world().resource::<HoverMap>();
+    let over: Vec<Entity> = hovered[&PointerId::Mouse].keys().copied().collect();
+    let mut pieces = seat.app.world_mut().query::<(Entity, &Piece)>();
+    let card = pieces
+        .iter(seat.app.world())
+        .find(|(_, piece)| piece.name == "card");
+    assert_eq!(over, [card.unwrap().0]);
+}
+
+#[test]
+fn a_covered_component_is_missed_by_a_point_and_a_partly_covered_one_is_pointed_where_it_shows() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("lid", Rect::new(0., 0., 20., 12.), 0.));
+
+    let missed = seat.ask(json!({"op": "point", "revision": 0, "component": "card"}));
+    assert_eq!(missed["status"], "missed", "{missed}");
+    assert_eq!(missed["ok"], false);
+    assert_eq!(missed["pressed"], false);
+    assert_eq!(missed["hit"], json!(["lid"]));
+    assert_eq!(
+        missed["error"],
+        "The pointer at (10, 10) is over \"lid\", not component card. Nothing was pressed."
+    );
+
+    let mut pieces = seat.app.world_mut().query::<&mut Piece>();
+    for mut piece in pieces.iter_mut(seat.app.world_mut()) {
+        if piece.name == "card" {
+            piece.reach.push(Vec2::new(10., 16.));
+        }
+    }
+    let pointed = seat.ask(json!({"op": "point", "revision": 0, "component": "card"}));
+    assert_eq!(pointed["status"], "pointed", "{pointed}");
+    assert_eq!(pointed["position"], json!([10.0, 16.0]));
+    assert_eq!(pointed["hit"], json!(["card"]));
+    assert_eq!(
+        pointed["covered"],
+        json!({"position": [10.0, 10.0], "hit": ["lid"]})
+    );
+    assert_eq!(pointed["observation"]["clicked"], json!([]));
+}
+
+#[test]
+fn a_point_presses_nothing_so_a_refusal_before_it_does_not_skip_it() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("lid", Rect::new(0., 0., 20., 20.), 0.));
+    let input = concat!(
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}\n",
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"lid\"}\n",
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"card\"}\n",
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"Tab\"}\n",
+    );
+    let mut output = Vec::new();
+
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+
+    let responses = lines(&output);
+    let statuses: Vec<&str> = responses
+        .iter()
+        .map(|response| response["status"].as_str().unwrap())
+        .collect();
+    // A missed point stops the connection's later keys as a missed activation does.
+    assert_eq!(
+        statuses,
+        ["ready", "refused", "pointed", "missed", "skipped"]
+    );
+}
+
+#[test]
+fn after_a_missed_point_a_point_is_served_and_activations_and_keys_are_skipped() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("lid", Rect::new(0., 0., 20., 20.), 0.));
+    let input = concat!(
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"card\"}\n",
+        "{\"op\":\"point\",\"revision\":0,\"component\":\"lid\"}\n",
+        "{\"op\":\"activate\",\"revision\":0,\"component\":\"lid\"}\n",
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"Tab\"}\n",
+    );
+    let mut output = Vec::new();
+
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+
+    let responses = lines(&output);
+    let statuses: Vec<&str> = responses
+        .iter()
+        .map(|response| response["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        statuses,
+        ["ready", "missed", "pointed", "skipped", "skipped"]
+    );
+    assert!(
+        responses[3]["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("Skipped: an earlier request on this connection missed its target"),
+        "{}",
+        responses[3]["error"]
+    );
+    // Nothing was pressed, so nothing was clicked.
+    assert_eq!(responses[4]["observation"]["clicked"], json!([]));
+    assert_eq!(responses[4]["observation"]["keys"], json!([]));
 }
 
 #[test]
