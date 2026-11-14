@@ -58,7 +58,17 @@ replay policy stay in each game. Admission and recovery validation run under the
 same lock as installation; the lock's inode is never truncated or removed.
 An unchanged decision writes no record bytes and does not validate recovery.
 
-This preserves the original filesystem behavior and diagnostics. It is not a
+The lock is explicitly released when replacement returns or unwinds, so an
+unrelated fork waiting to exec cannot keep it held through its inherited file
+description. An independent writer is still refused while admission, recovery
+validation or installation is active. Unlock errors, like close errors, are
+best-effort cleanup: they do not mask the operation's error, report an installed
+record as failed, or panic during unwinding. Closing the file remains the fallback;
+if the OS refuses unlock, an inherited descriptor can still retain the lock until
+it closes. [Issue #13](https://github.com/joeloverbeck/unfolded-tabletop/issues/13)
+owns this repair and its coordinated consumer verification.
+
+This preserves the original replacement behavior and diagnostics. It is not a
 multi-file transaction: a later failure can retain a restart archive or rotate
 the previous record. Staged files are synced, but parent-directory metadata is
 not; this does not promise universal power-loss durability or automatic repair

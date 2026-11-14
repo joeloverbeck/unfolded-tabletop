@@ -7,6 +7,20 @@ use std::{
     path::{Path, PathBuf},
 };
 
+struct ReplacementLock(fs::File);
+
+impl Drop for ReplacementLock {
+    fn drop(&mut self) {
+        // Closing alone leaves the lock held by a child that inherited the open
+        // file description and has not reached exec yet. Release at this scope's
+        // end, including early returns and unwinding, before closing our file.
+        // Like close errors, unlock errors must not replace an admission/write
+        // error, turn an installed record into a reported failure, or panic.
+        // Close remains the fallback if the OS refuses the explicit unlock.
+        let _ = self.0.unlock();
+    }
+}
+
 /// The caller's decision after inspecting the current bytes under the lock.
 pub enum Replacement {
     /// Leave all record bytes unchanged.
@@ -80,6 +94,7 @@ pub fn replace<E: From<std::io::Error>>(
         .open(PathBuf::from(lock_path))?;
     lock.try_lock()
         .map_err(|cause| error(format!("The save is busy: {cause}")))?;
+    let _lock = ReplacementLock(lock);
     let existing = match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_file() => Some(read(path, limit, error)?),
         Ok(_) => {
