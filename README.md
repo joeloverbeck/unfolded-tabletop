@@ -358,7 +358,8 @@ Arkham's prior commit contains its original generator.
 
 ## Development checks
 
-Run `scripts/check` from a clean clone before publication. It checks full-workspace
+Run `scripts/check` from a clean clone before publication. It bounds its builds
+by default (four Cargo jobs, no debug info; CI sets two), and the environment may override them. It checks full-workspace
 formatting first, then strict Clippy and tests with the default, `render` and
 `seat` features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
 committed lockfile fixes this repository's verification dependencies. CI runs the
