@@ -15,3 +15,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
+
+# The commands run through `run_cli` in dedicated processes; the executable
+# dispatches its own child modes, so it supplies its own harness.
+[[test]]
+name = "cli"
+path = "tests/cli/main.rs"
+harness = false
