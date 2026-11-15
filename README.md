@@ -409,3 +409,27 @@ untested migration.
 On 2026-11-13 the owner read the waiver as covering the agent seat as one
 mechanism: an operation of the seat that one consumer uses, such as `point`,
 is covered while the seat itself is used by two.
+
+## Development readers and recorded checks
+
+The separate `unfolded-dev-tools` workspace crate owns the bounded context readers,
+check recorder/resource summaries and process/file support extracted from Arkham
+`d0b57009ba037ca8756a4f2756dcb550d8634773`. Shared issue #27 coordinates Arkham #249
+and Netrunner #37. The existing two-consumer EVID-6 specialization applies; this
+is development support for those consumers, not a general agent platform.
+
+Arkham keeps its CLI and publication/native-operation policies. Netrunner keeps
+its fixture/preflight selection. Consumers may embed `reader`, `check`, `process`
+and `digest`; `run_cli` supplies the same reading/recording commands in a dedicated
+process and installs its interrupt handler there. Reader arguments retain their
+explicit byte limits, paging cursors and source hashes. Recording retains complete
+logs, source fingerprints, interruption and child-cleanup semantics. These are
+mechanical evidence, not authority to accept or publish their result.
+
+The runtime crate does not depend on this crate or on its command-line/signal
+handling dependencies. Consumers pin immutable Git revisions; no sibling checkout
+or separately built Arkham executable is needed. Existing Arkham integration tests
+exercise command compatibility, including failures, process exit and return use.
+Revert consumer adapters/pins before removing the shared crate; the baseline
+above retains the original implementation. Game behavior, saves and assets are
+outside this extraction.
