@@ -11,8 +11,10 @@
 //!
 //! Each game keeps its policy in its adapter: what it observes and names, the keys
 //! it reads and which of them can commit, its clock, its admission and the words of
-//! an admission that ran out of time, the plugins of its windowless host, how it is
-//! launched, and how long a held session may idle.
+//! an admission that ran out of time, the plugins of its windowless host, its launch
+//! options, and how long a held session may idle when that differs from the default.
+//! The order in which a seat starts, in either form, and its refusals are
+//! [`start`]'s.
 //!
 //! The module was extracted from Arkham, its first table. The protocol's vocabulary
 //! and the wording of its responses are as Arkham had them, and so are its fixed
@@ -61,6 +63,7 @@ use std::{
 };
 
 pub mod socket;
+pub mod start;
 
 /// A shown UI control's logical pointer position and geometric reachability.
 /// This does not establish that another control is not drawn over it: the seat

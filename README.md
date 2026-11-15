@@ -245,15 +245,36 @@ across shell commands on a local socket.
   `Listener::unix_listener` with a loop of its own instead of the seat's. The
   path is removed when its `Listener` drops, as with the seat's; `tests/seat.rs`
   holds both. The claim's refusals still speak of a seat.
+- `start` carries a table from "this process was asked to seat an agent" to the
+  end of its session, in either form. The game hands `Start::run` its socket, if
+  any, and a function that builds its table with the windowless surface installed.
+  `Start` holds the game's marker, its words for an admission that ran out of time
+  and, unless the game changes them, a 120-second admission limit and a
+  30-minute idle period. Those defaults are what the games used before this module
+  existed. The steps run in one order: whether this process is the launched seat;
+  if not, claim the socket and launch it; in the seat, leave the launching shell's
+  session and take the listener; build the table; open the seat; admit the table;
+  announce `ready`; serve. Every failure before `ready` prints exactly one
+  `refused` line, and a launching command relays the seat's as its own. A table can
+  keep something that must outlive its app, such as a lease on its artwork; it is
+  dropped after the app. `Start::seat` opens and admits a built table in the
+  calling process, so a game's tests sit an agent at its table with no launch.
+  The separate calls (`detached`, `launch`, `detach`, `announce`, `Seat::open`,
+  `Seat::admit`, `Seat::serve`, `Listener::serve`) still work, so a game that pins
+  this revision and keeps its own sequence still builds.
+  [Issue #32](https://github.com/joeloverbeck/unfolded-tabletop/issues/32) moves
+  the four games onto `start`. To withdraw it, first revert each game's adapter
+  and its pin together.
 
 Each game implements `Game` in its own adapter: its observation and revision,
 the names it resolves to screen positions and back, what has keyboard focus,
 whether its table is settled, its clock, its admission to play, whether its
 render pipelines are ready, and the keys the seat may press with those among
-them that can commit. These are each game's too: the words of an admission
-that ran out of time, the plugins of its windowless host, its launch options,
-the environment variable that marks a launched seat, and how long a held
-session may idle.
+them that can commit. These are each game's too, handed to `start`: the words of
+an admission that ran out of time, the plugins and contents of its windowless
+table, the environment variable that marks a launched seat, its admission limit
+and idle period when they differ from the defaults, and whatever must outlive its
+app. Its launch options stay in its own code.
 
 `ui_target` reads a visible, nonempty Bevy UI node's logical center and whether
 that center lies in its calculated clip and the supplied logical viewport. It
@@ -293,8 +314,16 @@ and not others, so a change to the rest would pass every check:
   again through `/proc/self/exe`, a socket path holds at most 107 bytes, and the
   held seat's standard error goes to a log at the socket's path with `.log`
   added. `tests/seat.rs` holds the 107 bytes, and Arkham's tests read the log at
-  that path. No test here starts a launched seat: a held start in a consumer
-  exercises the launcher.
+  that path. `tests/seat_start.rs` starts a launched seat end to end on a table
+  of no game: it runs its own executable as a game's command, through the real
+  launcher, and reads `ready`, a session ended by `quit`, and the one `refused`
+  line of each failure before `ready`. In both forms these are a table that cannot
+  be built, one with no camera for the seat to open, a refused admission and an
+  unfinished one. Only in held form are they a socket that cannot be claimed and a
+  marked seat handed no listener. It
+  starts child processes of its own and listens on Unix-domain sockets in the
+  system's temporary directory, and needs no graphics adapter. A real render
+  through a held start is still each consumer's own check.
 
 `tests/seat.rs` pins the protocol's responses and refusals as Arkham worded
 them, on a table that belongs to no game and without a graphics adapter: its
