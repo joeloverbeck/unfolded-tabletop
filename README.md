@@ -121,8 +121,14 @@ multi-file transaction: a later failure can retain a restart archive or rotate
 the previous record. Staged files are synced, but parent-directory metadata is
 not; this does not promise universal power-loss durability or automatic repair
 of corrupt records. `tests/record_replacement.rs` retains the original mechanism
-cases at the public interface. Arkham owns its admission, lock-tracing and real
-driver restart tests, and both consumers retain their required checks.
+cases at the public interface, and since issue #30 every mechanism case Arkham's
+continuity tests held: archives, recovery validation, size limits, non-regular
+destinations, lock contention and recovery-install cleanup.
+`tests/record_replacement_fork.rs` holds lock release before a forked child's
+inherited descriptor closes, and `tests/record_replacement_trace.rs` traces both
+renames of one replacement under the same sidecar lock, each in an executable of
+its own. Arkham owns its admission, session wording and real driver restart
+tests, and both consumers retain their required checks.
 
 Reverting the consumer adapter and dependency pin restores Arkham's prior local
 implementation. Revert the producer addition only after every adopting consumer
@@ -145,9 +151,11 @@ interpolation after the manual distance clamp. Focus and follow targets are
 consumer-supplied and are not admission-validated here. These are the inherited
 camera's bounds, not a promise to fit arbitrary tables.
 
-Arkham retains its camera and real-table navigation tests around its adapter;
-`tests/camera.rs` exercises the public input-to-transform path with a different
-consumer home. Netrunner's complete-table consumer and its native acceptance
+Arkham retains its framing tests (its startup home and named initial views) and
+real-table navigation around its adapter. `tests/camera.rs` holds the motion
+Arkham's camera tests held before issue #30: orbit, camera-relative pan, wheel
+normalization and limits, scene-drag capture and interruption, follow
+interpolation, focus and Home, with the expectations Arkham recorded. Netrunner's complete-table consumer and its native acceptance
 remain due under [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11)
 and [#13](https://github.com/joeloverbeck/netrunner-unfolded/issues/13).
 Mudsong's fixed orthographic presentation does not consume this mechanism.
@@ -357,6 +365,12 @@ only partial evidence. These checks do not replace any consumer's own checks:
 asset, GPU, native acceptance or saved-game continuity.
 
 The workspace's local Cargo patch exercises its owned `vendor/wgpu-hal` copy.
+`scripts/check` also runs that copy's `vulkan::upload_memory` regression tests
+from its own manifest and tracked lockfile; they need no GPU. `tests/assets.rs`,
+`tests/card.rs`, `tests/token.rs` and `tests/loading.rs` hold bounded and verified
+reads, PNG crop bounds, publication without replacement, card meshes, token
+assembly and load-state reports with test-made inputs. No test registers a real
+font, so `loading::font_registered` is held only for a font without a family.
 Consumers still select their own immutable root patch and dependency lockfile;
 this verification setup does not change their pins.
 
@@ -428,8 +442,11 @@ mechanical evidence, not authority to accept or publish their result.
 
 The runtime crate does not depend on this crate or on its command-line/signal
 handling dependencies. Consumers pin immutable Git revisions; no sibling checkout
-or separately built Arkham executable is needed. Existing Arkham integration tests
-exercise command compatibility, including failures, process exit and return use.
+or separately built Arkham executable is needed. `dev-tools/tests/cli` runs every
+reader and recorder case Arkham's tool tests held before issue #30 through `run_cli`,
+one process per invocation: the test executable is its own harness and the child
+its recorded checks run. `dev-tools/tests/process.rs` holds process ownership and
+the digest. Arkham's tests keep only its own command wiring.
 Revert consumer adapters/pins before removing the shared crate; the baseline
 above retains the original implementation. Game behavior, saves and assets are
 outside this extraction.
