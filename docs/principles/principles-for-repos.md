@@ -1,177 +1,169 @@
 # Principles for Repositories
 
-**Constitution revision:** 2026-09-30.1  
-**Supersedes:** 2026-08-27.2. Existing rule identifiers are retained.
+**Constitution revision:** 2026-11-15.1
+**Supersedes:** 2026-09-30.1.
 
-## 1. Purpose, scope, and requirements language
+## Purpose and requirements language
 
-This constitution governs every formal Git repository that adopts it. It applies to repository foundations, issues, plans, schemas, tests, reviewers, agents, skills, automation, branches, releases, data products, and inter-repository contracts. A specialized rule is dormant when its trigger does not exist; harmless inapplicability is not nonconformance.
+This constitution governs every adopting formal Git repository, including its foundations, work, representations, tests, agents, automation, publications and inter-repository contracts. It prevents work from acquiring authority through momentum, elegance, local correctness, enthusiasm, sunk cost or self-created demand, before repair or abandonment becomes difficult. A specialized rule is dormant when its trigger is absent; harmless inapplicability is not nonconformance.
 
-Its purpose is to prevent expensive work from acquiring authority through momentum, elegance, local correctness, agent enthusiasm, sunk cost, or architecture that manufactures its own demand. It is designed to stop work before a repository becomes difficult to repair or abandon.
+**MUST** and **MUST NOT** are requirements; deviation needs an `ADOPT-2` waiver unless forbidden. **SHOULD** and **SHOULD NOT** are strong defaults; deviation records reason, accepted risk and bounded scope in an existing authoritative artifact, without a waiver unless a MUST is also relaxed. **MAY** grants permission, not preference.
 
-The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are normative:
+All text is normative unless labelled **Informative**. The identified rules own detailed obligations. Examples are non-exhaustive and create no requirements by analogy. Identical obligations MUST have one canonical formulation; indexes and bootstraps route to it rather than restate competing rules. Required records MUST use an existing authoritative issue, PR, foundation, decision or governed state artifact unless a new artifact has an independently justified consumer. Compliance alone requires no registry, certification packet, recurring report or form.
 
-- **MUST** and **MUST NOT** state constitutional requirements. Deviation requires a valid waiver under `ADOPT-2`, unless the rule expressly forbids waiver.
-- **SHOULD** and **SHOULD NOT** state strong defaults. Deviation requires a recorded reason, accepted risk, and bounded scope in an existing authoritative artifact, but not a formal waiver.
-- **MAY** states permission, not preference.
+## Required agent bootstrap
 
-All text in this constitution is normative unless explicitly labeled **Informative**. Semantic rule identifiers contain the controlling detailed obligations. Examples are non-exhaustive and do not create requirements by analogy. Identical obligations MUST use one canonical formulation; indexes and bootstraps route readers to that formulation rather than restating it competitively.
+Copy this block into root `CLAUDE.md` under `ADOPT-1`. Only the `Adopted modules:` line is an adopter parameter: list that repository's adopted module filenames, or `none`. Every other byte is invariant. The core and module files themselves are always copied byte for byte. Repository-specific instructions may surround the block.
 
-When this constitution requires a fact or decision to be recorded, the repository MUST use an existing authoritative issue, pull request, foundation, decision record, or governed state artifact unless a new artifact has an independently justified consumer. No registry, certification packet, recurring report, or form is required merely to prove constitutional compliance.
-
-## 2. Required agent bootstrap
-
-The following block is normative routing text. Every adopting repository MUST copy it verbatim into the repository-root `CLAUDE.md`. `CLAUDE.md` is the real file; repository-root `AGENTS.md` MUST be a symlink to it. Repository-specific instructions may surround the block but MUST NOT alter it.
-
-<!-- BEGIN PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-09-30.1 -->
+<!-- BEGIN PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-11-15.1 -->
 ## Repository constitution
 
-This repository adopts `docs/principles/principles-for-repos.md`, revision **2026-09-30.1**, as binding. `CLAUDE.md` is the real root instruction file and `AGENTS.md` is its symlink. A namespace name below means every rule whose identifier begins with that namespace and a hyphen.
+This repository adopts `docs/principles/principles-for-repos.md`, revision **2026-11-15.1**, and the modules below as binding. `CLAUDE.md` is the real root instruction file; `AGENTS.md` is its symlink.
+
+Adopted modules: `fidelity.md`, `agency-simulation.md`, `search-adaptation.md`, `evaluators-scores.md`, `integration.md`, `longitudinal.md`.
 
 ### Mandatory reading
 
-Reasonable doubt activates a reading trigger. Memory, a previous session, an earlier reading for a different decision, and paraphrases do not satisfy it.
+Reasonable doubt fires a trigger. Read the core's Modules table for applicability. A missing triggered module MUST be adopted under `ADOPT-1` before substantive dependent work. Read each applicable module's rules. Founding, material reorientation or foundation revision, adoption/reconciliation, and constitutional amendment require the complete adopted text: core and all adopted modules, plus any newly applicable module.
 
-- Before founding, materially reorienting, or reconciling a repository; materially revising foundations; or adopting a constitutional revision: read the complete constitution.
-- Before accepting or activating work, applying execution-ready or AFK status, opening an adjacent lane, expanding scope, or selecting a coordinated producer–consumer iteration: read `PURP`, `WORK`, `OPS`, and `AGENT-5`.
-- Before turning uncertainty into a human request or blocker: read `AUTH-2`, `AUTH-3`, `AGENT-5`, and `OPS-2`.
-- Before adopting or expanding a representation, specification, recurrent authoring path, schema, ontology, state model, simulator, corpus, evaluator, semantic gate, migration, generated surface, shared infrastructure, or general capability: read `EVID`, `SEM`, `REP`, `GOV`, and `OPS`.
-- Before implementing or accepting a claim about feedback, training, ranking, search, adaptation, optimization, or repeated selection: read `PURP` and `EVID`; also read `SEM` and `REP` when semantic decisions or actions depend on it.
-- Before using a test, prototype, review, simulation, score, or experience as grounds for completion, adoption, or expansion: read `EVID-4` and the applicable proof requirements in `EVID-3`, `EVID-6`, and `REP-2`.
-- Before promising fidelity to external rules, standards, protocols, legacy behavior, or governed workflows: read `EVID`, `REP`, and `OPS`.
-- Before adding or redesigning a capability, pipeline, skill family, repository boundary, or human/agent workflow: read `BOUND`, `AGENT`, and `INT`.
-- Before cross-repository import, export, feedback, migration, shared identifiers, private-data mounting, or coordinated execution: read `INT` and `BOUND`; read `AGENT` when execution spans capabilities or repositories.
-- Before unattended continuation, handoff, repeated repair or review, or continuation near an appetite or allocation limit: read `AGENT`, `WORK`, and `OPS`.
-- Before merge, release, or making production work newly reachable from an authoritative path: read `AUTH` and `PUB`.
-- Before a waiver, specialization, adoption reconciliation, identifier change, or amendment: read `ADOPT`.
+An exact quotation of a current-revision rule in a brief naming that revision satisfies the recipient's reading of that rule. Paraphrase, memory and earlier reading for another decision do not. The recipient reads anything else its own work triggers.
 
-Name the consulted rule identifiers in the existing authoritative work artifact. Do not create a compliance document. An accepted bounded task may continue without rereading or recording the same consultation until its scope, premise, authority, publication set, or triggered rule family changes.
+- Before accepting or activating work: read `PURP-3`, `WORK-1`, `WORK-2`, `WORK-3`, `WORK-5`, `EVID-5`, `OPS-1`, `OPS-4`, `AGENT-5`.
+- Before using a test or other evidence for completion, adoption or expansion: read `EVID-3`, `EVID-4`, `EVID-6`, `REP-2`.
+- Before merge, release or authoritative publication: read `AUTH-1`, `AUTH-2`, `AUTH-3`, `OPS-6`, `OPS-7`, `PUB-1`.
+- Before founding, reorientation or selecting an outcome: read `PURP-1`, `PURP-2`, `PURP-4`, `GOV-1`.
+- Before prerequisites, supply, substrate or a coordinated consumer iteration constrain work: read `PURP-5`, `PURP-6`, `WORK-6`.
+- Before research or relying on an origin story: read `EVID-1`, `EVID-2`.
+- Before broad exploration or a selected full sweep: read `EVID-7`.
+- Before recurrent workflow adoption or manual evaluation: read `EVID-8`.
+- Before narrowing accepted input or occurrence criteria: read `EVID-9`.
+- Before interpreting meaning for a consequential decision: read `SEM-1`, `SEM-2`, `AUTH-3`.
+- Before a representation, specification or structured prerequisite constrains work: read `REP-1`, `REP-2`, `REP-3`.
+- Before adding or changing a capability or repository boundary: read `BOUND-1`, `BOUND-2`, `BOUND-3`, `BOUND-4`.
+- Before dividing or mounting private content: read `BOUND-5`.
+- Before composing or designing skills or semantic capabilities, or coordinating work across repositories: read `AGENT-1`, `AGENT-2`.
+- Before a handoff, human wait or unattended continuation: read `AGENT-3`, `AGENT-4`, `WORK-3`, `WORK-5`, `OPS-4`, `OPS-7`.
+- Before escalating missing inputs or uncertainty: read `AUTH-2`, `AUTH-3`, `AGENT-5`, `OPS-2`.
+- Before repairing a test/review failure or starting exact review: read `OPS-3`, `OPS-5`.
+- Before acting on consecutive real-input runs with no positive case: read `WORK-4`.
+- Before creating work-control or governance surfaces: read `GOV-2`, `GOV-3`.
+- Before adoption, reconciliation, waiver, specialization, identifier change or amendment: read `ADOPT-1`, `ADOPT-2`, `ADOPT-3`, `ADOPT-4`.
 
-### Universal authority chain
+Record consulted IDs in the existing authoritative work artifact, not a compliance document. Bounded accepted work need not repeat readings or records until scope, premise, authority, publication set or triggered rule family changes.
 
-Human intent → constrained proposal → mechanical or semantic checks → inspectable consequences → human acceptance → authoritative state
+### Authority and stop signals
 
-Human selection authorizes priority and bounded effort. It does not establish truth, fitness, reusability, demand, or permission for unaccepted dependent work.
+Human intent → constrained proposal → checks → inspectable consequences → human acceptance → authoritative state. Human selection authorizes priority and bounded effort; it does not establish truth, fitness, reusability, demand or permission for unaccepted dependent work.
 
-### Immediate stop-and-read signals
+Stop discretionary expansion and read the controlling rules when inputs, oracles, lifecycle evidence or no-match outcomes are missing; an essential consumer handoff remains untested; claims outrun evidence or burden exceeds appetite; presentation, scores, replay or compliance substitute for a different claim, hide failed requirements or obscure causal credit; capability, boundary, fan-out, non-convergence or terminal-decision limits arise; or authority conflicts or a human request would transfer technical investigation to the human. Use the routes above and applicable modules.
 
-Stop further discretionary expansion and read the controlling rules when:
+If required text cannot be located or read, substantive work is unauthorized. Preserve potentially applicable safeguards while investigating. `AGENT-5` reserves only the human remainder; ordinary implementation uncertainty permits governed investigation and reversible work.
+<!-- END PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-11-15.1 -->
 
-- required information, an independent oracle, dependency lifecycle evidence, or a valid no-match outcome is missing (`SEM`, `REP`, `OPS`);
-- local completion excludes an essential consumer effect, repeated artifacts leave the actual handoff untested, or another implementation is offered as proof of the intended path (`PURP-3`, `PURP-5`, `EVID-3`, `EVID-4`, `INT-1`);
-- experiential, recurrent, autonomous, simulation, search, generality, fidelity, or causal claims outrun their applicable evidence, or burden exceeds appetite (`PURP-2`, `EVID`, `REP`);
-- presentation, enthusiasm, evaluator scores, exact replay, or compliance records stand in for a different claim; a composite score conceals a failed requirement; or transformation conceals causal credit (`EVID-4`);
-- an unapproved capability, independent pipeline, uncontrolled change fan-out, non-convergence, exhausted appetite, or outstanding terminal decision appears (`BOUND`, `WORK`, `OPS`);
-- acceptance requires the human to reconstruct technical work, approval is being used to repair missing evidence, or authority, publication, or governing instructions conflict (`AUTH`, `AGENT-5`, `ADOPT`).
+## Normative definitions
 
-If applicable text cannot be located or read, substantive work is not authorized. Preserve a potentially applicable safeguard while investigating. Escalate only the reserved human remainder under `AGENT-5`; ordinary implementation uncertainty and several reasonable technical options do not themselves require a stop. Authorized evidence-gathering and provisional work remain governed by the applicable rules.
-<!-- END PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-09-30.1 -->
+**Acceptance authority:** named human deciding scoped canonical state, not delegated technical choices.
 
-## 3. Normative definitions
+**Acceptance-bearing increment:** independently inspectable/acceptable outcome part or earliest blocking premise/prerequisite; not scaffolding, repairs, tests or unfinished-work evidence alone.
 
-**Acceptance authority** is the named human authority that decides what becomes canonical for a stated scope. It is not the default oracle for implementation choices that accepted authority and repository evidence permit the executing agent to resolve.
+**Behavioral robustness:** claimed qualitative effects within accepted bounds across nonessential changes/independent seeds, configurations or populations; not identical traces or suppressed diversity/causal sensitivity.
 
-**Acceptance-bearing increment** is a coherent part of a named primary outcome, or the earliest premise or prerequisite blocking it, that can be inspected and accepted on its own. More scaffolding, internal repair, tests, ledgers, reports, or evidence about unfinished work do not qualify merely by existing.
+**Appetite:** accepted effort/exposure bounds in applicable time, work-item, review, compute/token, semantic-surface, money or human-burden units.
 
-**Behavioral robustness** is the degree to which a claimed qualitative tendency, causal effect, or family of outcomes remains within declared acceptable bounds across nonessential changes, independently selected seeds, configurations, or population variations. It does not require identical trajectories, suppress meaningful diversity, or protect the result from causally relevant interventions.
+**Authoritative state:** human-accepted within scope; presence in artifacts, branches, tests or conversation grants none.
 
-**Appetite** is the accepted bound on effort and exposure, expressed through the units that matter for the work: implementation time, completed work items, review cycles, LLM or compute use, semantic surface, financial cost, and human burden as applicable.
+**Bottleneck:** earliest unresolved condition blocking primary-outcome acceptance.
 
-**Authoritative state** is state that the acceptance authority has accepted for the declared scope. Presence in a repository, branch, issue, plan, test, schema, generated artifact, or agent transcript does not make state authoritative.
+**Capability class:** system/authority kind materially changing the solution surface: e.g. parser, model, framework, simulator, evaluator or governed service.
 
-**Bottleneck** is the earliest unresolved condition currently preventing the selected primary outcome from reaching acceptance.
+**Consumer:** current accepted use, decision, operational path or bounded decision experiment requiring declared fidelity; not supply's self-created demand.
 
-**Capability class** is a substantial kind of system or authority whose introduction materially changes the accepted solution surface, such as a parser, DSL, ontology, framework, controller, persistent state model, simulator, migration system, generalized evaluator, shared registry, or new independently governed service.
+**Distinctive activity loop:** smallest user-visible cycle distinguishing an effect and justifying material capability/state/recurrence/burden; availability, observation or adjacent use is not completion.
 
-**Consumer** is a current accepted use, human decision, operational path, or bounded decision-bearing experiment that requires an output at a declared fidelity. A roadmap, architecture diagram, schema, issue, or future pipeline authored merely to exercise proposed supply is not a consumer.
+**Decision atom:** independently acceptable/rejectable human commitment consistent with other accepted commitments.
 
-**Distinctive activity loop** is the smallest user-visible cycle whose completion distinguishes one claimed experiential effect from adjacent effects and whose existence materially justifies a separate capability, persistent state, recurrent path, or substantial human or maintenance burden. A merely available option, adjacent activity, or observation that the loop could be performed is not completion of the loop.
+**Implementation judgment:** execution entailed/strongly constrained by authority/evidence, without selecting/materially changing reserved human consequences.
 
-**Decision atom** is a human-governed semantic or governance commitment that can be accepted or rejected independently without contradicting another accepted commitment.
+**Reserved human decision:** selecting/changing intent, outcome, materially different product/user semantics neither entailed nor strongly constrained by accepted authority, accepted source interpretation, authority, persistence, appetite, risk/waiver, capability/repository boundaries, irreversible/external effects, publication, oracle, terminal disposition or canonical state; not complexity, unfamiliarity, ambiguity or explanation difficulty alone.
 
-**Implementation judgment** is a choice among ways to execute an accepted contract whose human-governed consequences are entailed or strongly constrained by accepted authority and repository evidence, and that does not select or materially change the primary outcome, product promise, accepted source interpretation, authority, persistence contract, capability or repository boundary, appetite, irreversible or external effect, publication scope, or acceptance oracle.
+**Independent pipeline:** invocable real-input-to-output path through authority/effects with its own acceptance/failure and release/park/remove/abandon decision; not just a step.
 
-**Reserved human decision** is a choice that requires the acceptance authority because it selects or changes human intent, the primary outcome, materially different user-facing or product semantics not entailed or strongly constrained by accepted authority, an accepted source-fidelity interpretation, appetite, risk acceptance, waiver, capability or repository boundary, irreversible or external effect, publication scope, terminal disposition, or authoritative state. A question is not reserved merely because it is technically complex, unfamiliar to the human, ambiguous at first inspection, or difficult for the agent to explain.
+**Least-complex credible intervention:** smallest credible change addressing the same real case without substantial candidate machinery; need not be final/reusable, but losing must test the hypothesis.
 
-**Externally governed fidelity promise** is a claim that a repository will reproduce, conform to, or remain compatible with behavior controlled by a source set outside the repository's own design authority, such as a rulebook, protocol, formal standard, law or regulation, published interface or file format, or legacy system behavior.
+**Primary outcome:** human-selected result justifying the repository/workstream. **Enabling work** enables it; **stewardship** maintains accepted products; **deferred possibilities** are inactive.
 
-**Fidelity obligation topology** is a coarse, source-derived map of the behavioral and adjudication families that determine an externally governed fidelity promise: controlling sources and precedence, base behaviors, exception classes, timing and lifecycle boundaries, persistent modifiers, optional or compound continuations, cross-rule interactions, unresolved ambiguity classes, and the oracles needed to decide them. It estimates obligation shape and burden; it is not an exhaustive state-space or pairwise-interaction matrix unless the accepted claim independently requires one.
+**Product-bearing artifact or release:** accepted primary-outcome part/named consumer input intended to survive within scope, beyond a bounded decision; not immutable/exhaustive.
 
-**Independent pipeline** is an invocable path from accepted real input through decision or semantic authority and side effects to a primary output, with its own acceptance or failure behavior and a coherent release, parking, removal, or abandonment decision. A function, phase, UI, library, or handoff is not an independent pipeline merely because it is a step.
+**Primary path:** shortest evidence-bearing path from bottleneck to acceptance-bearing increment.
 
-**Least-complex credible intervention** is the smallest good-faith change that could plausibly produce the named effect or address the observed failure on the same representative real case without adopting the candidate's substantial new machinery. It need not be production-final or globally reusable, but it MUST exercise the causal hypothesis seriously enough that losing to it would matter.
+**Publication:** making production newly reachable through default/protected branches, releases, packages, deployments, accepted data or other authoritative paths.
 
-**Primary outcome** is the human-selected result whose acceptance justifies the repository or current workstream. **Enabling work** exists only to make a primary outcome possible. **Stewardship** maintains an already accepted product. **Deferred possibilities** are not active work.
+**Qualifying opportunity run:** real-input exposure making positives plausible at claimed frequency, declared before interpretation.
 
-**Product-bearing artifact or release** is accepted as part of the selected primary outcome or as authoritative input to a named consumer, and is intended to survive for its declared scope rather than exist only to answer a bounded decision. Product-bearing does not mean immutable, exhaustive beyond that scope, or protected from later replacement.
+**Real input:** accepted material at first-promise fidelity; synthetic/hypothetical/system-invented examples may test/falsify but do not qualify.
 
-**Primary path** is the shortest evidence-bearing path from the current bottleneck to an acceptance-bearing increment of the selected primary outcome.
+**Representative real-use run:** real input through actual authoring/configuration, runtime and presentation, letting a human finish/intentionally end a bounded task and inspect effects. It proves only activities, loops and recurrence/recovery/assurance/availability exposed at claimed fidelity, not adjacent enjoyment, awareness or subsystem success.
 
-**Publication** is any action that makes a production delta newly reachable from a default or protected branch, release, package, deployed environment, accepted data release, or other authoritative path.
+**Materially different second-use run:** representative use of a second accepted artifact/configuration/scenario, chosen for different real pressure on the same path; not synthetic/convenience-selected.
 
-**Qualifying opportunity run** is a real-input execution that exposes enough relevant opportunity that a positive case should plausibly occur at the frequency assumed by the capability's accepted benefit claim. Its exposure basis is declared before interpreting the result.
+**Return-use run:** representative use after meaningful interruption/clean durable handoff exposing forgotten setup, hidden dependencies and recovery burden; no fixed delay.
 
-**Real input** is accepted material at the fidelity the first promise actually consumes. A synthetic fixture, hypothetical payload, imagined API, or example authored by the proposed system is not a real input, although it may test mechanics or falsify a candidate mechanism.
+**Semantic reviewer:** human/reasoning agent proposing revision-bound interpretations with warrant/uncertainty; authority needs constitutional/explicit human grant.
 
-**Representative real-use run** is an execution using accepted real input through the actual authoring or configuration, runtime, and presentation path far enough for the human to complete or intentionally terminate a bounded current task and inspect the material effect. A run is representative only for the activities, consequence-bearing loops, recurrence, recovery, assurance, or availability effects it actually exposes at the fidelity claimed. Enjoyment of an adjacent activity or awareness of an unexercised option does not make the run representative for that option's use or recurrence. A seam probe, synthetic fixture, isolated mechanic, subsystem demonstration, or internal report is not a representative real-use run merely because it succeeds.
+**Terminal decision:** adopt/reject/narrow/park/reframe/explicitly continue at appetite exhaustion or an authority gate; not a technical choice/finding.
 
-**Materially different second-use run** is a representative real-use run using a second accepted real artifact, scenario, or configuration selected independently enough to exert meaningfully different content, authoring, configuration, or operational pressure on the same accepted path. A synthetic variant or case selected merely because the current machinery already handles it does not qualify.
+**Completed work item:** bounded issue/PR/equivalent accepted, rejected, parked, superseded or closed terminally; not session, commit or effort.
 
-**Return-use run** is a representative real-use run resumed or newly created after a meaningful interruption or clean handoff from durable repository state, with enough separation to expose forgotten setup, hidden dependencies, and recovery burden. No universal interruption duration is implied.
+**Work-control plane:** one system owning active work, priority, readiness, dependencies, acceptance and closure.
 
-**Semantic reviewer** is a human or reasoning agent that interprets meaning and produces a revision-bound proposal with warrant and uncertainty. A semantic reviewer is not an acceptance authority unless the constitution or an explicit human decision grants that authority.
+## Modules
 
-**Terminal decision** is a reserved human disposition—adopt, reject, narrow, park, reframe, or explicitly continue—required because an appetite ended or an accepted authority gate was reached. An ordinary implementation judgment, reviewer finding, or unresolved technical preference is not a terminal decision.
+Files below are complete modules beside this core, governed by the same revision identity. Every trigger stays here whether or not a repository has adopted its module. When a trigger fires, the complete module MUST be adopted before substantive dependent work. A module cannot waive core rules; overlapping triggers require every applicable module. Module rules carry their own triggers and references to other applicable rules. The module names are identifiers, not semantic restrictions on the triggers.
 
-**Completed work item** is a bounded issue, pull request, or equivalent unit that has reached a terminal disposition—accepted, rejected, parked, superseded, or otherwise closed. A session, commit, status update, or amount of elapsed time is not a completed work item.
+| File | Namespace | Trigger |
+|---|---|---|
+| `fidelity.md` | `FID` | Promising reproduction, conformance or compatibility with behavior governed by external rules, standards, protocols, published formats/interfaces or legacy systems. |
+| `agency-simulation.md` | `SIM` | Runtime LLM narration, state changes, proposals or action selection; autonomous, agentic, adaptive or simulation claims relying on consequence/feedback loops or multiple causal scales; or any claimed causal tendency, emergent pattern, counterfactual effect or robustness across seeds/configurations/perturbations, whether or not labelled simulation. Ordinary coding-agent implementation alone does not trigger this module. |
+| `search-adaptation.md` | `SEARCH` | Memory, search, retrieval or ranking materially bearing a slice; claims about cumulative search, learned operators or efficient exploration by search; improvement attributed to feedback, training, optimization or repeated selection; causal credit to a generator/upstream stage after material downstream transformation; or acceptance beyond an exposed guiding objective. |
+| `evaluators-scores.md` | `EVAL` | Artificial evaluators materially support a claim whose interpretation depends on their competence/coverage, or a decision-bearing score aggregates materially different properties. |
+| `integration.md` | `INT` | Cross-repository import/export, domain or pipeline handoff, feedback, scoped identifiers, private-data mounting, legacy migration or human-authorized coordinated execution. |
+| `longitudinal.md` | `LONG` | A mechanism materially depends on later evidence, participation or action, and participant disappearance can strand accumulated state. |
 
-**Work-control plane** is the one named system that owns active work, priority, readiness, dependency state, acceptance, and closure for the repository.
+## Semantic authority and acceptance
 
-## 4. Semantic authority and acceptance
+### AUTH-1 — Human authority
 
-### AUTH-1 — Human semantic authority and bounded runtime behavior
+**Trigger:** Interpreted, generated or selected content entering persistent/canonical state or external action.
 
-**Trigger:** Any generated, interpreted, selected, migrated, or inferred content that may enter persistent repository state, canonical domain state, or an externally consequential action.
+**Rule:** Apply the bootstrap authority chain. LLM outputs/changes remain proposals until humans accept exact surface. A mechanism or prerequisite selected as outcome needs inspectable benefit for named real use, or a bounded experiment with consumer effect, stop and removal conditions.
 
-**Rule:** The universal authority chain and human-selection limitation in the bootstrap MUST govern the transition. LLM-produced repository changes, foundations, canonical facts, accepted datasets, specifications, and persistent semantic state remain proposals until the acceptance authority accepts the exact decision surface. When a mechanism or prerequisite is itself selected as the immediate primary outcome, it MUST still yield an inspectable benefit for a named real use or remain a bounded experiment with a named consumer effect, stop condition, and removal path.
+Runtime LLM behavior MAY avoid per-output approval only under accepted policy covering permissions, available state, persistence, side effects, refusal, failure, publication and intervention. Emission/display/action grants no canonical authority.
 
-A product MAY execute runtime LLM behavior without per-output human approval only inside a human-accepted policy covering permissions, available state, persistence boundaries, side-effect classes, refusal behavior, failure handling, publication limits, and means of human intervention. Runtime output does not become canonical merely because the product emitted, displayed, or acted upon it.
+### AUTH-2 — Granular, non-transitive acceptance
 
-### AUTH-2 — Acceptance is granular and non-transitive
+**Trigger:** A proposal, patch, migration, repair, batch or derived consequence may change authoritative state.
 
-**Trigger:** A proposal, patch, migration, batch, repair, derived consequence, or plan may mutate authoritative state.
+**Rule:** Expose each decision atom as **entailed** by accepted premises, **required repair** of an invariant/contradiction, or **discretionary**. Entailed atoms MAY form a visible batch naming its premise. Repairs MUST expose the invariant and valid alternatives, including narrowing/rejecting the parent when applicable. Discretionary choices stay deselectable. Acceptance MUST NOT cover omitted/later descendants; localize atoms to protect unrelated accepted state on rejection.
 
-**Rule:** Every independently rejectable decision atom MUST be visible within the accepted decision surface and classified as one of:
+Visibility concerns consequences, not approval per field/sentence/file. Related choices MAY share a coherent revision-bound account of behavior, alternatives, consequences and uncertainty. Link detail; independent discretionary commitments stay identifiable/rejectable.
 
-- **entailed:** mechanically or logically follows from an already accepted premise;
-- **required repair:** necessary to preserve an accepted invariant or resolve a contradiction; or
-- **discretionary:** an optional extrapolation, integration, retcon, addition, or creative choice.
+Bounded activation delegates necessary implementation judgment, reviewable through patch/evidence, without extra gates: e.g. internal reversible naming, placement, decomposition, algorithms, data/fixtures, tests, refactoring and consistency. Alternatives do not reserve choices.
 
-Entailed atoms MAY be accepted in a visible batch that names their premise. A required repair MUST expose the protected invariant and materially valid alternatives, including narrowing or rejecting the parent premise when applicable. Discretionary atoms remain separately deselectable. Approval of a premise, issue, plan, mechanism, token, batch label, or patch envelope MUST NOT authorize omitted or subsequently generated descendants. Atoms MUST be localized so rejecting one does not require disentangling unrelated accepted state.
+Agents, reviewers and artifacts MUST NOT reserve choices by labels, alternatives or approval requests. Only an accepted human instruction naming concrete human consequence, risk or authority reason can do so; buried agent-authored detail cannot. Delegation creates proposals (`AUTH-1`, `AGENT-5`).
 
-Visibility is about consequential commitments, not a separate approval for every field, rule sentence, data row, identifier, or file. A coherent design proposal MAY expose related choices together through a concise account of behavior, alternatives, consequences, and remaining uncertainty, bound to its exact technical revision. Materially independent discretionary commitments remain identifiable and rejectable. Supporting files may carry detail without becoming required human reading; concealed decisions and blanket approval of unknown descendants remain forbidden.
+### AUTH-3 — Exposed authority
 
-Acceptance or activation of a bounded execution-ready work item delegates to the implementing agent all implementation judgment necessary to satisfy its accepted contract. Such choices remain reviewable through the resulting patch and evidence, but they are not separately human-governed decision atoms, approval gates, or stop conditions. When they remain internal and reversible, this includes naming, local identifiers, file placement, decomposition, algorithms, internal data shapes, fixture or replay-witness shape, test strategy, refactoring, and consistency choices. The existence of several defensible alternatives does not change this classification.
+**Trigger:** Results govern acceptance, rejection, promotion, scoring, publication, canonical mutation or consequential action.
 
-A work item, agent, reviewer, or decision record MUST NOT convert an implementation judgment into a reserved human decision merely by assigning it an identifier, enumerating alternatives, or asking the human to accept it separately. An otherwise ordinary implementation choice MAY be explicitly reserved only by an accepted human instruction whose acceptance surface names the concrete human consequence, risk, or authority reason requiring human selection; burying a reservation in agent-authored implementation detail is insufficient. Delegated implementation judgment produces a proposal, not authoritative state; final acceptance and reserved human decisions remain governed by `AUTH-1` and `AGENT-5`.
+**Rule:** Causality/state transitions MUST be inspectable/testable at their authority boundary. Separate reasoning, authoritative state and workflow control. Expose owner, input revisions, oracle, authority, evidence, uncertainty, validity limits, failure and recheck conditions.
 
-### AUTH-3 — Decision-bearing results expose their authority
+A **mechanical validator** checks formal properties; a **semantic reviewer** proposes interpretations; an **acceptance authority** decides canonical state. “Validator” MUST NOT conceal roles; envelope validity proves no contents. Verify cited sources' existence, identity/revision and production/deterministic derivation of attributed values; otherwise label manual assertions, not verified provenance.
 
-**Trigger:** A result can block, promote, reject, score, accept, publish, mutate canonical state, or trigger an irreversible or external action.
+Decision surfaces MUST be intelligible without reconstructing the agent's technical context; bind exact revision; explain changed behavior/claims/risks/authority, recommendation, material alternatives, evidence/uncertainty, reversibility and blocked work; and separate demonstrated results, reasoned expectations and unresolved conditions. Concise evidence-linked explanations/examples/demonstrations suffice; raw records alone do not. Humans need not decode technical files.
 
-**Rule:** Decision-bearing causality and state transitions MUST be explicit, inspectable, and testable at the authority boundary they affect. Domain reasoning, authoritative state, and workflow control remain distinct responsibilities. The result MUST expose its owner, input revisions, decision rule or oracle, authority level, evidence, relevant uncertainty, validity limits, failure behavior, and recheck conditions. Use authority-specific names:
+Agents own competent investigation/verification; acceptance supplies no missing evidence or unexamined facts. Deficits persist until resolved or humans change the promise. Titles/qualifications MUST NOT claim satisfaction excluding defining requirements. Recommend changed promises plainly; `ADOPT-2` governs relaxed safeguards, `AGENT-5` requests.
 
-- a **mechanical validator** checks syntax, shape, identity, reference closure, arithmetic, freshness, or another formally stated property;
-- a **semantic reviewer** interprets meaning and produces a proposal; and
-- an **acceptance authority** decides what becomes canonical.
-
-The unqualified word `validator` MUST NOT conceal these roles. Mechanical validity of an envelope does not establish the truth or acceptance of its contents. A decision-bearing claim naming a source MUST verify its existence, identity or revision, and production or deterministic derivation of the attributed values. Otherwise label the value as a manual assertion; do not present it as provenance-verified evidence.
-
-A human decision surface MUST be intelligible without reconstructing the agent's technical context. It MUST explain the behavior, claim, risk, or authority that acceptance changes; the recommendation and material alternatives; evidence and uncertainty; reversibility; and any blocked-work consequence. It MUST bind the exact proposed revision and separate demonstrated results, reasoned expectations, and unresolved conditions. A concise explanation linked to evidence, selected examples, or an actual demonstration is sufficient. Raw schemas, large data files, identifiers, evidence packets, and exhaustive records do not by themselves constitute an intelligible decision surface. Technical source files need not be personally readable when the human can judge the material commitments and consequences through an adequate view.
-
-The agent remains responsible for technical investigation and verification within its competence. Human acceptance authorizes the declared commitment; it does not supply missing execution evidence, certify unexamined technical facts, or discharge an unmet requirement. A disclosed deficit remains unmet until resolved or an explicit human decision changes the promise. A title, success token, interpretation, or recommendation MUST NOT call the original requirement satisfied while exclusions or qualifications remove its defining property. Recommend the changed promise plainly and state its consequences; apply `ADOPT-2` when a constitutional safeguard would be relaxed. Requests for choices also satisfy `AGENT-5`.
-
-## 5. Purpose, activation, and demand
+## Purpose, activation, and demand
 
 ### PURP-1 — Purpose and portfolio fit
 
@@ -205,15 +197,13 @@ Unless the accepted primary outcome is itself a complete declared model of a fin
 
 An admired product, published paper or research architecture, reference implementation, benchmark result, research prototype, genre convention, corpus, legacy system, successful artifact, or familiar content form proves only the effect actually observed under its conditions. It does not grant authority to its domain structures, stages, schemas, ontologies, pipelines, simulation models, repository boundaries, or other machinery. A direct technology constraint MAY be binding without validating the domain mechanism built with it.
 
-### PURP-3 — One selected value stream and primary path
+### PURP-3 — One selected stream and path
 
-**Trigger:** Work is selected, reprioritized, or challenged.
+**Trigger:** Selecting, reprioritizing or challenging work.
 
-**Rule:** The repository MUST distinguish primary outcomes, enabling work, stewardship, and deferred possibilities. The human selects or accepts the active value stream and bottleneck. Work MUST follow the primary path from that bottleneck to an acceptance-bearing increment. An adjacent opportunity gains no priority merely because it is elegant, useful, partly implemented, testable, or present in the repository.
+**Rule:** Distinguish outcomes, enabling work, stewardship and deferred possibilities. Humans select stream/bottleneck; work MUST follow its primary path. Elegance, usefulness, sunk work and testability grant no adjacent priority. Agents MAY challenge with evidence, never redefine for architecture. Collectively leaving the path violates `WORK-3`.
 
-An agent MAY challenge the stated bottleneck with evidence, but MUST NOT redefine it to fit a preferred architecture. Several locally legitimate work items that collectively leave the primary path constitute an allocation failure under `WORK-3`.
-
-When the selected outcome spans repositories, the primary path MUST name the next actual consumer use and the unresolved handoff that could invalidate the investment. Repository-local acceptance criteria MUST NOT exclude that risk and then treat local acceptance as discharging it. An upstream artifact may have independent value, but continued investment in its downstream promise follows the evidence required by `EVID-3` and `INT-1`. Reporting a missing consumer repeatedly does not make the consumer unnecessary.
+Across repositories, name next actual consumer use and unresolved handoff risk. Local criteria MUST NOT exclude/discharge it. Producer value does not prove downstream promises (`EVID-3`, `INT-1`); repeatedly reporting missing consumers does not remove the need.
 
 ### PURP-4 — Incumbent and least-complex credible comparison
 
@@ -255,37 +245,37 @@ A producer MAY independently be active when its artifact is itself the human-sel
 
 An accepted catalog or corpus MAY be demanded at its declared coverage as a whole; each record does not need an independent consumer. Where identities and relationships are finite, use the smallest local mechanical check that closes both directions. A shared surface that loses its last accepted consumer MUST be removed, parked, made local and private, or explicitly adopted as a primary product in its own right.
 
-## 6. Work governance and stopping conditions
+## Work governance and stopping conditions
 
-### WORK-1 — Work selection is a governed transition
+### WORK-1 — Governed work selection
 
-**Trigger:** An issue or work item is accepted or activated; an execution-ready or AFK label is applied; work begins outside accepted scope; an adjacent lane opens; scope materially expands; or foundational, shared, governance, migration, substrate, or dependency-bearing work is proposed.
+**Trigger:** Activation/readiness, scope expansion, adjacent work, or foundational, shared, governance, migration, substrate or dependency-bearing work.
 
-**Rule:** Before activation, identify the selected primary outcome, current bottleneck or earliest unresolved prerequisite, and smallest acceptance-bearing primary-path increment. Direct work on that increment MAY proceed under existing accepted authority. Enabling, research, governance, migration, substrate, or adjacent work MUST state, in the existing authoritative issue or decision, the bottleneck, primary-path consequence, current consumer or blocked human decision, more direct work displaced, and stopping or return condition.
+**Rule:** Before activation, name selected outcome, bottleneck/earliest missing prerequisite and smallest acceptance-bearing primary-path increment. Existing authority MAY cover direct work. Enabling, research, governance, migration, substrate or adjacent work MUST record in its issue/decision the bottleneck, primary-path consequence, current consumer/blocked human decision, displaced direct work and stop/return condition.
 
-If those facts cannot be named, the work MUST be deferred or parked. Local correctness, a real defect, testability, issue presence, a label, available code, or a detailed plan does not authorize selection.
+If these cannot be named, defer or park. Correctness, defects, testability, code, labels and detailed issues alone do not authorize selection.
 
-### WORK-2 — Speculation is bounded, removable, and not adopted by implementation
+### WORK-2 — Bounded, removable speculation
 
-**Trigger:** Work rests on an unproven premise, temporary bootstrap, candidate architecture, or experiment.
+**Trigger:** An unproven premise, temporary bootstrap, candidate architecture or experiment.
 
-**Rule:** Give the premise an appetite proportionate to its decision, including semantic surface and human burden. An artifact count is not an appetite when internal obligations can expand without bound. When an experimental artifact could be mistaken for primary progress or prerequisite readiness, classify it under `EVID-4` before implementation. A temporary bootstrap that may constrain later work MUST name its owner, bounded purpose, allowed consumers, prohibited dependents, appetite, replacement or removal condition, and expiry event or date. It MUST NOT gain consumers or become canonical through inertia.
+**Rule:** Bound appetite by decision, semantic surface and human burden; artifact counts do not bound expanding obligations. Apply `EVID-4` before experiments look like primary progress/readiness. Constraining temporary bootstraps MUST name owner, purpose, allowed consumers, prohibited dependents, appetite, replacement/removal and expiry; inertia MUST NOT grant consumers/authority.
 
-Approval to implement authorizes an experiment, not adoption. Outside work MAY treat the premise as binding only after the human inspects a real end-to-end result and explicitly adopts the exact premise and scope. Human doubt narrows the work to the cheapest bounded falsifying experiment and blocks dependency fan-out. If the premise fails, is abandoned, or remains unadopted when its appetite ends, remove it from active agent context, active dependency graphs, and default publication paths; rejustify any survivor independently. There is no duty to salvage it.
+Implementation permits experiment, not adoption. External reliance requires human inspection of real end-to-end results and explicit adoption of the exact premise/scope. Human doubt permits only cheapest bounded falsification, without fan-out. Failure, abandonment or unadopted expiry removes the premise from active context, dependencies and default publication; independently justify survivors. Salvage is optional.
 
-Before the defining human, consumer, or behavioral effect of an experimental premise is accepted, the repository MUST NOT grant its provisional behavior product-like authority through broad golden-trajectory or snapshot locks, mutation-testing campaigns, certification programs, exhaustive conformance matrices, or governance whose primary purpose is preserving that behavior. Narrow tests, replay, diagnostics, and invariants needed to make the experiment safe, inspectable, reproducible, or decidable are permitted, as are proportionate protections for security, privacy, corruption prevention, irreversible side effects, and explicit authority boundaries. After the exact effect and scope are accepted, further hardening remains subject to current demand, operational burden, the primary path, and the governed lifetime of the behavior.
+Before its defining effect is accepted, provisional behavior MUST NOT acquire product authority through broad golden/snapshot locks, mutation campaigns, certification, exhaustive conformance or preservation governance. Narrow tests, replay, diagnostics and invariants for safe, inspectable, reproducible decisions are allowed, as are proportionate security/privacy/corruption, irreversible-effect and authority protections. Later hardening follows demand, burden, primary path and governed lifetime.
 
 ### WORK-3 — Repository allocation tripwire
 
 **Trigger:** Completed work accumulates without an acceptance-bearing primary-path increment.
 
-**Rule:** Each active repository MAY set a human-observable allocation unit and maximum consecutive streak. In the absence of an accepted repository-specific limit, the default is **three completed work items**. Opening another issue, changing lanes, performing cleanup, or completing locally correct enabling work does not reset the streak. Where repositories share one unresolved handoff or premise, moving the next task across that boundary does not reset the governing streak or create a fresh allowance for the same uncertainty.
+**Rule:** A repository MAY accept its own human-observable unit and consecutive limit; otherwise **three completed work items** applies. New issues, lanes, cleanup, enabling success or crossing repositories with the same unresolved handoff/premise do not reset it or grant allowance.
 
-A status change, approval of an intermediate artifact, or acceptance of its disclosed limitations does not reset a streak whose defining consumer effect remains unexercised. Report the artifact's narrower result accurately and retain the unmet premise. Reclassifying missing proof as an exclusion, deferred integration, or a non-blocking deficit does not discharge it. An independently useful producer outcome may be accepted on its own terms without establishing the dependent outcome.
+Intermediate acceptance or acknowledged limitations do not reset an unexercised consumer effect. Retain the unmet premise; exclusions, deferred integration and “non-blocking” deficits do not discharge it. A producer can earn independent acceptance without proving its consumer.
 
-For an experiential, interactive, or authoring-facing primary outcome, only a human-inspected representative real-use run through the affected path can reset the streak. The run MUST yield an acceptance-bearing human effect or resolve the earliest premise or prerequisite currently blocking one. It resets the streak only for the named premise, effect, or path it actually exercises under `PURP-2` and `EVID-3`. A pleasant adjacent activity, polished presentation, enthusiasm for available possibilities, or positive result on another effect does not reset a streak whose governing premise concerns an unexercised distinctive activity loop, voluntary recurrence, return use, recovery, assurance, or another materially separable claim. An isolated action, state transition, renderer, schema, validator, simulation, diagnostic, coverage increase, refactor, or successful subsystem demonstration does not reset the streak merely because it works.
+For experiential, interactive or authoring outcomes, reset requires human-inspected representative use through the affected path, yielding the named effect or resolving its earliest blocking premise. It resets only what it exercises under `PURP-2`/`EVID-3`, not adjacent enjoyment, presentation, available possibilities or unrelated success. Isolated actions, components, checks and refactors do not establish unexercised loops, voluntary recurrence, return, recovery or assurance.
 
-When the tripwire fires, further work items MUST NOT be selected until the human explicitly continues, reprioritizes, reframes, or parks the repository. Continuation MUST state why the same direction remains justified and renew the scope, appetite, and allocation bound. No session-count alternative applies.
+At the limit, select no further work until the human explicitly continues, reprioritizes, reframes or parks. Continuation MUST justify the direction and renew scope, appetite and allocation bound. Sessions are not an alternative count.
 
 ### WORK-4 — Demand-null tripwire
 
@@ -297,13 +287,11 @@ Unless another threshold was accepted in advance, the **second consecutive deman
 
 ### WORK-5 — Terminal decisions freeze the repository
 
-**Trigger:** An appetite expires or is exhausted, or accepted work reaches a point requiring a terminal decision.
+**Trigger:** Appetite ends, or accepted work reaches a terminal-decision gate.
 
-**Rule:** All discretionary work across the repository MUST stop until the exact decision is durably recorded. Changing lanes, filing or repairing another issue, cleanup, refactoring, architecture work, and allegedly small improvements do not evade the freeze.
+**Rule:** All discretionary repository work MUST stop until the exact decision is durably recorded; changing lanes, issues, cleanup or refactoring cannot evade it. Only necessary decision evidence, exact-state preservation/quarantine or minimal imminent data-loss, credential-exposure or immediately exploitable security containment MAY continue. Record emergency containment separately; the pending decision remains next. Extension requires fresh human reprioritization with scope and appetite.
 
-Only work strictly necessary to assemble evidence for the outstanding decision, preserve or quarantine the exact state, or minimally contain imminent data loss, credential exposure, or immediately exploitable security harm MAY continue. Emergency containment remains narrow, is recorded separately, and does not displace the outstanding decision as the next repository action. Continuation or extension requires fresh human reprioritization with explicit scope and appetite.
-
-Count consecutive extensions of the same outstanding terminal decision, including extensions carried across a successor repository under `PURP-1`. Each extension MUST name the specific evidence the decision still lacks, why the evidence already accumulated cannot decide it, and the exact scope intended to obtain it. At most **two consecutive extensions** are permitted after the original appetite. When the second extension expires or is exhausted, a third is unavailable: the acceptance authority MUST decide on the evidence in hand by adopting, rejecting, narrowing, parking, or reframing. The count resets only when the acceptance authority records a materially different primary claim or terminal decision. Changing repository, lane, mechanism, or presentation; renaming or cosmetically narrowing the slice; or producing another locally successful increment does not discharge the decision or reset the count.
+Count extensions of the same pending decision, including successor repositories (`PURP-1`). Each MUST name missing evidence, why accumulated evidence cannot decide, and the exact scope to obtain it. At most **two consecutive extensions** follow the original appetite. After the second, no third: the human MUST adopt, reject, narrow, park or reframe on existing evidence. Only a materially different primary claim or terminal decision resets the count; new repositories, lanes, mechanisms, presentation, cosmetic narrowing or local success do not.
 
 ### WORK-6 — Consumers drive substrate; future compatibility stays cheap
 
@@ -313,7 +301,7 @@ Count consecutive extensions of the same outstanding terminal decision, includin
 
 A future requirement MAY justify a cheap, reversible compatibility choice or smoke test when later retrofit would be unusually costly. It MUST NOT justify exhaustive implementation, validation, or supporting infrastructure before real demand exists.
 
-## 7. Evidence, experiments, and generalization
+## Evidence, experiments, and generalization
 
 ### EVID-1 — Founding memories are premises, not authority
 
@@ -331,89 +319,57 @@ Unless a research artifact is itself the accepted primary outcome, the experimen
 
 Preserve only the evidence and identities proportionate to that decision and a plausible next experiment. Bulk or generated outputs MAY remain outside Git when a representative sample or stable, retrievable, integrity-checkable binding is sufficient. A disposable decision-only probe need not become a maintained product, and this rule creates no repository-abandonment ritual, publication-grade report, experiment registry, recurring status duty, or obligation to reconstruct missing historical evidence. A fixed research-gate sequence, unanswered-question inventory, issue count, or closure history is not a value stream and creates no duty to continue.
 
-### EVID-3 — Produce the artifact before the system around it
+### EVID-3 — Artifact before system
 
-**Trigger:** A general system, workflow, framework, catalog, large generated network, semantic scale-up, or externally governed fidelity promise is proposed.
+**Trigger:** General systems, workflows, frameworks, catalogs, large generated networks, semantic scale-up or external fidelity claims.
 
-**Rule:** First produce or materially revise a real primary artifact or substantial risk-bearing slice through the proposed path. The slice MUST exercise the actual authoring, semantic, testing, runtime, and presentation risks that bear the claim. When look, feel, motion, latency, readability, interaction, or another presentation quality is material, the slice MUST reach enough fidelity to judge it; a misleading debugging abstraction is not evidence.
+**Rule:** First produce/materially revise a real primary artifact or substantial risk-bearing slice through the proposed path. It MUST exercise relevant authoring, semantics, tests, runtime and presentation with fidelity adequate for material visual, motion, latency, readability and interaction judgments; not misleading debug abstractions.
 
-For an externally governed fidelity promise, the first acceptance-bearing slice MUST be selected from independently derived hard cases and be hostile to the proposed representation or execution model. Where the fidelity obligation topology contains material cross-cutting interactions, the slice MUST exercise at least one such interaction through the real authoring, authority, execution, and oracle path. A tutorial, known script, simple scalar adjustment, isolated rule, per-item transcription milestone, or happy-path example is a seam probe unless it is itself the selected primary outcome. This requirement MUST NOT manufacture interactions absent from the governing source; the hostile slice is proportionate to the actual topology.
+Experiential, interactive and authoring slices MUST allow bounded actual task completion/intentional termination; isolated operations are probes unless selected outcomes. Each `PURP-2` loop justifying material machinery/burden MUST run before expansion. Observed options and adjacent enjoyment prove only experienced effects.
 
-For an experiential, interactive, or authoring-facing primary outcome, the slice MUST permit the human to complete or intentionally terminate a bounded current task through the actual path. An isolated mechanic, one content node, one state transition, or one successful subsystem operation is a seam probe unless that operation is itself the selected primary outcome.
+A diagnostic run MAY create credible rare/optional/unfamiliar opportunity. Recurrence requires later ordinary use with informed voluntary repetition/return; forced repetition is insufficient. Non-use/rejection is evidence against demand, not repair authority. For selected recovery, assurance, accessibility, availability or possibility value, name/expose the condition; humans MUST use it or, for availability/assurance, inspect sufficient real consequences/burden. This accepts that mode, not recurrence or broader persistence.
 
-For an experiential claim decomposed under `PURP-2`, each distinctive activity loop that materially justifies separate capability, persistent state, recurrent operation, or substantial burden MUST be exercised in an acceptance-bearing slice before that machinery or burden materially expands. Merely presenting or observing the option, completing an adjacent path, or enjoying related prose, choices, consequences, or presentation is evidence only for the effects actually experienced.
+Supported effects remain evidence when others fail/remain unproved. Unsupported machinery MUST stop under `WORK-5`; agents MAY recommend simpler preservation without silently changing outcomes.
 
-A deliberately diagnostic run MAY create a credible need or opportunity to ensure that a rare, optional, or unfamiliar loop is genuinely experienced. When recurrence is part of the claim, diagnostic completion alone is insufficient: after the human understands the loop, a later representative ordinary-use run MUST give the human a genuine choice whether to repeat or return to it, and recurrent fitness requires that the human elect to do so. Voluntary non-use or rejection is evidence against recurrent demand, not a defect that authorizes repair.
+Before recurrent adoption/material expansion of experiential, interactive, authoring, configurable, reusable or engine-like paths, materially different second use MUST pass through the same accepted authoring/configuration, runtime and presentation. It MAY add ordinary content/configuration, bounded consumer adapters at existing seams or in-scope repairs. New capability classes, core ontology levels, case-only shared schemas, required services or synchronized unrelated changes do not prove recurrent fitness. Completion-blocking/burden-hiding defects require reruns after repair; lesser defects still count against fitness. Experiential recurrence requires voluntary election.
 
-An optional or rare-event mechanism need not recur spontaneously when the selected effect is occasional recovery, assurance, accessibility, availability, or possibility value rather than recurrent activity. The slice MUST explicitly name that value and credibly create or expose the relevant condition. The human MUST either use the mechanism or, when the selected effect lies in availability or assurance rather than activation, inspect enough of the real consequence and burden to judge that effect. Acceptance authorizes only that mode of value; it does not establish desire to repeat the activity or demand for broader persistent machinery.
+Periodic reuse, use beyond fresh memory, handoff or interruption recovery also needs return use from durable state without conversational/unauthored-memory reconstruction. Clean handoff MAY replace elapsed interruption with equivalent burden exposure. Single-use work without recurrence claims needs neither extra run and MUST NOT generalize merely to satisfy them. These runs prove only that path; generality needs `EVID-6`.
 
-When evidence accepts one separable effect but rejects or leaves unproven another effect that justifies material machinery or scope, the supported effect remains valid evidence. Further work on the unsupported machinery MUST stop pending a terminal decision under `WORK-5` to narrow, reframe, reject, park, or explicitly continue that claim with a renewed appetite. An agent MAY recommend the least-complex path that preserves supported effects but MUST NOT silently substitute a materially different primary outcome.
+Authored specifications/configurations/packages promising downstream use MUST reach their intended consumer before bulk/repeated authoring or supporting machinery expands. The consumer MUST use actual pinned material as claimed, exercise difficult behavior against independent expectations and expose consequences. Interactive promises need real use; headless output proves only executed behavior. `INT-1` distinguishes specification implementation/runtime data; `EVID-7` allows bounded design exploration. Without consumers, next establish the path or obtain narrowing/parking/abandonment; independently selected producers may continue (`PURP-5`). Reviews/joins/models bypassing input or consumer prove no handoff.
 
-Before an experiential, interactive, authoring-facing, configurable, reusable, or engine-like path may be adopted as recurrent or materially expanded, it MUST pass a materially different second-use run through the same accepted authoring or configuration, runtime, and presentation path. For a recurrent experiential claim, this run MUST include the later ordinary-use election described above; a second forced diagnostic repetition does not qualify. The run MAY add ordinary content and configuration, use a bounded consumer-owned adapter at an existing seam, and repair a defect in behavior already within accepted scope. It does not establish recurrent fitness when completion depends on introducing a new capability class, a new level in the core ontology, a shared-schema expansion solely to admit the case, a new required external service, or synchronized changes across unrelated capabilities. A defect that prevents the bounded task from completing or conceals its material burden requires the run to be repeated after repair; smaller defects remain evidence against operational fitness even when the repaired run succeeds.
+Work MUST NOT scale to hundreds of interdependent records/rules/assets or equivalent semantic surface before representative effects at acceptable authoring/validation/maintenance cost. Legacy success proves its path only.
 
-When the selected outcome or product promise includes periodic reuse, continued use beyond the maintainer's fresh memory, handoff, or recovery after interruption, recurrent fitness additionally requires a return-use run from durable repository state. The run MUST NOT depend on reconstructing material setup, state, or procedure from conversation or unauthored memory. A clean handoff MAY substitute for elapsed interruption when it exposes the same discoverability and recovery burden. A bounded single-use experiment or artifact that makes no recurrence claim need not pass these runs and MUST NOT be expanded into a general system merely to satisfy them. Passing these runs authorizes only the declared recurrent path and does not replace the materially different cases and holdout required by `EVID-6` for a broader generalization claim.
+### EVID-4 — Evidence bears only its claim
 
-For an autonomous, agentic, adaptive, or simulation claim whose value depends on decisions producing consequences and feedback, the first acceptance-bearing slice MUST complete the smallest causal loop that bears the claim: a candidate decision is valid under current authority; execution produces an inspectable consequence, explicit failure, or deliberate non-action; relevant perception or feedback occurs; any claimed memory, belief, plan, or adaptation persists at the fidelity relied upon; and a later decision or human effect materially depends on that result. Planning, retrieval, movement, state mutation, event delivery, or narration demonstrated separately are seam probes unless one is itself the selected primary outcome. The loop MUST cross the causal scale and semantic boundary named by the selected effect. An individual action loop does not bear a claim about household, organizational, settlement, regional, ecological, economic, or long-horizon consequences unless the slice reaches that boundary and the later decision or human effect depends on it. The slice need not prove every population, final scale, or final architecture; it MUST establish the exact claimed loop and effect before broader scale.
+**Trigger:** A test, prototype, benchmark, review, simulation, metric, component or probe is offered as evidence.
 
-When the accepted claim concerns a causal tendency, emergent pattern, counterfactual wake, or behavior expected across seeds, configurations, populations, or nearby model variants, exact replay of one trajectory is insufficient. Before material scale or product-like hardening, compare the relevant intervention with a control, prior state, or other credible counterfactual and exercise bounded independently selected seeds, cases, or nonessential perturbations proportionate to the claim. The evidence MUST show what direction or family of outcomes is attributable to the intervention, what diversity is legitimate, which changes are intended to matter, and whether the claimed effect survives declared nonessential variation within accepted qualitative bounds. No universal replication count, statistical threshold, or demand for trajectory similarity applies. A deterministic one-off whose complete accepted claim is the exact trace is exempt. A product that deliberately seeks chaotic divergence, fragile equilibria, or butterfly effects MAY accept sensitivity as part of the human effect, but it MUST distinguish causally legible sensitivity from arbitrary dependence on incidental identifiers, ordering, fixtures, or unexamined implementation details.
+**Rule:** A **seam probe** proves real input crosses a boundary to output. An **acceptance-bearing vertical slice** proves expressibility, production, validation and operational sustainability of the smallest accepted demand, with required configurations, populations, controls, scale, provenance, refusal and verdict. Disconnected demos MUST NOT accumulate into wider fitness.
 
-When memory, search, retrieval, or ranking materially bears the slice, independently selected cases MUST distinguish a relevant result from a merely nearest or highest-scoring result and exercise confusable alternatives, absent-answer behavior, and changed or superseded information when those are part of the accepted claim. Judge the downstream decision or human effect as well as retrieval mechanics; a plausible neighbor list or aggregate hit metric alone does not prove downstream memory or retrieval fitness unless that metric is exactly the complete selected outcome.
+Source review, structure, coverage, expectations, consumer execution and human use each prove only their property. Joins are not entailment; models prove their behavior, not another consumer's; receipts record, not create evidence. Expectations MAY use source examples, calculations, invariants or justified models; implementation MUST NOT supply its own expected answer.
 
-When a search, evolutionary, repeated-generation, automated-variation, or adaptive-operator mechanism claims cumulative improvement, learned operator effectiveness, or efficient exploration rather than merely bounded sampling, the first acceptance-bearing slice MUST exercise the representation, candidate generation or variation, validation, material repair or post-processing, evaluation, and selection stages actually relied upon. Before material scale, that path MUST demonstrate a productive candidate neighborhood: enough valid, materially distinct, inspectable candidates reach the accepted evaluation surface at acceptable cost to support the claimed mode of search, and downstream transformation does not silently erase the lineage on which improvement or operator learning is attributed. The repository MUST state the observed limitations and leave unsupported operators, regions, or generality unproven. No universal yield threshold or search-space metric is required. Cheap exhaustive enumeration, fuzzing, random sampling, one-off creative generation, or another bounded search that makes no cumulative-improvement, operator-learning, or search-efficiency claim MAY proceed under the ordinary evidence and appetite rules.
+When priority/adoption depends on it, classify **product-bearing** versus **decision-only** in existing work before implementation or counting output as progress. Decision-only work MAY be disposable/high-fidelity; acceptance covers its named claim/decision only. Polish, extent, expense or resemblance MUST NOT imply downstream progress/readiness/reuse. Promotion separately requires real-input, authority, acceptance, boundary and publication compliance, not inertia.
 
-For an authored specification, definition, configuration, or package whose selected promise includes downstream implementation or operation, the first risk-bearing slice MUST reach the intended consumer before bulk authoring, repeated complete packages, or supporting machinery materially expand. Bounded exploration of alternative designs remains permitted under `EVID-7`. The consumer MUST use the actual revision-bound authored material in the manner claimed, exercise representative difficult behavior against independently derived expectations, and expose the material consequence. An interactive promise also requires the bounded real-use task already specified above. A headless run can establish the behavior it executes; it does not establish interaction or user experience. `INT-1` distinguishes implementation from a specification from runtime interpretation of data.
+Presentation/tangibility/enthusiasm/motivation/communication/emotional orientation proves only its selected effect. Proportionately bounded acceptance MAY resolve no product premise (`PURP-1`/`PURP-2`). Without separate design/acceptance for another claim, it MUST NOT imply upstream testing/stability/readiness or reusable machinery. State appetite, prohibited dependents and parking/disposal; promotion follows `PURP-4`/`PURP-5` too.
 
-If the consumer does not exist, the next bounded work must establish that first consuming path or obtain a human decision to narrow, park, or abandon the downstream promise. A separately selected producer product may proceed for its independent use under `PURP-5`; naming a future consumer does not prove the handoff. Review claims, reference joins, and executable models that bypass the authored input or intended consumer cannot satisfy this requirement.
+Replay proves pinned reproducibility, not causality/robustness/stability/diversity/generality; use proportionate controls, counterfactuals or independent variation (`SIM-2`, `EVID-6`). Distinguish desirable causal sensitivity from incidental variation. Statistics/simulation MAY diagnose/compare/falsify, never manufacture meaning, taste, fun, desirability or acceptance. Tests need valid oracles. Self-created evidence/consumers/obligations prove consistency at most, not need, demand, fitness, authority or causal credit.
 
-A completed accepted work is stronger evidence than a comprehensive process. Work MUST NOT scale to hundreds of interdependent records, content nodes, rules, generated assets, or equivalent semantic surface before a small representative slice produces the intended effect at acceptable authoring, validation, and maintenance cost. A legacy success proves its own path, not the fitness of a replacement path.
+### EVID-5 — Real inputs earn local paths
 
-### EVID-4 — Evidence is limited to the claim it bears
+**Trigger:** Substantive architecture or implementation.
 
-**Trigger:** A test, prototype, benchmark, component, review, simulation, metric, or end-to-end probe is offered as evidence.
+**Rule:** Start from accepted real input at consumed fidelity. Synthetic or hypothetical cases MAY test mechanics/falsify, but MUST NOT authorize canonical representations, general subsystems, architecture or backlogs.
 
-**Rule:** Distinguish a **seam probe**, which proves that real input can cross a boundary and produce some real output, from an **acceptance-bearing vertical slice**, which proves that the path can express, produce, validate, and operationally sustain the smallest accepted real demand with its required configurations, populations, controls, scale, provenance, refusal behavior, and verdict path. Disconnected demonstrations MUST NOT accumulate into proof of stack, platform, framework, product-line, or product fitness.
+One input earns only a local replaceable path; broader promises need `EVID-6`. Bounded, correct, safe, visible special cases, explicit branches and duplication MAY precede abstraction when cheaper to replace. Agents MUST NOT generalize merely to remove repetition before different real pressure earns it. This excuses neither inconsistent authority, hidden coupling, security/correctness defects nor duplicated logic whose current divergence is the bottleneck. Local clarity and repair remain required.
 
-For a specification or data handoff, distinguish source review, structural validity, declared coverage, worked expectations, execution in the intended consumer, and representative human use. Each supports only its stated property. An identifier join establishes a declared relationship, not that rules entail an outcome. A reference model establishes behavior of that model under its inputs, not behavior of another implementation or successful consumption of an authored package. A receipt records evidence; its existence does not create it. Independent expectations MAY come from source-derived examples, calculations, invariants, or an independently justified model, but implementation output MUST NOT define its own expected answer.
+### EVID-6 — Generality follows different pressure
 
-Evidence of source fidelity and evidence of consumer utility are separate claims. Reproducing selected source behavior does not establish that the implementation is useful, usable, maintainable, or worth its burden; helping a consumer does not establish fidelity to the governing source. When both claims justify the repository, each MUST have its own acceptance evidence and failure disposition. The acceptance authority MAY accept one and reject, narrow, park, or abandon the other without creating a duty to continue.
+**Trigger:** Cross-product/domain/repository/independent-consumer reuse or a shared constraining contract.
 
-When the distinction affects priority or adoption, classify a prototype or experiment in its existing authoritative issue or decision as **product-bearing** or **decision-only** before implementation or, for an existing artifact, before treating its output as progress. A decision-only experiment exists to answer a named decision. It MAY be disposable and MAY require high presentation or operational fidelity, but its acceptance authorizes only the claim and decision it was designed to bear. It MUST NOT be counted as progress toward a downstream primary artifact, prerequisite readiness, or a reusable product merely because it is polished, extensive, expensive, or shaped like the eventual product. Later promotion of its implementation requires separate satisfaction of the applicable real-input, authority, acceptance, boundary, and publication rules; implementation inertia is not promotion.
+**Rule:** Adoption MUST use **three materially different real design cases and one further holdout not used in design**; count alone is insufficient. Cross-product claims need different named products/independent consumers; other generality needs independently selected product-bearing artifacts or current accepted consumers. Synthetic variants, future or manufactured products and decision-only probes do not qualify. Target-specific language, fields, defaults, fixtures, sources or assumptions block adoption until removed/quarantined and the holdout re-evaluated.
 
-Presentation quality, visual or physical tangibility, enthusiasm, motivation, communication value, emotional orientation, or resemblance to the eventual product is evidence only of that explicitly selected human effect. When such an effect is explicitly selected under `PURP-1` and stated under `PURP-2`, a bounded artifact MAY be accepted for it at an appetite proportionate to that effect even when it resolves no product premise. Unless separately designed and accepted to bear another named claim, the payoff MUST NOT be represented as testing or advancing upstream design, stabilizing requirements, satisfying a prerequisite, establishing downstream production readiness, or justifying reusable production machinery. The artifact's appetite, prohibited dependents, and parking or disposal condition MUST be explicit; any later promotion remains subject to `PURP-4`, `PURP-5`, and the applicable real-input, authority, acceptance, boundary, and publication rules.
+Repositories MUST NOT become homes for imagined product families merely for reuse. Keep product work local and independently abandonable unless `BOUND-2` allows co-location. Repeated real pressure MAY earn an explicitly versioned shared extraction under boundary/integration rules. Visibility, licensing or confidentiality affect custody, not demand, generality, co-location or case requirements; justified shared code may be public or private.
 
-When the accepted claim attributes improvement to feedback, training, ranking, search, adaptation, optimization, repeated selection, or another mechanism that changes candidates in response to an evaluation signal, the evidence MUST distinguish that mechanism's contribution through a credible simpler, non-adaptive, null, ablated, or prior-state comparator, or a held-out evaluation, under materially comparable inputs, opportunity, and relevant resource budget. Use the cheapest matched comparison adequate to the claim. The `PURP-4` comparator MAY satisfy this obligation when it tests the same causal claim; no second tournament, universal random control, formal statistical study, or publication-grade protocol is required unless the accepted claim needs that strength. A mechanism selected as a learning exercise, implementation exercise, exploratory instrument, or recreational medium MAY be built and used without proving superiority, but any claim that its adaptation caused cumulative improvement remains experimental until this comparison bears it. If no meaningful comparison can be obtained, state the limitation rather than claiming the effect.
-
-When a generator, search operator, model, policy, or earlier stage receives causal credit for a final candidate that is materially changed by repair, retry, normalization, compiler or test feedback, filtering, reranking, human editing, or another downstream transformation, the evidence MUST preserve lineage and use an adequate ablation, comparator, or stage-specific measurement to isolate the credited contribution. A transformative stage is a separate mechanism and cost. Improvement by the combined pipeline MAY be claimed without isolation when that combined pipeline is exactly the claim, but the result MUST NOT be attributed to an upstream stage alone. Routine formatting or semantics-preserving normalization does not trigger this obligation.
-
-A reward, fitness function, training objective, benchmark score, optimization target, user-selection signal, or repeatedly consulted evaluation set MAY guide candidate generation or selection. Improvement on that guiding signal establishes only the narrow declared objective on that exposed evaluation surface. It does not by itself establish generalization, causal improvement, consumer utility, superiority, interesting behavior, or acceptance beyond that narrow signal. A broader claim requires a held-out or otherwise independently constituted evaluation surface, representative case, or human comparison derived from the accepted effect rather than selected by what the candidate already optimizes. The guiding signal MAY serve as acceptance evidence when satisfying it is exactly the complete accepted claim and no broader effect is asserted.
-
-When a decision-bearing score aggregates materially different properties, its component values, directions, normalizations, weights, uncertainty where relevant, and aggregation or compensation policy MUST remain inspectable. For the stated decision, the acceptance authority MUST distinguish properties that may trade off from requirements or invariants that are non-compensable. Failure of a non-compensable requirement MUST remain a gate, veto, abstention, or explicit failure; improvement elsewhere MUST NOT conceal it. A composite score MAY guide search, ranking, triage, or summary, and MAY be the acceptance oracle only when the exact aggregation and trade-offs are themselves the complete accepted claim. When unresolved but plausible choices of weights, normalization, or aggregation can materially reverse a decision, expose that sensitivity rather than present one scalar as determinate.
-
-When simulation, self-play, synthetic users, model judges, surrogate models, or other artificial evaluators materially bear a claim whose interpretation depends on their competence or behavioral coverage, independently establish that relevant competence or coverage on known, planted, held-out, or otherwise independently adjudicated cases at the level the claim requires. A weak, deliberately restricted, or uncalibrated evaluator MAY provide a baseline, conditional result, diagnostic, or valid counterexample; its failure to find a behavior or defect MUST NOT establish absence beyond its demonstrated coverage. If no adequate competence or coverage oracle exists, report behavior conditional on the named evaluator population, configuration, and validity limits rather than attributing the property generally to the evaluated system.
-
-A fixed-seed replay, golden trace, snapshot, or deterministic trajectory establishes reproducibility only under its pinned conditions. It does not by itself establish causal attribution, behavioral robustness, stability, diversity, generalization, or that the same qualitative effect occurs after nonessential changes. Those claims require the proportionate control, counterfactual, perturbation, or independently selected case evidence in `EVID-3` and, when broader reuse or generality is claimed, `EVID-6`. Conversely, sensitivity to a deliberately changed causal input is not a robustness failure; the accepted claim must distinguish relevant interventions from nonessential perturbations and state what variation is desirable.
-
-Simulation and statistics MAY diagnose behavior, compare declared properties, or falsify a measurable claim. They MUST NOT manufacture meaning, taste, fun, desirability, or human acceptance. More passing tests increase confidence only relative to a valid oracle. Evidence, fixtures, consumers, or obligations created solely by the candidate architecture to exercise itself establish internal consistency at most; they do not prove necessity, demand, fitness, authority, or the causal contribution of the mechanism.
-
-### EVID-5 — Real inputs authorize only local first paths
-
-**Trigger:** Substantive architecture or implementation is about to begin.
-
-**Rule:** Work MUST begin from at least one accepted real input at the fidelity the first promise consumes. Synthetic fixtures and hypothetical payloads MAY test mechanics or falsify a mechanism, but MUST NOT authorize a canonical representation, generalized subsystem, repository-wide architecture, or backlog.
-
-One real input authorizes only a deliberately local, replaceable first path. Broader promises require materially different cases and `EVID-6`. Early cases MAY use scenario-specific code, explicit branches, duplicated data, or other deliberately local special cases when they are bounded, correct, safe, visible, and cheaper to replace than a speculative abstraction. Agents MUST NOT introduce a generalized subsystem merely to remove repetition before materially different real pressure earns it under `EVID-6`.
-
-This permission does not excuse inconsistent authoritative state, hidden coupling, security or correctness defects, or duplicated logic whose current divergence is itself the bottleneck. A clean local first implementation is preferable to a speculative reusable layer, but local clarity and repair remain required.
-
-### EVID-6 — Generalization follows materially different pressure
-
-**Trigger:** A representation or capability is claimed to be reusable across products, domains, repositories, or independent consumers; or it will constrain them as a shared contract.
-
-**Rule:** Adoption MUST use at least **three materially different real cases** during design and **one further holdout case** not used to design it, unless one of the exceptions below applies. Count alone is insufficient: cases MUST exercise different pressures. For a cross-product or product-family claim, the cases MUST come from materially different named products or independent consumers. For another generalization claim, they MUST arise from independently selected product-bearing artifacts or current accepted consumers. Synthetic variants, planned future products, decision-only probes, and nominal products created merely to manufacture reusable demand do not qualify. Target-specific language, fields, defaults, fixtures, source choices, or assumptions discovered in supposedly general material block adoption until removed or quarantined and the holdout is re-evaluated.
-
-A repository MUST NOT be founded or expanded as the permanent home of an imagined family of future products merely to maximize reuse. Product-specific work remains local and separately abandonable unless `BOUND-2` independently permits co-location. Once materially different real products create repeated pressure, observed commonality MAY be extracted under `BOUND` and `INT` into an explicitly versioned shared component or repository. Publication status, confidentiality, licensing, and the wish to keep reusable domain material private affect custody and distribution; they do not establish demand, earn generality, justify a multi-product repository, or waive the required cases. A justified shared capability MAY be public or private.
-
-A smaller set is permissible only for an intrinsically finite problem, an external formal standard that fully governs the representation, or a scoped waiver. This rule does not apply to ordinary implementation-local refactoring, helper extraction, or deduplication whose behavioral contract is mechanically evident and which makes no cross-product, domain-neutral, or published reuse claim. Such code remains local and reversible until broader pressure exists.
+Fewer cases require an intrinsically finite problem, fully governing external formal standard or scoped waiver. Ordinary local refactoring, helpers and deduplication with mechanically evident behavior and no broader/published reuse claim are exempt; they stay local/reversible until wider pressure.
 
 ### EVID-7 — Broad search is judged by omission resistance, not traversal volume
 
@@ -451,15 +407,7 @@ A request for manual testing or evaluation MUST name the decision affected, why 
 
 If no real instance survives, the premise that qualifying subject matter is presently available is falsified and dependent work stops pending new evidence or reprioritization. If instances survive, claims and work are limited to that scope. Individually reasonable refinements do not waive the recheck.
 
-### EVID-10 — Longitudinal mechanisms must outlive their dependencies
-
-**Trigger:** A mechanism's value materially depends on evidence, participation, or action arriving later, and accumulated state can be stranded by participant disappearance.
-
-**Rule:** State the expected wait and compare it with observed participant lifetime or availability when measurable. If survival cannot be measured, declare the uncertainty and keep the mechanism a bounded experiment. When the required wait is material relative to observed survival, viability MUST be tested before adoption; likely participant disappearance is not merely an operational edge case.
-
-Whenever one participant exclusively owns authoritative accumulated state, define how that state and authority are transferred, recovered, retired, or explicitly lost when the participant disappears. Ordinary deferral that remains valuable and usable without the participant does not trigger this rule.
-
-## 8. Semantic evaluation and representation
+## Semantic evaluation and representation
 
 ### SEM-1 — Decision-bearing semantics must be decidable from the interface
 
@@ -495,31 +443,17 @@ The consumer may choose internal algorithms, indices, identifiers, and data stru
 
 Begin with the minimum provisional structure needed for a coherent creation or revision. Legacy renders provide evidence, hypotheses, and cases; their organization does not define the new ontology. New creation, legacy migration, and downstream projection remain independent claims requiring independent justification and acceptance. Accepting one record-backed artifact does not adopt its schema or demote accepted legacy artifacts.
 
-### REP-2 — Representation and state-model fitness use an independent oracle
+### REP-2 — Independent representation oracles
 
-**Trigger:** A record format, authored specification, schema, ontology, persistent state model, simulator, deterministic consequence model, migration system, or renderer may constrain other work or an intended consumer. A product-specific label does not exempt a representation whose adequacy bears a downstream promise.
+**Trigger:** Representation, specification, state/consequence model, migration or renderer constrains work/consumers, even with product-specific naming.
 
-**Rule:** Before adoption, a risk-bearing slice MUST prove the intended direction:
+**Rule:** Before adoption, a risk-bearing slice MUST prove real authoring/revision → inspectable proposed record/state → human-accepted artifact/effect in consumer form: structured, rendered or executable. No extra representation without a consumer; claimed benefit MUST improve an actual task.
 
-> real authoring or genuine revision → inspectable proposed record or state → human-accepted primary artifact or effect in the form its real consumer uses
+Explicit state/consequences require current accepted cases needing narration-independent persistence, coordination, deterministic or externally inspectable consequences with uncertainty/failure, recovery or another named consumer. Possible domain facts create no demand. Start with minimal local state/transition authority; generality needs `EVID-6`.
 
-The primary artifact MAY be the structured record itself, a derived render, or an executable artifact. A second representation MUST NOT be required without a real consumer, and claimed consumer benefit MUST improve an actual consumer task.
+The candidate MUST NOT select/filter its validation inventory, scope, fixtures, hard cases or oracle. Derive these independently from accepted tasks, semantic/authority distinctions, preservation obligations and sources, regardless of expressibility. Before adoption, map every finite-target obligation/deficit; for open targets disclose challenged inventory/unproved remainder, including hard/breaking cases. Identity coverage/receipts prove no source acceptance, research, freedom from contamination or fitness.
 
-A category of explicit state or deterministic consequence becomes authoritative only when a current accepted real case requires it to persist independently of narration, coordinate multiple actors, turns, or systems, drive a deterministic or externally inspectable consequence—including uncertainty or failure—support recovery, or serve another named accepted consumer. The possibility that the domain or fictional world could contain the fact, object, relation, body part, garment, action, or edge case is not demand. Begin with the smallest local state and transition authority needed by the current case; broader physical or semantic simulation must earn generality under `EVID-6`.
-
-When a simulation spans more than one causal scale, no resolution level has presumptive authority. The representation used for each current phenomenon MUST be justified by the selected effect and the distinctions its accepted consumers actually use. Individual people, households, organizations, settlements, cohorts, aggregates, scheduled processes, and summary events are all legitimate authority levels. Lower-level completeness MUST NOT gain authority merely because it appears more fundamental, realistic, reusable, or capable of eventually generating higher-level behavior. Individual detail is required when the accepted case depends on identity, embodiment, custody, knowledge, timing, relationship, consent, or interaction that aggregation would erase; aggregate or summarized behavior cannot substitute for a promise about those distinctions. Conversely, an individual-level substrate MUST NOT be treated as a prerequisite for a household-, market-, settlement-, ecological-, or regional effect that can be tested credibly at a coarser level. Any promotion, demotion, aggregation, or disaggregation relied upon by a consumer MUST preserve the authoritative continuity and causal ancestry that consumer needs, without transferring knowledge, rights, or detail that the source representation did not establish.
-
-When an LLM participates, the accepted boundary MUST distinguish facts it may narrate freely, state changes it may authoritatively produce under the accepted runtime policy, changes it may only propose, and consequence classes governed by deterministic or human authority. The LLM MUST NOT cross that boundary merely by narrating a convenient success, failure, discovery, injury, movement, or other governed outcome. Conversely, deterministic state MUST NOT expand to control narrative detail that no current accepted consequence or consumer requires.
-
-Where a controlled system defines or mechanically derives legal actions, valid targets, preconditions, timing windows, resource limits, or consequence classes, those constraints are authoritative. An LLM MAY select, rank, sequence, or parameterize within the accepted boundary, and MAY propose a novel action for separate validation, but it MUST NOT make an unavailable action or target executable by naming, scoring, or narrating it. Any semantic matching or ranking at this boundary remains subject to `SEM-1`. Free-form LLM action authority remains a legitimate product or bounded experiment only when explicitly accepted and when its risk-bearing slice proves the required validity, failure, consequence, recovery, and intervention behavior as applicable.
-
-The candidate representation MUST NOT choose or filter the target inventory, evaluation scope, fixtures, hard cases, or oracle used to validate its own adequacy. Derive them independently from accepted consumer tasks, semantic distinctions, authority states, preservation obligations, and source material selected without regard to what the representation already expresses. A representation-selected slice cannot validate that representation.
-
-For a finite target, map the complete declared inventory and record every unmapped obligation as a representation deficit before adoption. For an externally governed fidelity promise, that inventory MUST describe behavioral obligations, not only named source items. It MUST include the controlling sources, base behavior families, exception classes, precedence, timing and lifecycle boundaries, persistent modifiers, optional or compound continuations, and material interaction classes identified by the fidelity obligation topology; unresolved interpretations and untested interaction classes remain explicit deficits. A complete transcription or one test or receipt per card, endpoint, command, section, file, or other named item does not establish fidelity while cross-cutting obligations remain unrepresented or lack an independent oracle. The fidelity obligation topology MUST remain coarse but sufficient to expose material semantic, adjudication, authoring, and verification burden; it MUST NOT become an exhaustive pairwise matrix or state-space enumeration unless the accepted claim, safety case, or formal standard independently requires that stronger proof.
-
-For an open-ended target, declare the bounded inventory actually challenged and the unproven remainder. Include known hard cases and material expected to strain or break the representation. Identity coverage or a per-record receipt does not establish that the underlying source material is accepted, adequately researched, uncontaminated, or fit for the decisions claimed.
-
-A disposable local representation MAY precede this proof only when it makes no adequacy or reuse claim, has no adopted external dependents or supporting infrastructure, remains explicitly replaceable, and cannot define its own oracle or validation scope. A bounded candidate-consumer iteration under `PURP-5` may exercise it before adoption; that use is evidence-gathering, not a reuse claim or license to expand. Reconciliation, synchronization, invalidation, migration, authoring, and validation obligations created by the representation count against its fitness. Parsing a legacy render does not prove the new authoring direction.
+A disposable local model MAY precede proof only without adequacy/reuse claims, adopted external dependents or supporting infrastructure; it stays replaceable and cannot choose its oracle/scope. `PURP-5` consumer probes gather evidence, not expansion authority. Representation-created synchronization, reconciliation, invalidation, migration, authoring and validation burden counts against fitness. Parsing old renders does not prove new authoring.
 
 ### REP-3 — Structural level and semantic prerequisite satisfaction
 
@@ -529,7 +463,7 @@ A disposable local representation MAY precede this proof only when it makes no a
 
 A filename, title, directory, status token, schema type, passing validator, or nominal artifact class never satisfies a prerequisite by identity alone. At the fidelity the consumer uses, the candidate MUST provide the required content, coverage, semantic distinctions, provenance or derivation, authority state, evidence, validity limits, and failure behavior. A differently derived artifact placed under the expected name cannot borrow the prerequisite's authority. When the derivation path is part of the accepted consumer contract, substitution requires explicit re-ratification before dependent work activates.
 
-## 9. Capability and repository boundaries
+## Capability and repository boundaries
 
 ### BOUND-1 — Pipeline inventory and founding stop
 
@@ -579,52 +513,7 @@ If adding, changing, parking, or removing it requires synchronized edits across 
 
 This storage rule does not override `BOUND-2` when independently invocable product lifecycles are present. A public tool repository SHOULD use declared import/export or a configured content-root contract rather than embed private content as an implicit subtree. Any legitimate mount, link, submodule, or external content root MUST be explicit, version-governed or pinned where appropriate, clone-visible, and unnecessary for unrelated repository operation.
 
-## 10. Inter-repository integration
-
-### INT-1 — Semantic integration crosses a versioned artifact boundary
-
-**Trigger:** Independent repositories exchange domain or pipeline artifacts during ordinary operation, or a proposed handoff is offered as evidence of downstream usability.
-
-**Rule:** The producer MUST emit a bounded, immutable, versioned export. The consumer MUST acquire its own stable copy or integrity-checkable snapshot, retain source identity and provenance, translate through a consumer-owned adapter where needed, and exercise its own acceptance authority before authoritative mutation. The producer owns source semantics and the export contract; the consumer owns faithful implementation or local projection, consumer identifiers, validation, and its own state. A declared set of files at an immutable commit may be sufficient initially. Honor an existing accepted export interface; do not bypass it to mine producer internals. No registry, custom packaging platform, shared schema, or per-field custody system is implied.
-
-State how the material is consumed:
-
-- **Implementation from a specification:** a human or coding agent uses the exact authored source to implement product-specific behavior. The source must determine domain behavior for the accepted scope; code may supply internal representations and algorithms. Pin both source and implementation revisions, retain proportionate links from consequential rules to their implementation and independent behavioral checks, and expose source ambiguities. The program need not parse the rule specification at runtime.
-- **Runtime data or interpretation:** the executing consumer reads the claimed parameters, content, or behavior representation. Parsing, typed tokens, field coverage, or a separate model is insufficient: demonstrate that the actual input governs the claimed behavior. A hybrid contract may use both modes, with their boundary explicit.
-
-For the first real handoff, demonstrate representative difficult behavior through the intended consumer against source-derived expectations, then exercise a bounded source change and its intended downstream effect. For runtime data, change the consumed value or content and verify its use. For implemented rules, bind the source change to the corresponding implementation change and behavioral check. A reversible test revision may establish this dependency when no real correction is warranted; it does not justify changing canonical product rules merely to complete a ritual. Record the exact source, consumer revision, scope exercised, result, and material limits in existing work artifacts. No dedicated receipt schema is required. Apply `EVID-3` for actual use and expansion, and `EVID-4` for what this evidence establishes.
-
-Proof of the promised downstream execution MUST exercise the repository and implementation that own the intended execution path. Producer-side structural checks and independently derived expectations remain appropriate. A scratch program, auxiliary repository, alternative-language model, or hard-coded parallel implementation MUST NOT substitute for consumer proof or evade a boundary that places runtime behavior downstream. An independent executable oracle requires a distinct justified verification question and proportionate scope; it does not become a second product implementation by default. A consumer that works from an ancestral source while bypassing the authored export does not prove that export's fitness.
-
-Ordinary operation MUST NOT depend on live reads of the producer's working tree, internal database, private directory layout, skill definitions, issue tracker, implementation-owned records, or uncommitted state. Repository-owned automation MUST NOT mutate a peer's authoritative state. Human-authorized coordinated work follows `AGENT-1` and each repository's own authority. Ordinary package-manager code dependencies are permitted when they do not smuggle peer-owned semantic state or working-tree coupling.
-
-### INT-2 — Feedback is proposal data, not a reverse authority transition
-
-**Trigger:** A downstream result may influence an upstream repository.
-
-**Rule:** Feedback MUST travel as an explicitly non-authoritative proposal package containing the source package identity, proposed claims or changes, evidence, scope, uncertainty, conflicts, and known omissions. The upstream repository alone accepts and mutates its state.
-
-A consumer-owned adapter or projection MAY add consumer-specific representation, presentation, validation, policy, or state, but it MUST NOT silently amend, contradict, or replace producer-owned semantic truth or behavior that the consumer claims as imported authority. When the consumer's primary promise requires such a source-semantic change, adoption and production reliance on that changed behavior MUST remain blocked until the producer accepts the change, emits a new versioned package, and the consumer imports and accepts it. A bounded provisional implementation may demonstrate a proposed resolution under `PURP-5` and `AGENT-5`; keep it revision-bound and separate from accepted behavior. An implementation defect under an unchanged accepted rule is repaired downstream and does not require a new upstream design ruling. A consumer-specific interpretation that is explicitly local, does not claim to alter producer truth, and remains within the consumer's own authority is unaffected.
-
-Repository-scoped identifiers remain scoped. The consumer preserves producer identities as provenance and allocates its own identities; independent repositories MUST NOT share a global identifier allocator or universal internal schema merely for convenience. Manual transfer or an ordinary file-import command SHOULD remain the default transport until repeated real exchanges justify automation.
-
-### INT-3 — Direct legacy access is a bounded migration exception
-
-**Trigger:** A one-time migration from a legacy or abandoned repository would otherwise require disproportionate new exporter work.
-
-**Rule:** The bridge MUST be read-only, pin the exact source revision, name the accepted source scope and target mapping, preserve comparison and rollback evidence, prohibit ordinary runtime or authoring dependence, and expire on a named event or date. Output MUST become self-contained in the target's accepted custody before migration closes.
-
-The source's schemas, directories, stages, and historical machinery are evidence, not target architecture. A bridge that writes back, follows a moving head, gains recurring consumers, or survives expiry is ongoing integration and MUST instead satisfy `INT-1` through `INT-4` as applicable or stop.
-
-### INT-4 — Imported authority retains custody and derivation evidence
-
-**Trigger:** Accepted consumer state depends on an imported package.
-
-**Rule:** Retain enough immutable evidence to identify the exact package, producer and revision, content identity or digest, edits before acceptance, adapter or transformation revision, acceptance decision, and consumer artifacts derived from it. The package MAY live in Git or another stable private artifact store or attachment; it need not be duplicated when a durable integrity-checkable binding exists.
-
-The evidence MUST remain retrievable for as long as the consumer claims reproducibility, source fidelity, or derivation. If it is lost, state the loss and downgrade the provenance claim rather than reconstructing it from memory. Prefer ordinary version control, content digests, and existing work artifacts over a provenance platform.
-
-## 11. LLM capabilities and durable continuity
+## LLM capabilities and durable continuity
 
 ### AGENT-1 — LLM skills compose through a human-governed blackboard
 
@@ -662,43 +551,37 @@ Control records MUST remain minimal and recoverable. They MUST NOT become a seco
 
 The clock boundary alone does not force a stop when this state exists and no tripwire has fired. Missing state, required reasoning reconstruction, or a crossed tripwire MUST stop continuation before the unattended interval. Reconstruction from transcript or memory does not restore authority. Human absence never authorizes crossing an appetite, authority, scope, capability-class, repository-boundary, non-convergence, or publication boundary.
 
-### AGENT-5 — Delegated judgment is the default; escalation is evidence-bound
+### AGENT-5 — Delegated judgment, evidenced escalation
 
-**Trigger:** During accepted work, an agent encounters uncertainty, multiple plausible paths, an apparent ambiguity, or considers asking a human to clarify, choose, rule, ratify, approve, or confirm before the current acceptance surface.
+**Trigger:** Uncertainty, alternatives, apparent ambiguity or a contemplated human request before the current acceptance surface.
 
-**Rule:** Acceptance or activation of bounded work delegates implementation judgment as defined in this constitution. The agent MUST investigate proportionately using the accepted issue, repository foundations, controlling sources, relevant code, tests, version history, established conventions, and authoritative external material as applicable. It MUST then choose and proceed with the best-supported option. Low confidence, novelty, complexity, several defensible alternatives, human availability, or the convenience of transferring responsibility is not a human decision boundary. The agent MUST NOT ask the human to answer a technical question that this investigation makes the agent better positioned to answer.
+**Rule:** Bounded activation delegates implementation judgment. Agents MUST proportionately investigate applicable work, foundations, sources, code, tests, history, conventions and authoritative external evidence, then choose/proceed with the best-supported option. Low confidence, novelty, complexity, alternatives, availability or responsibility transfer create no human gate. Do not ask technical questions the investigated agent can answer better.
 
-A decision request is permitted only when the residual choice is a reserved human decision and currently blocks safe or proportionate progress. Before requesting it, the agent MUST identify the exact human-governed consequence; explain why accepted authority and proportionate investigation cannot decide it; recommend one option; name the strongest material alternative and why it loses; state evidence, uncertainty, reversibility, and the cost of delay or error; and name the work blocked and safe return point. The request MUST lead with the recommendation rather than an unranked menu and MUST translate technical detail into consequences for the primary outcome, behavior, authority, risk, appetite, reversibility, or publication.
+A request requires a residual reserved decision currently blocking safe/proportionate progress. It MUST meet `AUTH-3`, identify the human consequence and why authority/investigation cannot decide, lead with a recommendation, explain why the strongest alternative loses, and state delay/error cost and safe return. Translate technical detail into human consequences.
 
-When the residual uncertainty is not reserved, the agent MUST select a local, reversible, consistency-preserving option, contain its consequences, test it, and proceed. It records the assumption only when it materially affects behavior or future interpretation. When a reserved human decision exists, no accepted instruction requires an immediate stop, and a provisional choice can remain explicit, local, reversible, and quarantined from false claims, authoritative adoption, dependent work, irreversible effects, and disproportionate waste, the agent MUST continue provisionally and surface the choice in the next coherent acceptance surface rather than interrupt immediately. It MUST stop when proceeding would cross an authority, risk, appetite, capability, repository, publication, or irreversible-effect boundary; materially lock in user-facing semantics; create disproportionate waste; or violate another constitutional stop condition.
+For technical uncertainty, choose a local reversible consistent option, contain/test/proceed; record only materially relevant assumptions. For reserved uncertainty without an immediate stop requirement, agents MUST continue explicit local reversible proposals when isolated from false claims, adoption, dependents, irreversible effects and disproportionate waste; expose them at the next coherent acceptance. Stop at authority/risk/appetite/capability/repository/publication/irreversible boundaries, material user-semantic lock-in, disproportionate waste or other stop rules.
 
-When an accepted brief delegates creative or domain proposal work, the agent SHOULD resolve ordinary gaps into its best-supported coherent proposal and explain the material choices together. Such work remains a proposal until accepted. Where `PURP-5` permits it, a local reversible implementation may make the consequences inspectable before the human chooses. Do not silently change accepted behavior, the product's identity, or another reserved boundary, and do not ask for a separate ruling on each provisional rule merely because it was newly authored.
+For delegated creative/domain proposals, agents SHOULD resolve ordinary gaps coherently and explain choices together. Proposals remain unaccepted; `PURP-5` may permit reversible demonstrations. Do not silently change accepted behavior/identity or reserve every provisional rule.
 
-Independent genuine decisions MUST be batched when safe. Agents MUST NOT create serial micro-ratifications, ask speculative questions before investigation, or turn final acceptance into a sequence of internal design rulings. Internal identifiers MAY track analysis but do not make a choice human-governed. Interactive work follows the same rule as unattended work.
+Batch genuine independent decisions when safe. Agents MUST NOT create serial micro-approvals, speculative pre-investigation questions or technical subgates. IDs do not reserve choices; interactive work follows the same rule.
 
-A generic human request to use the agent's judgment, investigate, or recommend authorizes implementation judgment but is not by itself acceptance of a reserved human decision. Silence, confusion, fatigue, or a request for a recommendation MUST NOT be recorded as acceptance. When such an instruction follows a decision-complete surface under `AUTH-3` and clearly authorizes the recommended option, it MAY constitute acceptance and MUST NOT be reconfirmed. Once the human clearly selects or accepts an option, the agent MUST NOT seek duplicate confirmation unless the relevant facts, consequences, or scope materially change. The agent's exercise of delegated judgment produces a proposal; it does not displace human acceptance authority over canonical state.
+Generic judgment/investigation/advice requests authorize technical judgment, not reserved choices. Silence, confusion, fatigue or advice requests MUST NOT count as acceptance. Clear authorization after an `AUTH-3` complete recommendation MAY accept it; MUST NOT reconfirm without materially changed facts, consequences or scope. Agent judgment remains a proposal, not canonical human authority.
 
-## 12. Implementation, review, and operational safety
+## Implementation, review, and operational safety
 
-### OPS-1 — Feasibility precedes TDD and execution readiness
+### OPS-1 — Feasibility before readiness/TDD
 
-**Trigger:** Risk-bearing work is about to enter TDD, implementation, exact-candidate review, `ready-for-agent`, AFK, or unattended execution.
+**Trigger:** Risk-bearing TDD, implementation, exact review, execution readiness or unattended work.
 
-**Rule:** Establish that supplied inputs contain the information required for the promised outputs. Identify the finite representation or oracle where one exists, semantic authority, uncertainty behavior, smallest acceptance-bearing increment, appetite, stop conditions, and safe publication boundary. Where repeated human judgment will be a binding oracle, execution readiness also requires the cumulative unit and ceiling mandated by `EVID-8`.
+**Rule:** Establish adequate input information for promised outputs; identify finite representation/oracle where available, semantic authority, uncertainty behavior, smallest acceptance-bearing increment, appetite, stops and publication boundary. Repeated human judgment also requires `EVID-8`'s cumulative unit/ceiling.
 
-For a producer–consumer task, readiness MUST distinguish authority to construct a bounded candidate from evidence that the handoff works. Name the intended execution owner and the actual source-to-consumer check under `INT-1`; do not require a generalized evaluator or final universal representation before product-specific implementation can begin. A jointly bounded verification step under `PURP-5` can resolve the uncertainty. Its planned result is not evidence already obtained.
+Producer-consumer readiness MUST separate candidate-construction authority from proved handoff. Name the execution owner and actual source-to-consumer check (`INT-1` where cross-repository); generalized evaluators/universal representations are not prerequisites for product-specific code. A `PURP-5` joint probe can resolve uncertainty, but its plan is not evidence.
 
-Where recurrent, reusable, configurable, engine-like, or materially separable experiential fitness is part of the accepted claim, execution readiness also requires the applicable distinctive activity loop and selected value mode under `PURP-2`, the setup and return-burden appetite under `EVID-8`, and the planned first-use, materially different second-use, and, when triggered, return-use evidence under `EVID-3`.
+Recurrent, reusable, configurable, engine-like or separable experiential claims also need `PURP-2`'s loop/value mode, `EVID-8`'s setup/return burden, and planned first, different second and applicable return use (`EVID-3`).
 
-When a materially relied-upon external dependency owns persistence, indexing, retrieval, ranking, planning, migration, or another primary-path state or decision lifecycle, execution readiness additionally requires a minimal real lifecycle probe and an independent oracle for the semantics actually relied upon. Exercise update or rebuild behavior, identifier mapping, score or distance interpretation, persistence and reload, failure, recovery, and replacement boundaries only as applicable. Documentation, type signatures, wrapper tests that repeat examples, and plausible outputs do not establish correct use. A mechanically straightforward, locally replaceable dependency whose misuse cannot alter accepted meaning, authoritative state, or an externally consequential action needs only ordinary proportionate verification.
+Material external dependencies owning primary-path state/decisions require a minimal real lifecycle probe and independent semantic oracle. Exercise applicable update/rebuild, IDs, score/distance meanings, persistence/reload, failure/recovery and replacement. Docs, types, example-repeating wrappers and plausible output do not prove correct use. Straightforward replaceable dependencies unable to alter accepted meaning, authority or consequential action need only ordinary proportionate checks.
 
-When the promised output includes an externally governed fidelity promise, execution readiness additionally requires the exact controlling source set and revisions or equivalent immutable identities; precedence among those sources; the named authority or decision rule for ambiguity; failure behavior when no supported interpretation can be established; and an independent fidelity oracle. Derive and accept a fidelity obligation topology independently of the candidate architecture, then estimate implementation, authoring, adjudication, testing, review, and maintenance burden against appetite. Independently select the first hostile slice and its acceptance criteria under `EVID-3`. Counts of cards, rules, sections, endpoints, commands, files, or other named items are not scope estimates when exceptions or interactions multiply obligations.
-
-Unresolved source ambiguity blocks an unqualified fidelity claim. Before escalation, the agent MUST exhaust the controlling source set, precedence, reconciliation rules, and proportionate independent evidence, then recommend the best-supported local interpretation, variant, or reduced claim under `AGENT-5` even when no option can be presented as source fact. The acceptance authority MAY ratify that clearly labeled choice and continue within the narrower claim; it MUST NOT present the choice as source-verified fidelity. A bounded provisional implementation MAY proceed before ratification as decision-only work only when the interpretation remains explicit, local, reversible, quarantined from authoritative source fact and dependent production, and is surfaced in the next coherent acceptance surface. If those conditions do not hold, the blocker MUST name the human-governed consequence, recommendation, evidence limit, and safe return point under `AUTH-3` and `AGENT-5`.
-
-Before the source set and fidelity obligation topology are accepted and the hostile slice is selected, only bounded source reconciliation, research, disposable local experiments, and decision-only probes MAY proceed. Their implementation MUST NOT gain dependent infrastructure, become canonical product machinery, authorize a generalized engine, DSL, framework, or inventory-scale product transcription or implementation, or count as product progress. Decision artifacts such as accepted source identities, ambiguity rulings, and the topology MAY become authoritative for the feasibility decision. This reconnaissance MAY be as deep as necessary within its appetite to discover the obligation surface; its implementation remains replaceable and subordinate to the decision.
-
-Apply this gate whenever work involves unrestricted language, semantic scoring or gating, decision-bearing search or retrieval, a materially relied-upon external dependency for a primary-path state or decision lifecycle, an externally governed fidelity promise, a shared abstraction, parser, DSL, ontology, framework, controller, model, migration, cross-cutting validator, large generated surface, session-spanning work, or intended default-branch publication. If any required answer is missing, the task is not ready. A label or detailed issue body cannot manufacture feasibility.
+Apply this gate to unrestricted prose, semantic gating/scoring, decision-bearing retrieval, relied-on lifecycle dependencies, external fidelity, shared abstractions, parsers/DSLs/models/frameworks/controllers, migrations, cross-cutting validators, generated scale, session-spanning work and default publication. Missing answers mean not ready; labels/detail confer no feasibility.
 
 ### OPS-2 — Missing inputs and new capability classes require re-ratification
 
@@ -718,22 +601,22 @@ Heuristic reconstruction, hidden scope expansion, or quietly treating the new ca
 
 Classify the finding as an implementation defect, specified missing case, invalid or obsolete test, specification ambiguity, authority or ownership defect, infrastructure failure, novel requirement, or non-convergence signal. Only implementation defects and specified missing cases enter automatic repair. Uncertainty about classification requires proportionate investigation and does not itself authorize repair or human escalation. If the residual choice is implementation judgment, the agent chooses the best-supported reversible classification and proceeds; if it is a reserved human decision, `AGENT-5` governs the request. Reviewer-generated examples are observations, not requirements until their interpretation and scope are accepted.
 
-### OPS-4 — Non-convergence and resource tripwires stop implementation
+### OPS-4 — Execution stops
 
-**Trigger:** Nontrivial implementation or review is underway.
+**Trigger:** Nontrivial implementation or review.
 
-**Rule:** Unless a stricter or explicitly accepted larger limit exists, stop at the earliest of:
+**Rule:** Unless a stricter or explicitly accepted larger limit applies, stop at the earliest of:
 
-- two hours of active work without an inspectable acceptance-bearing increment;
-- three failed implementation or review repair cycles on the same acceptance boundary;
-- three consecutive review passes that preserve earlier cases but add new members of an open-ended semantic or paraphrase family;
-- discovery of an unapproved capability class or independent pipeline;
-- approximate doubling of the expected production, test, evidence, or semantic surface;
-- exhaustion of the declared token, compute, financial, or human-burden ceiling;
-- a context or session boundary that would require reconstruction of material reasoning; or
-- attempted unattended continuation without the state required by `AGENT-4`.
+- two active hours without inspectable acceptance-bearing increment;
+- three failed implementation/review repair cycles at one acceptance boundary;
+- three consecutive review passes retaining cases but adding members of an open semantic/paraphrase family;
+- an unapproved capability class or independent pipeline;
+- approximate doubling of expected production, test, evidence or semantic surface;
+- exhaustion of token, compute, financial or human-burden limits;
+- a context/session boundary requiring material reasoning reconstruction; or
+- unattended continuation lacking `AGENT-4` state.
 
-An open issue, AFK label, sunk cost, green legacy suite, or persuasive completion report does not override a stop. Extension requires fresh human reprioritization with a new scope and appetite. These issue-level limits do not reset `WORK-3` or `WORK-4`.
+Open issues, AFK, sunk cost, passing legacy tests or reports override no stop. Extension needs fresh human priority, scope and appetite; `WORK-3`/`WORK-4` counts persist.
 
 ### OPS-5 — Exploration stabilizes the claim; exact review verifies a finite candidate
 
@@ -743,33 +626,31 @@ An open issue, AFK label, sunk cost, green legacy suite, or persuasive completio
 
 Permanent selectors, ledgers, red-green evidence, and reconciliation duties are reserved for stable decision-bearing behavior and MUST be proportional to its authority and expected lifetime. Three review passes that continue expanding an open semantic family trigger `OPS-4` rather than another repair cycle.
 
-### OPS-6 — Consequential side effects are narrow, revision-checked, and recoverable
+### OPS-6 — Bounded, fresh, recoverable effects
 
-**Trigger:** Work may cause external, destructive, irreversible, repeated, or concurrency-sensitive effects.
+**Trigger:** External, destructive, irreversible, repeated or concurrency-sensitive effects.
 
-**Rule:** The effect MUST have narrow accepted authority, an expected-revision or equivalent freshness check, idempotent or explicitly bounded retry behavior, and an inspectable consequence. Failure behavior and recovery ownership MUST be explicit.
+**Rule:** Effects MUST have narrow accepted authority, expected-revision or equivalent freshness checks, idempotent or explicitly bounded retries, inspectable consequences, explicit failure behavior and recovery ownership. Local accepted edits need only ordinary version identity and atomic validated writes unless a real boundary proves extra machinery necessary. Do not build orchestration/receipt platforms before the smallest fault-tested slice proves need.
 
-Ordinary version-control identity and atomic validated writes are sufficient for local accepted edits unless a real retry, interoperability, concurrency, provenance, or external-side-effect boundary proves that additional machinery is needed. An orchestration or receipt platform MUST NOT be built before the smallest fault-tested slice proves it necessary.
+### OPS-7 — Clean-clone operational closure
 
-### OPS-7 — A clean clone exposes operational closure
+**Trigger:** Activation, handoff, publication or reliance on a repository.
 
-**Trigger:** A repository is activated, handed off, published, or depended upon.
+**Rule:** A clean clone MUST expose purpose/authority, work control, build/check and primary-outcome activation paths, external/private input contracts/locations, output ownership/location and absent-input behavior. Dependencies, services, stores, submodules and content roots need visible roles, access, version/pins and setup/recovery. Preserve root `AGENTS.md` → `CLAUDE.md` and the canonical constitution.
 
-**Rule:** From a clean clone, a maintainer or agent MUST be able to determine the repository's purpose and authority, work-control plane, build or verification path, activation path for the current primary outcome, contracts and expected locations for external or private inputs, output ownership and location, and behavior when inputs are absent. Required repositories, services, artifact stores, submodules, and content roots MUST be clone-visible with their role, access expectation, version or pinning rule, and setup or recovery path. The clean clone MUST also preserve the root `AGENTS.md` symlink to `CLAUDE.md` and the canonical constitution at its declared path.
+Ordinary use MUST NOT rely on remembered siblings, hidden gitlinks/mounts/services/topology or conversational setup. Missing private input MAY block its workflow but must fail early/honestly while preserving claimed input-independent checks. Public demo data is optional; synthetic fixtures MUST NOT claim real demand, representativeness or readiness.
 
-Ordinary operation MUST NOT depend on a remembered sibling checkout, hidden gitlink, undocumented mount, local-only service, untracked directory topology, or conversational setup knowledge. Missing private inputs MAY prevent a private workflow from running, but the repository MUST fail early and honestly while preserving any claimed input-independent verification. A public demonstration corpus is optional; synthetic fixtures MUST NOT be fabricated to claim demand, representativeness, or product readiness.
+## Publication
 
-## 13. Publication
+### PUB-1 — Publication
 
-### PUB-1 — Publication scope follows exact acceptance scope
+**Trigger:** Merge, release, deployment, package/data publication or another authoritative-path change.
 
-**Trigger:** A merge, release, deployment, package publication, accepted data release, or other default/protected-path change is proposed.
+**Rule:** Terminally failed, rejected, parked or unaccepted production MUST NOT become newly reachable on authoritative paths, even solo/private. Quarantined failure reports, fixtures and adversarial corpora MAY publish separately. Independent prerequisite/evidence work SHOULD exclude failed candidates.
 
-**Rule:** A terminally failed, rejected, parked, or still-unaccepted production delta MUST NOT become newly reachable from a default or protected branch or other authoritative path, including in a solo private repository. Failure reports, fixtures, and adversarial corpora MAY be published separately when clearly quarantined. Independently publishable prerequisite or evidence work SHOULD remain on a path that does not include a failed candidate.
+Before publication, list exact commits/decision-bearing files and reconcile each acceptance. Names/status/tests/mergeability/intent do not suffice. Archiving exact failed production requires scoped waiver. Issue approval permits work, not all resulting bytes; proposal labels/custody records do not evade this. `PURP-5` provisional consumers stay isolated pending exact source/behavior/publication acceptance.
 
-Before publication, enumerate the exact commits and decision-bearing files that will become newly reachable and reconcile each with its acceptance state. Branch names, issue status, test counts, mergeability, and intent are insufficient. Publishing an exact failed delta for archival reasons requires a scoped waiver. Acceptance of an issue authorizes bounded work; it does not automatically accept every resulting production byte for default-path publication. Calling production bytes a proposal or enclosing them in an accepted custody record does not evade this rule. A provisional consumer implementation permitted by `PURP-5` stays isolated from authoritative production until its exact source, behavior, and publication scope have been accepted.
-
-## 14. Foundations and governance
+## Foundations and governance
 
 ### GOV-1 — Foundations are minimal and cannot manufacture a backlog
 
@@ -803,17 +684,19 @@ Constitutional application MUST protect the intended outcome and authority, not 
 
 When the governed subject disappears or narrows, remove or shrink its policing surface. Governance MUST NOT preserve itself by inventing consumers, compliance work, or evidence of necessity. Reference-only workflows, legacy packages, and old decision inventories create no disposition, migration, or implementation backlog without independently selected current demand.
 
-## 15. Adoption, precedence, waivers, and amendment
+## Adoption, precedence, waivers, and amendment
 
 ### ADOPT-1 — Adoption is complete, exact, and progressively loaded
 
-**Trigger:** A repository adopts this constitution or a later revision.
+**Trigger:** A repository adopts this constitution, a module or a later revision, or a previously dormant module trigger fires.
 
-**Rule:** An exact copy of the complete adopted text MUST exist at `docs/principles/principles-for-repos.md`. The exact bootstrap for that revision MUST appear in root `CLAUDE.md`, and root `AGENTS.md` MUST be a symlink to `CLAUDE.md`. A clean clone MUST allow Claude Code and Codex to discover that bootstrap and read the canonical file. Root instructions SHOULD remain concise enough to fit the configured agent instruction limits; task-specific reference material belongs in governed files or skills that are read on the bootstrap triggers. The complete constitution MUST NOT be pasted, imported through Claude Code's `@` syntax, or otherwise pulled into every request merely to satisfy adoption; progressive loading through the bootstrap is the default required model.
+**Rule:** The complete adopted text is the core plus every adopted module at one revision. An exact copy of the core MUST exist at `docs/principles/principles-for-repos.md`; each adopted module MUST be copied byte for byte beside it under its Modules-table filename. Every applicable module MUST be adopted in full before substantive dependent work. Optional means its trigger is absent, not permission to omit safeguards from an applicable domain. Adopting a module changes the complete adopted set and requires explicit human acceptance and applicable reconciliation; a pending adoption permits only investigation or provisional work authorized by the operative revision. Overlapping triggers require every applicable module. Module and core rules have the same force; modules cannot waive the core.
 
-Repository foundations MUST cite and specialize this constitution with concrete facts; they MUST NOT summarize, paraphrase, selectively reproduce, or replace its safeguards as competing normative text. A later revision is adopted as a complete text or not adopted. Partial alignment has no constitutional force, and the previously adopted complete revision remains in force until reconciliation is accepted.
+The revision's exact bootstrap MUST appear in root `CLAUDE.md`, and root `AGENTS.md` MUST be its symlink. Its sole substitution parameter is the entire `Adopted modules:` line: list the adopted module filenames in backticks, separated by commas and ending in a period, or `Adopted modules: none.`. This line MUST match the accepted adopted set; every other bootstrap byte remains exact. A clean clone MUST let Claude Code and Codex discover the bootstrap and all canonical adopted files. Root instructions SHOULD fit configured instruction limits; task-specific references belong in governed files/skills read on the triggers. The complete adopted text MUST NOT be pasted, imported with Claude Code's `@` syntax or otherwise loaded into every request merely for adoption; progressive loading is required by default.
 
-The complete constitution or applicable rule namespaces MUST be read exactly as the bootstrap's triggers specify. Its absence from initial prompt context is not permission to ignore it; failure to locate or read applicable text blocks substantive work.
+Foundations MUST cite and specialize the constitution with concrete facts, never summarize, paraphrase, selectively reproduce or replace safeguards as competing normative text. A later revision is adopted as a complete core and complete adopted modules, or not adopted; selective alignment has no constitutional force. The previous complete adopted revision remains operative until human acceptance of reconciliation. Proposed replacement files, passing checks and implementation approval alone do not activate a revision.
+
+Read the complete adopted text, applicable rules and modules exactly when the bootstrap requires. An exact quotation of a current-revision rule in a brief naming that revision satisfies the recipient's reading of that rule; it does not satisfy other triggered readings. Paraphrases and memory do not qualify. Absence from initial context excuses nothing; inability to locate/read required text blocks substantive work.
 
 ### ADOPT-2 — Precedence and waivers preserve the safeguard
 
@@ -849,6 +732,10 @@ Classify conflicts as accepted, provisional, parked, rejected, superseded, or ev
 8. identify the reconciliation class and, when an existing authoritative portfolio inventory names affected repositories, identify those repositories. The amendment MUST NOT require creating a new central inventory merely for this purpose; each repository that adopts the revision identifies and reconciles itself under `ADOPT-3`.
 
 The amendment's existing authoritative issue, pull request, or decision MUST carry the basis, safe paths, mapping, and reconciliation class required above. The complete replacement constitution MUST contain only current operative text and minimal revision metadata. Amendment narratives, repository-specific histories, affected-repository notes, revision-specific reconciliation instructions, and superseded migration guidance MUST NOT be carried forward unless they are themselves necessary to state a current operative obligation. Version history MAY preserve the diff; no changelog, amendment log, or other new artifact is required.
+
+The reference ticket measures core-only reading for the bootstrap events accepting or activating an execution-ready work item, offering a test as completion evidence, and merging. Count the union of rules these three triggers name, each once, plus the complete Normative definitions section once. A rule or definitions section runs from its heading to the next Markdown heading, counted as stored UTF-8 bytes; approximate tokens are bytes divided by four, rounded up. Every amendment MUST run the canonical reading checker against the previous revision and report each event, the reference union, definitions, bootstrap and whole-text byte counts with approximate tokens and deltas. The bootstrap count includes its markers. Every core rule, including each new rule, MUST be named directly in a reading trigger. Ordinary reference reading MUST stay at or below 32,000 bytes and the bootstrap at or below 5,062 bytes. Moving text without preserving discoverable triggers and complete safeguards does not satisfy the budget. Module text is outside ordinary reference totals but remains mandatory when triggered; whole-text reporting MUST include core and modules.
+
+Any increase in the reference figure since the previous revision, even within the ceiling, requires the amendment to name the failure needing the extra text and remove at least as much text elsewhere in the constitution. A proposed increase to either ceiling additionally MUST be explicit in the amendment issue and separately accepted by the human; convenience or accumulated prose grants no increase. An agent unable to meet the budget without dropping or weakening a safeguard MUST stop and expose each proposed loss, with its reason, as a separate human decision. The drafter MUST NOT silently settle that trade-off; human amendment and waiver authority remains governed by `AUTH-2` and `ADOPT-2`.
 
 Semantic identifiers are stable within an edition line: later revisions may clarify or strengthen them while preserving their subject. A deliberate major replacement MAY restructure identifiers through an explicit migration mapping; it MUST NOT pretend old citations retain unchanged meaning. Unique safeguards belong in their controlling rule, not in a second normative list of inherited failures.
 
