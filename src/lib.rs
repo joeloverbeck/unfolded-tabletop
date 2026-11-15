@@ -9,6 +9,7 @@ pub mod capture;
 pub mod card;
 #[cfg(feature = "render")]
 pub mod count_label;
+pub mod hover;
 #[cfg(feature = "render")]
 pub mod loading;
 pub mod random;

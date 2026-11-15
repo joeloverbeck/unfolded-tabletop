@@ -18,6 +18,25 @@ taken and what a failed one means, and what an agent observes and names at their
 table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
 it, for the agent seat; preparation, `random` and `record_replacement` work without Bevy.
 
+## Hover opening lifecycle
+
+`hover::Hover` owns the transient opening lifecycle extracted from mudsong at
+`b6c05ac561bf52f4dabb7d77fa313889a768b628`, `crates/app/src/pointing.rs::grow`.
+[Issue #18](https://github.com/joeloverbeck/unfolded-tabletop/issues/18) coordinates
+its mudsong migration and Cuba Libre contribution-view consumer under the scoped
+EVID-6 extension recorded there. This candidate is not a general tooltip system.
+
+Call `update` with the picked identity, eligibility, elapsed time and local dwell
+duration. A new identity starts at zero elapsed dwell; the first eligible view
+waits, an already open view switches immediately, and absent/ineligible targets
+dismiss it. Eligibility changes on the same identity retain its elapsed dwell.
+`visible` identifies what to show and `waiting` reports pending dwell. Consumers
+own picking, content, actions, geometry, timing, dimming and animation readiness.
+No Bevy feature is needed. Reset the lifecycle with its `Default` on a local
+view reset. It changes no persisted records. Revert consumer adapters and pins
+together before removing this producer module; each consumer still needs its
+own actual interaction and image checks.
+
 ## Token count labels
 
 `count_label`, behind `render`, holds numeric label creation and camera tracking
