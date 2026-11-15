@@ -1,6 +1,18 @@
 //! Seeded randomness extracted from Arkham: one number of state, an index and a
 //! shuffle. Consumers decide what the numbers mean and how the state is saved.
 
+use std::io::{self, Read};
+
+/// Reads a fresh seed from the operating system's `/dev/urandom` device.
+///
+/// Preserves Arkham's eight-byte, little-endian seed acquisition. Opening or
+/// reading the device can fail; the consumer owns the resulting user message.
+pub fn fresh_seed() -> io::Result<u64> {
+    let mut seed = [0; 8];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut seed)?;
+    Ok(u64::from_le_bytes(seed))
+}
+
 /// A SplitMix64 generator whose whole state is one `u64`, so a consumer can keep
 /// it in saved state and resume the same sequence from it.
 ///

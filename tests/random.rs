@@ -1,6 +1,12 @@
 //! The numbers a state produces are a contract with every consumer's saved games.
 
-use unfolded_tabletop::random::SeededRandom;
+use unfolded_tabletop::random::{SeededRandom, fresh_seed};
+
+#[test]
+fn an_operating_system_seed_can_start_a_generator() {
+    let seed = fresh_seed().expect("operating-system randomness is available");
+    assert_eq!(SeededRandom::new(seed).state(), seed);
+}
 
 /// Wide enough that about half of the generator's values are rejected: the
 /// eleven indexes below took fifteen steps.
