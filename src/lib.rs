@@ -12,6 +12,8 @@ pub mod count_label;
 pub mod hover;
 #[cfg(feature = "render")]
 pub mod loading;
+#[cfg(feature = "render")]
+pub mod printed;
 pub mod random;
 pub mod record_replacement;
 #[cfg(feature = "seat")]

@@ -18,6 +18,35 @@ taken and what a failed one means, and what an agent observes and names at their
 table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
 it, for the agent seat; preparation, `random` and `record_replacement` work without Bevy.
 
+## Printed mat labels
+
+`printed`, behind `render`, extracts the transparent row atlas and flat label
+planes from Arkham `d0212e5eecf21c358472a62c93c8992607497263`,
+`src/gathering_tabletop/printed.rs`. [Issue #25](https://github.com/joeloverbeck/unfolded-tabletop/issues/25)
+coordinates [Arkham #247](https://github.com/joeloverbeck/arkham-unfolded/issues/247)
+and the printed labels selected in [Netrunner #26](https://github.com/joeloverbeck/netrunner-unfolded/issues/26).
+The existing two-consumer EVID-6 exception applies; this is not a typography
+framework. The inspected third consumer has no corresponding mat-label atlas.
+
+Keep an `Atlas` across scene rebuilds. `render` takes caller-owned text bundles
+and pixel dimensions, creates a transparent camera and UI root, and returns a
+`Rendered` row set. `spawn` maps one row onto an unlit blended XZ plane at the
+caller’s exact transform. The caller supplies positive dimensions and UI scale,
+a nonempty row set, valid row indices and positive finite plane heights; invalid
+inputs panic. Images are reused at the same dimensions and replaced when the
+row count or dimensions change. Row geometry compensates for UI scale; callers
+divide their own font sizes by the same scale. Cameras retain Bevy’s defaults
+apart from their supplied order and transparent clear color.
+
+Consumers own content, fonts, colors, layout, orientation, names, actions and
+updates. They also despawn each returned camera, root and plane on rebuild;
+the root owns its descendants. No plugin or camera-facing behavior is added.
+The shared tests exercise this interface without a graphics adapter. Each game
+retains its own checks and rendered inspection, including live text changes.
+Revert consumer adapters and immutable pins together before removing the shared
+addition; Arkham's previous revision retains the original implementation. No
+saved state or artwork changes.
+
 ## Hover opening lifecycle
 
 `hover::Hover` owns the transient opening lifecycle extracted from mudsong at
