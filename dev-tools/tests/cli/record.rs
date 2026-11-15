@@ -23,8 +23,8 @@ fn record_options(root: &Path, output: &Path, mode: &str, resources: bool) -> Co
     }
     command
         .arg("--")
-        .arg(support::fixture())
-        .args(["--fixture-record-check", mode]);
+        .arg(support::executable())
+        .args([crate::fixture::RECORD_CHECK, mode]);
     command
 }
 
@@ -33,7 +33,6 @@ fn metadata(output: &Path) -> Value {
 }
 
 fn declared_stdin_is_retained_and_produces_the_expected_file() {
-    use sha2::{Digest, Sha256};
     let root = tempfile::tempdir().unwrap();
     let input = root.path().join("commands.jsonl");
     let artifact = root.path().join("produced.json");
@@ -49,8 +48,8 @@ fn declared_stdin_is_retained_and_produces_the_expected_file() {
         .arg("--expect-file")
         .arg(&artifact)
         .arg("--")
-        .arg(support::fixture())
-        .args(["--fixture-record-check", "stdin"])
+        .arg(support::executable())
+        .args([crate::fixture::RECORD_CHECK, "stdin"])
         .env("FIXTURE_STDIN_OUTPUT", &artifact)
         .env("FIXTURE_REPLACE_STDIN_SOURCE", &input)
         .output()
@@ -63,7 +62,8 @@ fn declared_stdin_is_retained_and_produces_the_expected_file() {
     assert_eq!(record["stdin"]["mode"], "file");
     assert_eq!(
         record["stdin"]["sha256"],
-        format!("{:x}", Sha256::digest(bytes))
+        // SHA-256 of the input bytes, computed independently with sha256sum.
+        "4e7432a8ebad508e27d453f9f866ee8ded470c80c6c150ec44556bfc889a48dc"
     );
     assert_eq!(
         record["expected_files"][0]["sha256"],
@@ -89,8 +89,8 @@ fn missing_outputs_fail_without_hiding_the_child_status_and_stale_outputs_refuse
             .arg("--expect-file")
             .arg(&artifact)
             .arg("--")
-            .arg(support::fixture())
-            .args(["--fixture-record-check", "stdin"])
+            .arg(support::executable())
+            .args([crate::fixture::RECORD_CHECK, "stdin"])
             .stdin(fs::File::open(&piped).unwrap())
             .env("FIXTURE_STDIN_OUTPUT", &artifact)
             .env("FIXTURE_STARTED", &marker)
@@ -143,8 +143,8 @@ fn invalid_declared_input_is_refused_before_spawning() {
             .arg("--stdin-file")
             .arg(input)
             .arg("--")
-            .arg(support::fixture())
-            .args(["--fixture-record-check", "0"])
+            .arg(support::executable())
+            .args([crate::fixture::RECORD_CHECK, "0"])
             .env("FIXTURE_STARTED", &marker)
             .output()
             .unwrap();
@@ -354,8 +354,8 @@ fn complete_logs_and_metadata_preserve_success_and_original_failure_codes() {
         assert_eq!(
             completed["command"],
             json!([
-                support::fixture(),
-                "--fixture-record-check",
+                support::executable(),
+                crate::fixture::RECORD_CHECK,
                 code.to_string()
             ])
         );
@@ -364,6 +364,34 @@ fn complete_logs_and_metadata_preserve_success_and_original_failure_codes() {
         let finish = completed["finished_unix_ms"].as_u64().unwrap();
         assert!(start > 0 && finish >= start);
     }
+}
+
+fn a_relative_command_runs_from_the_working_directory_and_is_recorded_as_given() {
+    let root = tempfile::tempdir().unwrap();
+    let scripts = root.path().join("scripts");
+    fs::create_dir(&scripts).unwrap();
+    std::os::unix::fs::symlink(support::executable(), scripts.join("check")).unwrap();
+    let directory = root.path().join("record");
+    let result = support::tool()
+        .current_dir(root.path())
+        .args(["record-check", "--output-dir"])
+        .arg(&directory)
+        .args(["--", "scripts/check", crate::fixture::RECORD_CHECK, "0"])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{result:?}");
+    let completed = metadata(&directory);
+    assert_eq!(completed["status"], "finished");
+    assert_eq!(completed["exit_code"], 0);
+    assert_eq!(
+        completed["command"],
+        json!(["scripts/check", crate::fixture::RECORD_CHECK, "0"])
+    );
+    let log = fs::read_to_string(directory.join("check.log")).unwrap();
+    assert!(
+        log.contains(&format!("cwd={}", root.path().display())),
+        "{log}"
+    );
 }
 
 fn launch_failure_is_incomplete_and_never_reports_a_successful_exit() {
@@ -588,57 +616,19 @@ fn killed_supervisor_leaves_running_metadata_as_incomplete_evidence() {
     );
 }
 
-pub const CASES: &[crate::Case] = &[
-    (
-        "record::declared_stdin_is_retained_and_produces_the_expected_file",
-        declared_stdin_is_retained_and_produces_the_expected_file,
-    ),
-    (
-        "record::missing_outputs_fail_without_hiding_the_child_status_and_stale_outputs_refuse_before_spawn",
-        missing_outputs_fail_without_hiding_the_child_status_and_stale_outputs_refuse_before_spawn,
-    ),
-    (
-        "record::invalid_declared_input_is_refused_before_spawning",
-        invalid_declared_input_is_refused_before_spawning,
-    ),
-    (
-        "record::failure_automatically_shows_bounded_diagnostics_without_changing_the_record",
-        failure_automatically_shows_bounded_diagnostics_without_changing_the_record,
-    ),
-    (
-        "record::unavailable_diagnostic_excerpt_preserves_the_original_failure_status",
-        unavailable_diagnostic_excerpt_preserves_the_original_failure_status,
-    ),
-    (
-        "record::source_fingerprints_bind_dirty_and_untracked_inputs_and_invalidate_mutation",
-        source_fingerprints_bind_dirty_and_untracked_inputs_and_invalidate_mutation,
-    ),
-    (
-        "record::optional_resource_capture_keeps_measurements_and_original_failure_status",
-        optional_resource_capture_keeps_measurements_and_original_failure_status,
-    ),
-    (
-        "record::complete_logs_and_metadata_preserve_success_and_original_failure_codes",
-        complete_logs_and_metadata_preserve_success_and_original_failure_codes,
-    ),
-    (
-        "record::launch_failure_is_incomplete_and_never_reports_a_successful_exit",
-        launch_failure_is_incomplete_and_never_reports_a_successful_exit,
-    ),
-    (
-        "record::output_directory_must_be_fresh_and_its_parent_must_exist",
-        output_directory_must_be_fresh_and_its_parent_must_exist,
-    ),
-    (
-        "record::controlled_interruption_records_the_outcome_and_cleans_the_owned_group",
-        controlled_interruption_records_the_outcome_and_cleans_the_owned_group,
-    ),
-    (
-        "record::a_signaled_child_is_interrupted_and_retains_the_actual_signal",
-        a_signaled_child_is_interrupted_and_retains_the_actual_signal,
-    ),
-    (
-        "record::killed_supervisor_leaves_running_metadata_as_incomplete_evidence",
-        killed_supervisor_leaves_running_metadata_as_incomplete_evidence,
-    ),
-];
+pub const CASES: &[crate::Case] = cases!("record":
+    declared_stdin_is_retained_and_produces_the_expected_file,
+    missing_outputs_fail_without_hiding_the_child_status_and_stale_outputs_refuse_before_spawn,
+    invalid_declared_input_is_refused_before_spawning,
+    failure_automatically_shows_bounded_diagnostics_without_changing_the_record,
+    unavailable_diagnostic_excerpt_preserves_the_original_failure_status,
+    source_fingerprints_bind_dirty_and_untracked_inputs_and_invalidate_mutation,
+    optional_resource_capture_keeps_measurements_and_original_failure_status,
+    complete_logs_and_metadata_preserve_success_and_original_failure_codes,
+    a_relative_command_runs_from_the_working_directory_and_is_recorded_as_given,
+    launch_failure_is_incomplete_and_never_reports_a_successful_exit,
+    output_directory_must_be_fresh_and_its_parent_must_exist,
+    controlled_interruption_records_the_outcome_and_cleans_the_owned_group,
+    a_signaled_child_is_interrupted_and_retains_the_actual_signal,
+    killed_supervisor_leaves_running_metadata_as_incomplete_evidence,
+);

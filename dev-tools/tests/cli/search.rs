@@ -373,49 +373,16 @@ fn multiple_no_matches_and_oversized_following_file_remain_bounded() {
     assert!(String::from_utf8_lossy(&refused.stderr).contains("cannot fit"));
 }
 
-pub const CASES: &[crate::Case] = &[
-    (
-        "search::literal_search_stays_within_the_selected_range_and_preserves_its_source",
-        literal_search_stays_within_the_selected_range_and_preserves_its_source,
-    ),
-    (
-        "search::pages_preserve_scoped_context_once_under_one_complete_byte_budget",
-        pages_preserve_scoped_context_once_under_one_complete_byte_budget,
-    ),
-    (
-        "search::heading_scope_includes_children_and_ignores_headings_inside_fenced_examples",
-        heading_scope_includes_children_and_ignores_headings_inside_fenced_examples,
-    ),
-    (
-        "search::empty_sources_and_no_matches_are_explicit_successful_results",
-        empty_sources_and_no_matches_are_explicit_successful_results,
-    ),
-    (
-        "search::continuation_refuses_source_query_scope_and_context_changes_before_output",
-        continuation_refuses_source_query_scope_and_context_changes_before_output,
-    ),
-    (
-        "search::ambiguous_headings_require_a_range_and_missing_headings_are_not_no_matches",
-        ambiguous_headings_require_a_range_and_missing_headings_are_not_no_matches,
-    ),
-    (
-        "search::invalid_inputs_and_oversized_matches_emit_no_source",
-        invalid_inputs_and_oversized_matches_emit_no_source,
-    ),
-    (
-        "search::crlf_missing_final_newline_and_shell_characters_remain_literal",
-        crlf_missing_final_newline_and_shell_characters_remain_literal,
-    ),
-    (
-        "search::multiple_files_and_terms_share_a_budget_and_never_duplicate_overlapping_lines",
-        multiple_files_and_terms_share_a_budget_and_never_duplicate_overlapping_lines,
-    ),
-    (
-        "search::multi_file_continuation_binds_unread_sources_path_order_and_every_term",
-        multi_file_continuation_binds_unread_sources_path_order_and_every_term,
-    ),
-    (
-        "search::multiple_no_matches_and_oversized_following_file_remain_bounded",
-        multiple_no_matches_and_oversized_following_file_remain_bounded,
-    ),
-];
+pub const CASES: &[crate::Case] = cases!("search":
+    literal_search_stays_within_the_selected_range_and_preserves_its_source,
+    pages_preserve_scoped_context_once_under_one_complete_byte_budget,
+    heading_scope_includes_children_and_ignores_headings_inside_fenced_examples,
+    empty_sources_and_no_matches_are_explicit_successful_results,
+    continuation_refuses_source_query_scope_and_context_changes_before_output,
+    ambiguous_headings_require_a_range_and_missing_headings_are_not_no_matches,
+    invalid_inputs_and_oversized_matches_emit_no_source,
+    crlf_missing_final_newline_and_shell_characters_remain_literal,
+    multiple_files_and_terms_share_a_budget_and_never_duplicate_overlapping_lines,
+    multi_file_continuation_binds_unread_sources_path_order_and_every_term,
+    multiple_no_matches_and_oversized_following_file_remain_bounded,
+);

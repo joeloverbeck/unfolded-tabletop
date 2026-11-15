@@ -352,45 +352,15 @@ fn batch_validates_all_excerpts_before_output_and_preserves_empty_and_crlf_sourc
     assert!(result.stdout.is_empty());
 }
 
-pub const CASES: &[crate::Case] = &[
-    (
-        "reader::line_windows_stop_at_eof_without_weakening_explicit_ranges",
-        line_windows_stop_at_eof_without_weakening_explicit_ranges,
-    ),
-    (
-        "reader::help_identifies_the_batch_file_and_both_byte_limits",
-        help_identifies_the_batch_file_and_both_byte_limits,
-    ),
-    (
-        "reader::continuations_cover_selected_unicode_lines_once_within_the_complete_byte_limit",
-        continuations_cover_selected_unicode_lines_once_within_the_complete_byte_limit,
-    ),
-    (
-        "reader::changed_source_refuses_continuation_without_emitting_content",
-        changed_source_refuses_continuation_without_emitting_content,
-    ),
-    (
-        "reader::invalid_ranges_limits_files_and_oversized_lines_emit_no_source",
-        invalid_ranges_limits_files_and_oversized_lines_emit_no_source,
-    ),
-    (
-        "reader::empty_crlf_and_missing_final_newline_are_explicit_and_preserved",
-        empty_crlf_and_missing_final_newline_are_explicit_and_preserved,
-    ),
-    (
-        "reader::missing_batch_manifest_reports_the_requested_file_without_source_output",
-        missing_batch_manifest_reports_the_requested_file_without_source_output,
-    ),
-    (
-        "reader::batch_continuations_share_one_budget_and_deliver_each_selected_line_once",
-        batch_continuations_share_one_budget_and_deliver_each_selected_line_once,
-    ),
-    (
-        "reader::batch_continuation_binds_even_unread_sources_and_the_request_list",
-        batch_continuation_binds_even_unread_sources_and_the_request_list,
-    ),
-    (
-        "reader::batch_validates_all_excerpts_before_output_and_preserves_empty_and_crlf_sources",
-        batch_validates_all_excerpts_before_output_and_preserves_empty_and_crlf_sources,
-    ),
-];
+pub const CASES: &[crate::Case] = cases!("reader":
+    line_windows_stop_at_eof_without_weakening_explicit_ranges,
+    help_identifies_the_batch_file_and_both_byte_limits,
+    continuations_cover_selected_unicode_lines_once_within_the_complete_byte_limit,
+    changed_source_refuses_continuation_without_emitting_content,
+    invalid_ranges_limits_files_and_oversized_lines_emit_no_source,
+    empty_crlf_and_missing_final_newline_are_explicit_and_preserved,
+    missing_batch_manifest_reports_the_requested_file_without_source_output,
+    batch_continuations_share_one_budget_and_deliver_each_selected_line_once,
+    batch_continuation_binds_even_unread_sources_and_the_request_list,
+    batch_validates_all_excerpts_before_output_and_preserves_empty_and_crlf_sources,
+);

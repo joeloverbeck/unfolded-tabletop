@@ -127,7 +127,9 @@ destinations, lock contention and recovery-install cleanup.
 `tests/record_replacement_fork.rs` holds lock release before a forked child's
 inherited descriptor closes, and `tests/record_replacement_trace.rs` traces both
 renames of one replacement under the same sidecar lock, each in an executable of
-its own. Arkham owns its admission, session wording and real driver restart
+its own. The trace needs permission to ptrace the test's own child, which
+ordinary Linux hosts and GitHub's Ubuntu runners grant; a container that forbids
+ptrace fails it. Arkham owns its admission, session wording and real driver restart
 tests, and both consumers retain their required checks.
 
 Reverting the consumer adapter and dependency pin restores Arkham's prior local
@@ -151,8 +153,8 @@ interpolation after the manual distance clamp. Focus and follow targets are
 consumer-supplied and are not admission-validated here. These are the inherited
 camera's bounds, not a promise to fit arbitrary tables.
 
-Arkham retains its framing tests (its startup home and named initial views) and
-real-table navigation around its adapter. `tests/camera.rs` holds the motion
+Arkham's framing tests (its startup home and named initial views) and
+real-table navigation stay around its adapter. `tests/camera.rs` holds the motion
 Arkham's camera tests held before issue #30: orbit, camera-relative pan, wheel
 normalization and limits, scene-drag capture and interruption, follow
 interpolation, focus and Home, with the expectations Arkham recorded. Netrunner's complete-table consumer and its native acceptance
@@ -442,11 +444,14 @@ mechanical evidence, not authority to accept or publish their result.
 
 The runtime crate does not depend on this crate or on its command-line/signal
 handling dependencies. Consumers pin immutable Git revisions; no sibling checkout
-or separately built Arkham executable is needed. `dev-tools/tests/cli` runs every
-reader and recorder case Arkham's tool tests held before issue #30 through `run_cli`,
-one process per invocation: the test executable is its own harness and the child
-its recorded checks run. `dev-tools/tests/process.rs` holds process ownership and
-the digest. Arkham's tests keep only its own command wiring.
+or separately built Arkham executable is needed. `dev-tools/tests/cli` runs, through
+`run_cli` and one process per invocation, the reader, search and recorder cases
+Arkham's tool tests held before issue #30, and a relative command run from the
+working directory. The test executable is its own harness and the child its
+recorded checks run. `dev-tools/tests/process.rs` holds process ownership and the
+digest. Issue #30 links Arkham's pull request that removes its copies; Arkham
+keeps the tests of its own command wiring, including its nested `scripts/dev`
+and `scripts/check` record.
 Revert consumer adapters/pins before removing the shared crate; the baseline
 above retains the original implementation. Game behavior, saves and assets are
 outside this extraction.

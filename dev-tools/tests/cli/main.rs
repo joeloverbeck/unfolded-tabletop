@@ -3,7 +3,14 @@
 //! `--run-cli` it is the command line, and with a fixture argument it is the child a
 //! recorded check runs. No consumer binary, compiler or sibling checkout is needed.
 
-use std::{env, ffi::OsString, panic, process::ExitCode, sync::Mutex, thread};
+use std::{env, ffi::OsString, process::ExitCode, sync::Mutex, thread};
+
+/// One named case per function, so a reported name cannot drift from its function.
+macro_rules! cases {
+    ($module:literal: $($case:ident),* $(,)?) => {
+        &[$((concat!($module, "::", stringify!($case)), $case as fn())),*]
+    };
+}
 
 mod fixture;
 mod reader;
@@ -27,17 +34,27 @@ fn main() -> ExitCode {
     run([reader::CASES, search::CASES, record::CASES].concat())
 }
 
-/// Accept the common test-harness arguments: name filters, `--skip`, `--exact`
-/// and `--list`; other options are ignored, with their values where they take one.
+/// Accept the common test-harness arguments: name filters, `--skip`, `--exact`,
+/// `--list`, `--ignored` (no case here is ignored) and `--test-threads` or
+/// `RUST_TEST_THREADS`; other options are ignored, with their values where they take one.
 fn run(cases: Vec<Case>) -> ExitCode {
     let (mut filters, mut skips, mut exact, mut list) = (Vec::new(), Vec::new(), false, false);
+    let mut only_ignored = false;
+    let mut threads = env::var("RUST_TEST_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok());
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--skip" => skips.extend(args.next()),
             "--exact" => exact = true,
             "--list" => list = true,
-            "--test-threads" | "--format" | "--color" | "--logfile" | "-Z" => {
+            "--ignored" => only_ignored = true,
+            "--test-threads" => threads = args.next().and_then(|value| value.parse().ok()),
+            option if option.starts_with("--test-threads=") => {
+                threads = option["--test-threads=".len()..].parse().ok();
+            }
+            "--format" | "--color" | "--logfile" | "-Z" => {
                 args.next();
             }
             option if option.starts_with('-') => {}
@@ -54,7 +71,8 @@ fn run(cases: Vec<Case>) -> ExitCode {
     let selected: Vec<Case> = cases
         .into_iter()
         .filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| matches(name, f)))
-        .filter(|(name, _)| !skips.iter().any(|s| name.contains(s.as_str())))
+        .filter(|(name, _)| !skips.iter().any(|s| matches(name, s)))
+        .filter(|_| !only_ignored)
         .collect();
     if list {
         for (name, _) in &selected {
@@ -66,9 +84,11 @@ fn run(cases: Vec<Case>) -> ExitCode {
     let total = selected.len();
     let queue = Mutex::new(selected.into_iter());
     let failures = Mutex::new(Vec::new());
-    let workers = thread::available_parallelism()
-        .map_or(4, |n| n.get())
-        .min(8);
+    let workers = threads.filter(|&count| count > 0).unwrap_or_else(|| {
+        thread::available_parallelism()
+            .map_or(4, |n| n.get())
+            .min(8)
+    });
     thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
@@ -78,10 +98,10 @@ fn run(cases: Vec<Case>) -> ExitCode {
                     // A named thread makes the default panic message name the case.
                     let passed = thread::Builder::new()
                         .name(name.to_owned())
-                        .spawn(move || panic::catch_unwind(case).is_ok())
+                        .spawn(case)
                         .unwrap()
                         .join()
-                        .unwrap_or(false);
+                        .is_ok();
                     println!("test {name} ... {}", if passed { "ok" } else { "FAILED" });
                     if !passed {
                         failures.lock().unwrap().push(name);
