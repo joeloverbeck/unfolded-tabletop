@@ -6,7 +6,10 @@
 //!
 //! A held start goes through the real launcher: the launching command starts this
 //! executable again, in its own session, as the seat. So this executable has no
-//! test harness of its own, and every case runs in a process of its own.
+//! test harness of its own. Each game command it runs is a process of its own; the
+//! cases run one after another in this one. As a harness would, it runs only the
+//! cases whose names contain a filter given on its command line, and `--list` lists
+//! them.
 #![cfg(feature = "seat")]
 
 use bevy::{asset::AssetPlugin, prelude::*};
@@ -260,10 +263,10 @@ fn converse(socket: &Path, requests: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-/// Wait until `path` no longer exists, for at most ten seconds.
-fn gone(path: &Path) -> bool {
+/// Wait until `done` holds, for at most ten seconds.
+fn eventually(mut done: impl FnMut() -> bool) -> bool {
     let deadline = Instant::now() + Duration::from_secs(10);
-    while path.exists() {
+    while !done() {
         if Instant::now() >= deadline {
             return false;
         }
@@ -287,9 +290,21 @@ fn a_held_start_prints_the_launched_seats_ready_and_leaves_it_serving(scratch: &
     let answered = converse(&socket, &[json!({"op": "observe"}), json!({"op": "quit"})]);
     let statuses: Vec<_> = answered.iter().map(|line| &line["status"]).collect();
     assert_eq!(statuses, ["observed", "bye"], "{answered:?}");
-    assert!(gone(&socket), "the session left its socket");
-    let log = std::fs::read_to_string(scratch.join("ready.sock.log")).unwrap();
-    assert!(log.contains("The agent seat's session ended."), "{log}");
+    assert!(
+        eventually(|| !socket.exists()),
+        "the session left its socket"
+    );
+    let log = scratch.join("ready.sock.log");
+    let ended = || {
+        std::fs::read_to_string(&log)
+            .unwrap()
+            .contains("The agent seat's session ended.")
+    };
+    assert!(
+        eventually(ended),
+        "{}",
+        std::fs::read_to_string(&log).unwrap()
+    );
 }
 
 fn batch_form_answers_ready_first_and_then_its_input(_: &Scratch) {
@@ -388,26 +403,42 @@ fn the_defaults_are_the_games_own(_: &Scratch) {
     assert_eq!(IDLE, Duration::from_secs(1_800));
 }
 
+/// Something whose drop is recorded, in order with the others.
+struct Ends(&'static str, Arc<Mutex<Vec<&'static str>>>);
+
+impl Drop for Ends {
+    fn drop(&mut self) {
+        self.1.lock().unwrap().push(self.0);
+    }
+}
+
+/// Held by the app, so it drops with the app.
+#[derive(Resource)]
+struct InApp(#[expect(dead_code, reason = "held for its drop")] Ends);
+
+/// The case's table, keeping something, and the record of what has dropped.
+fn kept_table(case: Case) -> (Table<Empty, Ends>, Arc<Mutex<Vec<&'static str>>>) {
+    let ended = Arc::new(Mutex::new(Vec::new()));
+    let mut table = case.build().unwrap();
+    table.app.insert_resource(InApp(Ends("app", ended.clone())));
+    (table.keeping(Ends("kept", ended.clone())), ended)
+}
+
 /// What a table keeps outlives its app, and a test seats an agent with no process of
 /// its own and no graphics adapter.
 fn a_table_seated_in_process_keeps_what_outlives_its_app(_: &Scratch) {
-    let ended = Arc::new(Mutex::new(Vec::new()));
-    struct Ends(&'static str, Arc<Mutex<Vec<&'static str>>>);
-    impl Drop for Ends {
-        fn drop(&mut self) {
-            self.1.lock().unwrap().push(self.0);
-        }
-    }
-    #[derive(Resource)]
-    struct InApp(#[expect(dead_code, reason = "held for its drop")] Ends);
-    let mut table = Case::Ready.build().unwrap();
-    table.app.insert_resource(InApp(Ends("app", ended.clone())));
-    let mut seated = START
-        .seat(table.keeping(Ends("kept", ended.clone())))
-        .unwrap_or_else(|error| panic!("{error}"));
+    let (table, ended) = kept_table(Case::Ready);
+    let mut seated = START.admit(table).unwrap_or_else(|error| panic!("{error}"));
     let ready = seated.seat.ready(&mut seated.app);
     assert_eq!(ready["status"], "ready");
     drop(seated);
+    assert_eq!(*ended.lock().unwrap(), ["app", "kept"]);
+}
+
+/// A table that is not admitted still drops what it keeps after its app.
+fn a_refused_table_drops_what_it_keeps_after_its_app(_: &Scratch) {
+    let (table, ended) = kept_table(Case::Refused);
+    assert_eq!(START.admit(table).err().as_deref(), Some(REFUSAL));
     assert_eq!(*ended.lock().unwrap(), ["app", "kept"]);
 }
 
@@ -419,8 +450,7 @@ fn main() -> ExitCode {
     if arguments.first().is_some_and(|first| first == "game") {
         return game(&arguments[1..]);
     }
-    let scratch = Scratch::new();
-    let cases: [Test; 7] = [
+    let tests: [Test; 8] = [
         (
             "a_held_start_prints_the_launched_seats_ready_and_leaves_it_serving",
             a_held_start_prints_the_launched_seats_ready_and_leaves_it_serving,
@@ -449,11 +479,31 @@ fn main() -> ExitCode {
             "a_table_seated_in_process_keeps_what_outlives_its_app",
             a_table_seated_in_process_keeps_what_outlives_its_app,
         ),
+        (
+            "a_refused_table_drops_what_it_keeps_after_its_app",
+            a_refused_table_drops_what_it_keeps_after_its_app,
+        ),
     ];
-    for (name, case) in cases {
-        case(&scratch);
+    let filters: Vec<&str> = arguments
+        .iter()
+        .filter(|argument| !argument.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let chosen: Vec<&Test> = tests
+        .iter()
+        .filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f)))
+        .collect();
+    if arguments.iter().any(|argument| argument == "--list") {
+        for (name, _) in &chosen {
+            println!("{name}: test");
+        }
+        return ExitCode::SUCCESS;
+    }
+    let scratch = Scratch::new();
+    for (name, test) in &chosen {
+        test(&scratch);
         println!("test {name} ... ok");
     }
-    println!("test result: ok. {} passed", cases.len());
+    println!("test result: ok. {} passed", chosen.len());
     ExitCode::SUCCESS
 }

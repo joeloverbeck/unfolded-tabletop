@@ -3,8 +3,8 @@
 //! build its table, with its own marker, limits and words; the order of the steps
 //! and every refusal are here.
 //!
-//! In batch form the seat builds the table, opens and admits it, and answers standard
-//! input. Held on a socket, the command an agent runs claims the socket and starts the
+//! In batch form the seat builds the table, opens and admits it, announces `ready` and
+//! answers standard input. Held on a socket, the command an agent runs claims the socket and starts the
 //! same executable again as the seat ([`socket::launch`]); that seat leaves the
 //! launching shell's session, takes the listener, builds, opens and admits the table,
 //! announces `ready` and serves until `quit`, the table's own exit or the idle end.
@@ -23,9 +23,9 @@ pub const ADMISSION: Duration = Duration::from_secs(120);
 /// unless the game says otherwise.
 pub const IDLE: Duration = Duration::from_secs(30 * 60);
 
-/// What a game's words for an admission that ran out of time read: its table, and
-/// the time it was allowed.
-pub type Unfinished = fn(&World, Duration) -> String;
+/// A game's words for an admission that ran out of time, from its table and the time
+/// it was allowed.
+pub type UnfinishedWords = fn(&World, Duration) -> String;
 
 /// A game's table as the game builds it, with its windowless surface installed
 /// ([`crate::capture::install`]), before the seat opens it.
@@ -72,13 +72,13 @@ pub struct Start {
     marker: &'static str,
     admission: Duration,
     idle: Duration,
-    unfinished: Unfinished,
+    unfinished: UnfinishedWords,
 }
 
 impl Start {
     /// The game's marker and words, with an admission limit of [`ADMISSION`] and an
     /// idle period of [`IDLE`].
-    pub const fn new(marker: &'static str, unfinished: Unfinished) -> Self {
+    pub const fn new(marker: &'static str, unfinished: UnfinishedWords) -> Self {
         Self {
             marker,
             admission: ADMISSION,
@@ -107,20 +107,40 @@ impl Start {
 
     /// Open a built table and admit it within the limit, in this process: what a start
     /// does before `ready`, for a game's tests as for its seat. The error is the game's
-    /// refusal, or its words for an admission that ran out of time.
-    pub fn seat<G: Game, K>(&self, table: Table<G, K>) -> Result<Seated<G, K>, String> {
+    /// refusal, or its words for an admission that ran out of time. Either way, what the
+    /// table keeps is dropped after its app.
+    pub fn admit<G: Game, K>(&self, table: Table<G, K>) -> Result<Seated<G, K>, String> {
         let Table {
             mut app,
             game,
             kept,
         } = table;
-        let mut seat = Seat::open(game, &mut app)?;
-        seat.admit(&mut app, self.admission)
+        match self.open(game, &mut app) {
+            Ok(seat) => Ok(Seated { app, seat, kept }),
+            Err(error) => {
+                drop(app);
+                drop(kept);
+                Err(error)
+            }
+        }
+    }
+
+    fn open<G: Game>(&self, game: G, app: &mut App) -> Result<Seat<G>, String> {
+        let mut seat = Seat::open(game, app)?;
+        seat.admit(app, self.admission)
             .map_err(|unadmitted| match unadmitted {
                 Unadmitted::Refused(reason) => reason,
                 Unadmitted::Unfinished => (self.unfinished)(app.world(), self.admission),
             })?;
-        Ok(Seated { app, seat, kept })
+        Ok(seat)
+    }
+
+    /// The table `build` makes, admitted, or one `refused` response and its error.
+    fn admitted<G: Game, K>(
+        &self,
+        build: impl FnOnce() -> Result<Table<G, K>, String>,
+    ) -> Result<Seated<G, K>, String> {
+        build().and_then(|table| self.admit(table)).or_else(refuse)
     }
 
     /// Seat an agent at the table `build` makes, in batch form, or held on `socket`,
@@ -133,8 +153,7 @@ impl Start {
         build: impl FnOnce() -> Result<Table<G, K>, String>,
     ) -> Result<(), String> {
         let Some(path) = socket else {
-            let mut seated = build().and_then(|table| self.seat(table)).or_else(refuse)?;
-            let Seated { app, seat, .. } = &mut seated;
+            let Seated { app, seat, .. } = &mut self.admitted(build)?;
             return seat.serve(app, std::io::stdin().lock(), std::io::stdout().lock());
         };
         if !socket::detached(self.marker) {
@@ -142,8 +161,7 @@ impl Start {
             return socket::launch(path, self.marker).or_else(refuse);
         }
         let listener = socket::detach(path, self.marker).or_else(refuse)?;
-        let mut seated = build().and_then(|table| self.seat(table)).or_else(refuse)?;
-        let Seated { app, seat, .. } = &mut seated;
+        let Seated { app, seat, .. } = &mut self.admitted(build)?;
         socket::announce(&seat.ready(app))?;
         listener.serve(seat, app, self.idle)
     }

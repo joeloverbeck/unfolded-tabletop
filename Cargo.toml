@@ -45,7 +45,8 @@ tempfile = "3"
 wgpu-hal = { path = "vendor/wgpu-hal" }
 
 # A game's start of its seat, end to end: the launcher starts this executable again
-# as the seat, so it has no test harness and runs each case in a process of its own.
+# as the seat, so it has no test harness, and each game command it runs is a process
+# of its own.
 [[test]]
 name = "seat_start"
 harness = false
