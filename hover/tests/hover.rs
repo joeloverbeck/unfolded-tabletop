@@ -1,5 +1,5 @@
 use std::time::Duration;
-use unfolded_tabletop::hover::Hover;
+use unfolded_hover::Hover;
 
 #[test]
 fn first_opening_waits_for_the_consumers_dwell() {

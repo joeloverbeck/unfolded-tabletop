@@ -1,8 +1,7 @@
 # unfolded-tabletop
 
-Concrete Rust mechanisms extracted from Arkham Unfolded for named consumers:
-presentation mechanisms for its Gathering table and Netrunner Unfolded's first
-Brân run, and seeded randomness, screen capture and the agent seat for Arkham and
+Concrete Rust mechanisms, most of them extracted from Arkham Unfolded, for four
+named games: Arkham Unfolded, Netrunner Unfolded, Cuba Libre Unfolded and
 `mudsong`. This is a bounded candidate with real consumers, not a general
 tabletop framework.
 
@@ -15,8 +14,40 @@ capture. Consumers own rules, observations, layout, materials, resource
 meanings, required artwork, renderer admission policy, native-operation policy,
 what their randomness decides and how its state is saved, when a capture is
 taken and what a failed one means, and what an agent observes and names at their
-table. Enable `render` for the Bevy 0.20.0 modules, and `seat`, which implies
-it, for the agent seat; preparation, `random` and `record_replacement` work without Bevy.
+table.
+
+## Packages
+
+Every package below lives in this one repository and changes revision with it.
+None has a lifecycle of its own.
+
+| Package | Mechanism | Bevy | Direct dependencies |
+| --- | --- | --- | --- |
+| `unfolded-random` | seeded randomness | never | none |
+| `unfolded-hover` | hover opening lifecycle | never | none |
+| `unfolded-record-replacement` | recoverable file replacement | never | `tempfile` |
+| `unfolded-assets` | verified reads, PNG crops, prepared-directory publication | never | `image` (PNG), `rustix`, `serde_json`, `sha2` |
+| `unfolded-seat-client` | held-seat client, on Unix | never | `anyhow`, `serde_json` |
+| `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
+| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | see its manifest |
+
+"Never" holds under every feature set: `scripts/check` fails if `cargo tree`
+finds a `bevy` package below any of them, and fails if `unfolded-random` brings
+any crate at all. A game crate with no interface in it should depend only on the
+Bevy-free packages it uses, so Cargo can never link Bevy into it, whatever else
+its workspace builds. The crate that holds the game's interface depends on
+`unfolded-tabletop`, which depends on the Bevy-free packages. Arkham, Netrunner
+and Cuba Libre keep their interface behind a `tabletop` feature, which enables
+`unfolded-tabletop/seat`.
+
+Pin every package a game takes from this repository, its root
+`[patch.crates-io]` entry for `wgpu-hal` and `unfolded-dev-tools` at one
+immutable `rev`. A Git dependency's patch does not propagate, so the game's own
+root must name it.
+
+`unfolded_tabletop::{assets, hover, random, record_replacement, seat_client}`
+still re-export the Bevy-free packages, so a game keeps building at this
+revision before it changes its own paths. Issue #31 removes them once no game uses them.
 
 ## Printed mat labels
 
@@ -61,7 +92,7 @@ waits, an already open view switches immediately, and absent/ineligible targets
 dismiss it. Eligibility changes on the same identity retain its elapsed dwell.
 `visible` identifies what to show and `waiting` reports pending dwell. Consumers
 own picking, content, actions, geometry, timing, dimming and animation readiness.
-No Bevy feature is needed. Reset the lifecycle with its `Default` on a local
+Its package cannot depend on Bevy. Reset the lifecycle with its `Default` on a local
 view reset. It changes no persisted records. Revert consumer adapters and pins
 together before removing this producer module; each consumer still needs its
 own actual interaction and image checks.
@@ -96,9 +127,9 @@ and restart archiving. Origin: `joeloverbeck/arkham-unfolded` at
 `89be726a81f73f3d5828683a72ee16eb3de2f66a`, `src/record_replacement.rs`.
 The coordinated extraction belongs to
 [Netrunner issue #9](https://github.com/joeloverbeck/netrunner-unfolded/issues/9).
-Arkham's adapter keeps its actual save, reload and restart paths; Netrunner's
-save/resume ticket must still establish its own real consumer before coordinated
-adoption is complete. Mudsong has no saved-game consumer and needs no migration.
+Arkham's adapter keeps its actual save, reload and restart paths. Netrunner's
+saved state (`src/saved_state.rs`) and Cuba Libre's save (`src/save.rs`) replace
+their records through it. Mudsong has no saved-game consumer and needs no migration.
 
 Consumers supply their record-size bound, error conversion, replacement admission
 and recovery validation. Schemas, checksums, content identities, freshness and
@@ -120,12 +151,12 @@ This preserves the original replacement behavior and diagnostics. It is not a
 multi-file transaction: a later failure can retain a restart archive or rotate
 the previous record. Staged files are synced, but parent-directory metadata is
 not; this does not promise universal power-loss durability or automatic repair
-of corrupt records. `tests/record_replacement.rs` retains the original mechanism
+of corrupt records. `record-replacement/tests/record_replacement.rs` retains the original mechanism
 cases at the public interface, and since issue #30 every mechanism case Arkham's
 continuity tests held: archives, recovery validation, size limits, non-regular
 destinations, lock contention and recovery-install cleanup.
-`tests/record_replacement_fork.rs` holds lock release before a forked child's
-inherited descriptor closes, and `tests/record_replacement_trace.rs` traces both
+`record_replacement_fork.rs` beside it holds lock release before a forked child's
+inherited descriptor closes, and `record_replacement_trace.rs` traces both
 renames of one replacement under the same sidecar lock, each in an executable of
 its own. The trace needs permission to ptrace the test's own child, which
 ordinary Linux hosts and GitHub's Ubuntu runners grant; a container that forbids
@@ -157,10 +188,9 @@ Arkham's framing tests (its startup home and named initial views) and
 real-table navigation stay around its adapter. `tests/camera.rs` holds the motion
 Arkham's camera tests held before issue #30: orbit, camera-relative pan, wheel
 normalization and limits, scene-drag capture and interruption, follow
-interpolation, focus and Home, with the expectations Arkham recorded. Netrunner's complete-table consumer and its native acceptance
-remain due under [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11)
-and [#13](https://github.com/joeloverbeck/netrunner-unfolded/issues/13).
-Mudsong's fixed orthographic presentation does not consume this mechanism.
+interpolation, focus and Home, with the expectations Arkham recorded. Netrunner's
+table (`src/tabletop.rs`, under [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11))
+and Cuba Libre's (`src/tabletop.rs`) move their cameras through it. Mudsong's fixed orthographic presentation does not consume this mechanism.
 Reverting Arkham's adapter and dependency pin restores its original local
 camera. This candidate makes no general camera-platform claim.
 
@@ -273,7 +303,7 @@ own check.
 
 ## Held-seat client
 
-`seat_client` is available on Unix without the renderer. It extracts Arkham's
+`seat_client`, in `unfolded-seat-client`, is available on Unix. It extracts Arkham's
 `tools/src/seat.rs` at `8301466b5bbc20b99411901cfcd6db2b29865431`:
 request-line normalization, connection, concurrent sending/reading, write
 half-close, and unchanged response output. The caller supplies the output writer
@@ -289,13 +319,14 @@ Signal installation, launch guidance and partner-wait decisions stay in Arkham.
 this candidate for [Cuba Libre #10](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/10).
 Those records carry the owner's 2026-11-14 bounded EVID-6 extension for mechanisms
 used by Cuba and an existing game, the two-hour extraction cap, actual-consumer
-verification and rollback. Cuba's consuming path remains due before coordinated
-adoption is complete. Revert Arkham's adapter and dependency pins before removing
+verification and rollback. Cuba's `cuba-tools` sends its requests through it.
+Revert Arkham's adapter and dependency pins before removing
 the producer addition; no saves or artwork change.
 
 ## Screen capture
 
-`capture` holds the part of Arkham's screen capture that both consumers use.
+`capture` holds the part of Arkham's screen capture that Arkham and `mudsong` both
+used when it moved; Netrunner and Cuba Libre now capture through it too.
 Origin: `joeloverbeck/arkham-unfolded` at
 `617904319a7b260e496af61cc5390458c2b1ff6b`, `write_image` of
 `src/tabletop_capture.rs` and the windowless surface and capture loop of
@@ -349,7 +380,7 @@ enters the module.
 
 A generator's whole state is one `u64`, and the numbers a state produces are a
 contract: a consumer's saved game stores that state and continues only while it
-keeps producing the same numbers. `tests/random.rs` pins numbers recorded from
+keeps producing the same numbers. `random/tests/random.rs` pins numbers recorded from
 Arkham before the move, so changing them is a breaking change for every consumer.
 
 Each consumer's pull request records its own migration, checks and acceptance.
@@ -360,8 +391,12 @@ Arkham's prior commit contains its original generator.
 
 Run `scripts/check` from a clean clone before publication. It bounds its builds
 by default (four Cargo jobs, no debug info; CI sets two), and the environment may override them. It checks full-workspace
-formatting first, then strict Clippy and tests with the default, `render` and
-`seat` features. Rustup selects the compiler/components in `rust-toolchain.toml`; the
+formatting first, then strict Clippy on the workspace and on `unfolded-tabletop`
+with `render` and with `seat`. It asserts that no Bevy-free package reaches Bevy
+and that `unfolded-random` has no dependency, and lints each Bevy-free package
+alone, since a workspace build can supply a dependency feature that a game
+depending on that package alone would lack. Then it runs the workspace's tests
+and `unfolded-tabletop`'s with `render` and with `seat`. Rustup selects the compiler/components in `rust-toolchain.toml`; the
 committed lockfile fixes this repository's verification dependencies. CI runs the
 same entry point on Ubuntu without game assets or a desktop. A focused command is
 only partial evidence. These checks do not replace any consumer's own checks:
@@ -369,7 +404,7 @@ asset, GPU, native acceptance or saved-game continuity.
 
 The workspace's local Cargo patch exercises its owned `vendor/wgpu-hal` copy.
 `scripts/check` also runs that copy's `vulkan::upload_memory` regression tests
-from its own manifest and tracked lockfile; they need no GPU. `tests/assets.rs`,
+from its own manifest and tracked lockfile; they need no GPU. `assets/tests/assets.rs`,
 `tests/card.rs`, `tests/token.rs` and `tests/loading.rs` hold bounded and verified
 reads, PNG crop bounds, publication without replacement, card meshes, token
 assembly and load-state reports with test-made inputs. No test registers a real
@@ -379,8 +414,8 @@ this verification setup does not change their pins.
 
 `vendor/wgpu-hal` retains Arkham's narrowly scoped NVIDIA Vulkan staging workaround
 and its upstream licensing. Applications must configure their own Cargo root
-`[patch.crates-io]`; a dependency's patch does not propagate. Pin both the library
-and patched package to the same immutable repository revision.
+`[patch.crates-io]`; a dependency's patch does not propagate. Pin the patched package
+at the same immutable revision as the library packages, as **Packages** says.
 
 Origin: `joeloverbeck/arkham-unfolded` at
 `83bd1264b7962d844cfa2417d7f50be642575c9a`, principally `src/assets.rs`,

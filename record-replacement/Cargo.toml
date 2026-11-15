@@ -1,0 +1,13 @@
+[package]
+name = "unfolded-record-replacement"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+
+[dependencies]
+tempfile = "3"
+
+[dev-dependencies]
+rustix = "1"

@@ -2,7 +2,7 @@
 //! held at the public interface with test-made files. Expectations come from
 //! Arkham's recorded atlas fixture and from hand-computed sizes and digests.
 use std::{fs, path::Path};
-use unfolded_tabletop::assets::{
+use unfolded_assets::{
     PngCrop, crop_png, publish_directory, read_bounded, read_verified, regular_file, relative_path,
     resolve_output, verify_bytes,
 };

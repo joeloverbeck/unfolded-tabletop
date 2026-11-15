@@ -1,0 +1,10 @@
+[package]
+name = "unfolded-random"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+
+# No dependencies: a crate that needs only seeded randomness gets nothing else
+# through this repository, and `scripts/check` holds that.

@@ -4,7 +4,7 @@ use std::{
     thread,
     time::Duration,
 };
-use unfolded_tabletop::seat_client;
+use unfolded_seat_client as seat_client;
 
 #[test]
 fn sends_lines_then_half_closes_and_preserves_final_response_without_newline() {

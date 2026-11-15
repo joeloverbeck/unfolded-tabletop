@@ -7,7 +7,7 @@ use std::{
     io::Error,
     path::{Path, PathBuf},
 };
-use unfolded_tabletop::record_replacement::{Replacement, previous_path, read, replace};
+use unfolded_record_replacement::{Replacement, previous_path, read, replace};
 
 const LIMIT_ERROR: &str = "This file exceeds the bounded experiment's record limit.";
 
