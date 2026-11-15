@@ -15,5 +15,7 @@ pub mod random;
 pub mod record_replacement;
 #[cfg(feature = "seat")]
 pub mod seat;
+#[cfg(unix)]
+pub mod seat_client;
 #[cfg(feature = "render")]
 pub mod token;
