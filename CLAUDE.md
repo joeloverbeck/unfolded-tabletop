@@ -52,3 +52,17 @@ Stop further discretionary expansion and read the controlling rules when:
 - acceptance requires the human to reconstruct technical work, approval is being used to repair missing evidence, or authority, publication, or governing instructions conflict (`AUTH`, `AGENT-5`, `ADOPT`).
 
 If applicable text cannot be located or read, substantive work is not authorized. Preserve a potentially applicable safeguard while investigating. Escalate only the reserved human remainder under `AGENT-5`; ordinary implementation uncertainty and several reasonable technical options do not themselves require a stop. Authorized evidence-gathering and provisional work remain governed by the applicable rules.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` plus `docs/adr/`, created lazily. See `docs/agents/domain.md`.
