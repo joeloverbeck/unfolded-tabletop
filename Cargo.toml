@@ -19,24 +19,25 @@ exclude = ["vendor/wgpu-hal"]
 
 [features]
 default = []
-render = ["dep:bevy"]
+# A capture converts Bevy's picture through `image` before it writes it.
+render = ["dep:bevy", "dep:image"]
 # The agent seat: its protocol reads and writes JSON lines, and its held session
-# starts its own session with `setsid` and waits for requests with `poll`.
-seat = ["render", "dep:serde", "rustix/process", "rustix/event"]
+# makes its private directory, starts its own session with `setsid` and waits for
+# requests with `poll`.
+seat = ["render", "dep:serde", "dep:serde_json", "dep:tempfile", "rustix/process", "rustix/event"]
 
 [dependencies]
-# Compatibility re-exports of the Bevy-free packages; see `src/lib.rs`.
-unfolded-assets = { path = "assets" }
-unfolded-hover = { path = "hover" }
-unfolded-random = { path = "random" }
-unfolded-record-replacement = { path = "record-replacement" }
-unfolded-seat-client = { path = "seat-client" }
-rustix = "1"
-serde_json = "1"
+rustix = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
-tempfile = "3"
-image = { version = "=0.25.10", default-features = false, features = ["png"] }
+tempfile = { version = "3", optional = true }
+image = { version = "=0.25.10", default-features = false, features = ["png"], optional = true }
 bevy = { version = "=0.20.0", optional = true, default-features = false, features = ["std", "bevy_asset", "3d_bevy_render", "bevy_picking", "ui_bevy_render"] }
+
+[dev-dependencies]
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+serde_json = "1"
+tempfile = "3"
 
 # Exercise the same owned workaround as both consumers when checking this workspace.
 # Dependency patches do not propagate; consumers still pin their own root patch.

@@ -29,14 +29,14 @@ None has a lifecycle of its own.
 | `unfolded-assets` | verified reads, PNG crops, prepared-directory publication | never | `image` (PNG), `rustix`, `serde_json`, `sha2` |
 | `unfolded-seat-client` | held-seat client, on Unix | never | `anyhow`, `serde_json` |
 | `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
-| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | see its manifest |
+| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde`, `serde_json`, `tempfile` and `rustix` with `seat` |
 
 "Never" holds under every feature set: `scripts/check` fails if `cargo tree`
 finds a `bevy` package below any of them, and fails if `unfolded-random` brings
 any crate at all. A game crate with no interface in it should depend only on the
 Bevy-free packages it uses, so Cargo can never link Bevy into it, whatever else
-its workspace builds. The crate that holds the game's interface depends on
-`unfolded-tabletop`, which depends on the Bevy-free packages. Arkham, Netrunner
+its workspace builds. The crate that holds the game's interface also depends
+on `unfolded-tabletop`, which depends on none of them. Arkham, Netrunner
 and Cuba Libre keep their interface behind a `tabletop` feature, which enables
 `unfolded-tabletop/seat`.
 
@@ -45,9 +45,10 @@ Pin every package a game takes from this repository, its root
 immutable `rev`. A Git dependency's patch does not propagate, so the game's own
 root must name it.
 
-`unfolded_tabletop::{assets, hover, random, record_replacement, seat_client}`
-still re-export the Bevy-free packages, so a game keeps building at this
-revision before it changes its own paths. Issue #31 removes them once no game uses them.
+A game names each mechanism by its own package: `unfolded_random::SeededRandom`,
+not `unfolded_tabletop::random::SeededRandom`. The old paths were re-exports
+kept while the games moved (issue #31). The last revision that has them is
+`138e050`.
 
 ## Printed mat labels
 

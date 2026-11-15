@@ -4235,11 +4235,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "unfolded-assets",
- "unfolded-hover",
- "unfolded-random",
- "unfolded-record-replacement",
- "unfolded-seat-client",
 ]
 
 [[package]]
