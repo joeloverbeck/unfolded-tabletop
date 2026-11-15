@@ -9,7 +9,11 @@ use bevy::{
     app::AppExit,
     asset::RenderAssetUsages,
     camera::RenderTarget,
-    input::{InputPlugin, keyboard::Key},
+    input::{
+        InputPlugin,
+        keyboard::Key,
+        mouse::{MouseScrollUnit, MouseWheel},
+    },
     picking::{
         backend::HitData,
         hover::HoverMap,
@@ -54,6 +58,8 @@ struct Table {
     keys: Vec<String>,
     /// The pieces clicked: pressed and released while under the pointer.
     clicked: Vec<String>,
+    wheels: Vec<(f32, f32)>,
+    scrolls: Vec<(String, f32, f32)>,
     admission: Admission,
     /// Frozen steps still to pass before the render pipelines are ready.
     compiling: u32,
@@ -68,6 +74,8 @@ impl Default for Table {
             focus: None,
             keys: Vec::new(),
             clicked: Vec::new(),
+            wheels: Vec::new(),
+            scrolls: Vec::new(),
             admission: Admission::Admitted,
             compiling: 0,
         }
@@ -267,8 +275,19 @@ fn pick(
                 }
             }
             PointerAction::Cancel => *held = None,
+            PointerAction::Scroll { unit, x, y, .. } => {
+                assert_eq!(unit, MouseScrollUnit::Line);
+                table.scrolls.push((nearest.unwrap().into(), x, y));
+            }
             _ => {}
         }
+    }
+}
+
+fn read_wheel(mut events: MessageReader<MouseWheel>, mut table: ResMut<Table>) {
+    for event in events.read() {
+        assert_eq!(event.unit, MouseScrollUnit::Line);
+        table.wheels.push((event.x, event.y));
     }
 }
 
@@ -319,7 +338,7 @@ fn sit_with(image: Option<Handle<Image>>) -> Sitting {
         .add_message::<PointerInput>()
         .init_resource::<HoverMap>()
         .init_resource::<Table>()
-        .add_systems(Update, (read_keys, pick));
+        .add_systems(Update, (read_keys, pick, read_wheel));
     if image.is_some() {
         app.add_systems(Update, renderer_hands_back);
     }
@@ -552,7 +571,7 @@ fn batch_form_is_ready_first_and_stops_acting_after_its_first_refusal() {
     assert_eq!(
         responses[2]["error"],
         format!(
-            "Skipped: an earlier request on this connection was refused, so its activations and keys are no longer acted on. Nothing was pressed. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
+            "Skipped: an earlier request on this connection was refused, so its activations, keys and scrolls are no longer acted on. No input was sent. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
             responses[1]["error"].as_str().unwrap()
         )
     );
@@ -637,6 +656,88 @@ fn a_point_rests_the_pointer_on_the_named_component_and_presses_nothing() {
         .iter(seat.app.world())
         .find(|(_, piece)| piece.name == "card");
     assert_eq!(over, [card.unwrap().0]);
+}
+
+#[test]
+fn scrolling_delivers_normal_wheel_and_pointer_input_without_clicking() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    let response =
+        seat.ask(json!({"op":"scroll", "revision":0, "component":"card", "x":2, "y":-4}));
+    assert_eq!(response["status"], "scrolled", "{response}");
+    assert_eq!(response["position"], json!([10., 10.]));
+    assert_eq!(response["delta"], json!({"unit":"line", "x":2., "y":-4.}));
+    assert_eq!(seat.table().wheels, vec![(2., -4.)]);
+    assert_eq!(seat.table().scrolls, vec![("card".into(), 2., -4.)]);
+    assert!(seat.table().clicked.is_empty());
+    assert_eq!(seat.table().revision, 0);
+}
+
+#[test]
+fn scrolling_refuses_invalid_deltas_names_stale_busy_and_covered_targets() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    for request in [
+        json!({"op":"scroll", "revision":0, "component":"card", "y":0}),
+        json!({"op":"scroll", "revision":0, "component":"card", "y":33}),
+        json!({"op":"scroll", "revision":0, "component":"card", "x":-33, "y":1}),
+        json!({"op":"scroll", "revision":0, "component":"card", "y":1e40}),
+        json!({"op":"scroll", "revision":0, "y":1}),
+        json!({"op":"scroll", "revision":0, "component":"card", "choice":"x", "y":1}),
+        json!({"op":"scroll", "revision":0, "component":"absent", "y":1}),
+        json!({"op":"scroll", "revision":1, "component":"card", "y":1}),
+    ] {
+        assert_eq!(seat.ask(request)["status"], "refused");
+    }
+    seat.table().presenting = 2;
+    assert_eq!(
+        seat.ask(json!({"op":"scroll", "revision":0, "component":"card", "y":1}))["status"],
+        "refused"
+    );
+    seat.table().presenting = 0;
+    seat.show(piece("modal", Rect::new(0., 0., 20., 20.), 0.));
+    assert_eq!(
+        seat.ask(json!({"op":"scroll", "revision":0, "component":"card", "y":1}))["status"],
+        "missed"
+    );
+    assert!(seat.table().wheels.is_empty());
+    assert!(seat.table().scrolls.is_empty());
+    assert!(seat.table().clicked.is_empty());
+}
+
+#[test]
+fn a_scroll_miss_stops_later_scrolls_and_actions_on_that_connection() {
+    let mut seat = sit();
+    seat.show(piece("card", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("modal", Rect::new(0., 0., 20., 20.), 0.));
+    let input = concat!(
+        "{\"op\":\"scroll\",\"revision\":0,\"component\":\"card\",\"y\":-4}\n",
+        "{\"op\":\"scroll\",\"revision\":0,\"component\":\"modal\",\"y\":-4}\n",
+        "{\"op\":\"activate\",\"revision\":0,\"component\":\"modal\"}\n",
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"Tab\"}\n",
+        "{\"op\":\"observe\"}\n",
+    );
+    let mut output = Vec::new();
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+    let responses = lines(&output);
+    assert_eq!(
+        responses
+            .iter()
+            .map(|r| r["status"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "ready", "missed", "skipped", "skipped", "skipped", "observed"
+        ]
+    );
+    assert!(seat.table().wheels.is_empty());
+    assert!(seat.table().scrolls.is_empty());
+    assert!(seat.table().clicked.is_empty());
+    assert_eq!(
+        seat.ask(json!({"op":"scroll", "revision":0, "component":"modal", "y":-4}))["status"],
+        "scrolled"
+    );
 }
 
 #[test]
@@ -819,7 +920,7 @@ fn a_miss_stops_the_connections_later_activations_and_keys() {
         responses[2]["error"]
             .as_str()
             .unwrap()
-            .starts_with("Skipped: an earlier request on this connection missed its target, so its activations and keys are no longer acted on. Nothing was pressed. Missed request: "),
+            .starts_with("Skipped: an earlier request on this connection missed its target, so its activations, keys and scrolls are no longer acted on. No input was sent. Missed request: "),
         "{}",
         responses[2]["error"]
     );
