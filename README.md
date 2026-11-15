@@ -142,16 +142,28 @@ across shell commands on a local socket.
 - `Seat` alone steps the table, in fixed steps of one sixtieth of a second. It
   writes pointer and key input where Bevy's window-event conversion writes it,
   settles the table, captures its image through `capture`, and answers
-  `observe`, `activate`, `point`, `key`, `settle`, `capture` and `quit`.
+  `observe`, `activate`, `point`, `scroll`, `key`, `settle`, `capture` and `quit`.
   `point` rests the pointer on a named component or choice as `activate` does,
   and leaves it there without pressing; its response says where it rests and
   what is under it. `mudsong`, a private repository that pins the library for
   its application, is the consumer that sends it; a game that does not send it
   changes nothing.
-- The guards are the protocol's, so both forms have them. An activation, a point
-  or a key acts only on the revision it names. A key that the game marks as able
+- `scroll` names `revision` and exactly one `component` or `choice`, as `point`
+  does, plus `y` and optional `x` (default zero), in wheel lines. Each axis must
+  be finite and between -32 and 32, with at least one nonzero axis. For example,
+  `{"op":"scroll","revision":9,"choice":"GainCredit","y":-4}` scrolls down
+  over that visible control. Positioning and actual picking precede both normal
+  `MouseWheel` and `PointerInput::Scroll` messages; no handler is called directly.
+  The `scrolled` response confirms input delivery and reports position and delta,
+  not whether a particular panel moved. Observe or capture the consumer effect.
+  Each game keeps its scroll policy, camera capture and modal restrictions.
+  [Issue #23](https://github.com/joeloverbeck/unfolded-tabletop/issues/23) coordinates
+  Arkham's existing menu and Netrunner's overflowing action dock. No adapter API,
+  saved format or artwork changes. Revert consumer pins before withdrawing it.
+- The guards are the protocol's, so both forms have them. An activation, a point,
+  scroll or key acts only on the revision it names. A key that the game marks as able
   to commit presses only the control the request names. A connection stops
-  pressing after its first refusal or miss: its later activations and keys are
+  acting after its first refusal or miss: its later activations, keys and scrolls are
   skipped. A point presses nothing, so it is still served, and a missed point
   stops the later activations and keys as a missed activation does.
 - `socket` holds one session on a Unix-domain socket that only its owner can

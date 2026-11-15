@@ -23,14 +23,14 @@
 //! sends it.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
-//! and keys act only on the revision they were decided on, a key that can commit
+//! scrolls and keys act only on the revision they were decided on, a key that can commit
 //! presses only the control it names, and a connection stops pressing after its first
-//! refusal or miss: its later activations and keys are skipped. A point presses
+//! refusal or miss: its later activations, keys and scrolls are skipped. A point presses
 //! nothing, so it is served after a refusal or a miss, and a missed point stops the
 //! connection's later activations and keys as a missed activation does.
 //!
 //! Input enters where Bevy's own window-event conversion writes it: `PointerInput` and
-//! `KeyboardInput` messages plus the logical window's cursor position. Everything after
+//! `MouseWheel` and `KeyboardInput` messages plus the logical window's cursor position. Everything after
 //! that is the game's production code. The seat never triggers observers, queues table
 //! actions or calls handlers.
 
@@ -41,6 +41,8 @@ use bevy::{
     input::{
         ButtonState,
         keyboard::{Key, KeyboardInput},
+        mouse::{MouseScrollUnit, MouseWheel},
+        touch::TouchPhase,
     },
     picking::{
         hover::HoverMap,
@@ -269,6 +271,16 @@ enum Request {
         #[serde(default)]
         choice: Option<String>,
     },
+    Scroll {
+        revision: u64,
+        #[serde(default)]
+        component: Option<String>,
+        #[serde(default)]
+        choice: Option<String>,
+        #[serde(default)]
+        x: f32,
+        y: f32,
+    },
     Key {
         key: String,
         revision: u64,
@@ -295,6 +307,7 @@ enum Status {
     Activated,
     /// The pointer rests on the named target, and nothing was pressed.
     Pointed,
+    Scrolled,
     Pressed,
     Settled,
     Unsettled,
@@ -304,7 +317,7 @@ enum Status {
     /// Something else was over the target of an activation or a point: nothing was
     /// pressed, or the press was cancelled before release.
     Missed,
-    /// An earlier refusal or miss on the connection stopped its activations and keys.
+    /// An earlier refusal or miss stopped its activations, keys and scrolls.
     Skipped,
     /// `quit` ended the session.
     Bye,
@@ -350,7 +363,7 @@ enum ConnectionEnd {
 
 /// One connection's requests: standard input in batch form, or one connection to the
 /// seat. After its first refused or missed response the connection stops pressing:
-/// every later activation and key is skipped, so one wrong assumption cannot cascade
+/// every later activation, key and scroll is skipped, so one wrong assumption cannot cascade
 /// into several commits. Observing, pointing, settling, capturing and quitting are
 /// still served; a point presses nothing.
 #[derive(Default)]
@@ -377,9 +390,9 @@ impl Connection {
             Status::Missed => ("missed its target", "Missed"),
             _ => ("was refused", "Refused"),
         };
-        matches!(request, Request::Activate { .. } | Request::Key { .. }).then(|| {
+        matches!(request, Request::Activate { .. } | Request::Key { .. } | Request::Scroll { .. }).then(|| {
             format!(
-                "Skipped: an earlier request on this connection {stopped}, so its activations and keys are no longer acted on. Nothing was pressed. {request_was} request: {line}. Reason: {reason}"
+                "Skipped: an earlier request on this connection {stopped}, so its activations, keys and scrolls are no longer acted on. No input was sent. {request_was} request: {line}. Reason: {reason}"
             )
         })
     }
@@ -593,6 +606,20 @@ impl<G: Game> Seat<G> {
                 revision,
                 focused,
             } => self.key(app, &key, revision, focused.as_deref()),
+            Request::Scroll {
+                revision,
+                component,
+                choice,
+                x,
+                y,
+            } => match (component, choice) {
+                (Some(name), None) => self.scroll(app, Name::Component(name), revision, x, y),
+                (None, Some(id)) => self.scroll(app, Name::Choice(id), revision, x, y),
+                _ => self.refused(
+                    app,
+                    "scroll needs exactly one of component or choice".into(),
+                ),
+            },
             Request::Settle { steps } => self.settle(app, steps),
             Request::Capture { path } => self.capture(app, &path),
             Request::Quit {} => return self.response(app, Status::Bye, None),
@@ -694,6 +721,63 @@ impl<G: Game> Seat<G> {
                 .map(|hit| hit.description)
                 .collect::<Vec<_>>()
         );
+        if let Some(covered) = covered {
+            response.json["covered"] = covered_at(covered);
+        }
+        response
+    }
+
+    /// Wheel input in lines, through both normal window-input consumers. Picking
+    /// selects the recipient; the game owns scrolling, camera capture and modals.
+    fn scroll(&mut self, app: &mut App, name: Name, revision: u64, x: f32, y: f32) -> Response {
+        if !x.is_finite()
+            || !y.is_finite()
+            || x.abs() > 32.
+            || y.abs() > 32.
+            || (x == 0. && y == 0.)
+        {
+            return self.refused(
+                app,
+                "scroll needs a nonzero finite delta with each axis between -32 and 32 lines"
+                    .into(),
+            );
+        }
+        let Rest {
+            position, covered, ..
+        } = match self.rest_on(app, &name, revision) {
+            Ok(rest) => rest,
+            Err(response) => return response,
+        };
+        // Hover can itself change the table. Recheck before sending wheel input.
+        if let Some(refusal) = self.unready(app, revision) {
+            return refusal;
+        }
+        let action = PointerAction::Scroll {
+            unit: MouseScrollUnit::Line,
+            x,
+            y,
+            phase: TouchPhase::Moved,
+        };
+        if let Err(error) = self.pointer(app, position, action) {
+            return self.refused(app, error);
+        }
+        let world = app.world_mut();
+        // `pointer` just checked that this primary window exists.
+        let window = world
+            .query_filtered::<Entity, With<PrimaryWindow>>()
+            .single(world)
+            .unwrap();
+        world.write_message(MouseWheel {
+            unit: MouseScrollUnit::Line,
+            x,
+            y,
+            window,
+            phase: TouchPhase::Moved,
+        });
+        self.step(app, STEP);
+        let mut response = self.response(app, Status::Scrolled, None);
+        response.json["position"] = json!([position.x, position.y]);
+        response.json["delta"] = json!({"unit": "line", "x": x, "y": y});
         if let Some(covered) = covered {
             response.json["covered"] = covered_at(covered);
         }
