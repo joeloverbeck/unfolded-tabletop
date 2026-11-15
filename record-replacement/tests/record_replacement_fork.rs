@@ -4,7 +4,7 @@
 #![cfg(target_os = "linux")]
 
 use std::fs;
-use unfolded_tabletop::record_replacement::{Replacement, previous_path, replace};
+use unfolded_record_replacement::{Replacement, previous_path, replace};
 
 mod inherited_lock {
     use super::*;

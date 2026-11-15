@@ -17,7 +17,7 @@ use std::{
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
-use unfolded_tabletop::record_replacement::{Replacement, previous_path, replace};
+use unfolded_record_replacement::{Replacement, previous_path, replace};
 
 const TRACED: &str = "UNFOLDED_TRACED_RECORD";
 

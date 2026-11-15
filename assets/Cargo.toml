@@ -1,0 +1,16 @@
+[package]
+name = "unfolded-assets"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+
+[dependencies]
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+rustix = { version = "1", features = ["fs"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

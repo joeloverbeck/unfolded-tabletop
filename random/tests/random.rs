@@ -1,6 +1,6 @@
 //! The numbers a state produces are a contract with every consumer's saved games.
 
-use unfolded_tabletop::random::{SeededRandom, fresh_seed};
+use unfolded_random::{SeededRandom, fresh_seed};
 
 #[test]
 fn an_operating_system_seed_can_start_a_generator() {

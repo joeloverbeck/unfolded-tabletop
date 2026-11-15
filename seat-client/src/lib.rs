@@ -2,6 +2,7 @@
 //! No renderer is required. Consumers own launch diagnostics, signal handling,
 //! deadlines and the policy for incomplete exchanges. Response lines have no size
 //! limit; a final line without a newline is returned and parsed as it arrived.
+#![cfg(unix)]
 
 use anyhow::{Context, Result, bail};
 use std::{

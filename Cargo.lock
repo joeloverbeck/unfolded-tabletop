@@ -4176,6 +4176,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "214ca0b2191785cbc06209b9ca1861e048e39b5ba33574b3cedd58363d5bb5f6"
 
 [[package]]
+name = "unfolded-assets"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "rustix",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "unfolded-dev-tools"
 version = "0.1.0"
 dependencies = [
@@ -4190,17 +4201,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "unfolded-tabletop"
+name = "unfolded-hover"
+version = "0.1.0"
+
+[[package]]
+name = "unfolded-random"
+version = "0.1.0"
+
+[[package]]
+name = "unfolded-record-replacement"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "tempfile",
+]
+
+[[package]]
+name = "unfolded-seat-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "unfolded-tabletop"
+version = "0.1.0"
+dependencies = [
  "bevy",
  "image",
  "rustix",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
+ "unfolded-assets",
+ "unfolded-hover",
+ "unfolded-random",
+ "unfolded-record-replacement",
+ "unfolded-seat-client",
 ]
 
 [[package]]
