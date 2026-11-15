@@ -15,11 +15,13 @@ cargo clippy --locked -p unfolded-tabletop --all-targets --features seat -- -D w
 # Bevy under all features on all targets has none under any feature set. Each
 # package is also linted alone: in a workspace build another member's features
 # could supply a dependency feature that a game depending on it alone lacks.
-bevy_free=(unfolded-assets unfolded-dev-tools unfolded-hover unfolded-random unfolded-record-replacement
-  unfolded-seat-client)
+# Every workspace member except the table package is one.
+members=$(cargo tree --locked --workspace --depth 0 -e normal --prefix none --format '{p}')
+mapfile -t bevy_free < <(awk 'NF && $1 != "unfolded-tabletop" {print $1}' <<<"$members" | sort -u)
 for package in "${bevy_free[@]}"; do
-  if cargo tree --locked -p "$package" --all-features --target all -e normal,build,dev \
-    --prefix none --format '{p}' | grep -E '^bevy(_[a-z0-9_]+)? '; then
+  tree=$(cargo tree --locked -p "$package" --all-features --target all -e normal,build,dev \
+    --prefix none --format '{p}')
+  if grep -E '^bevy(_[a-z0-9_]+)? ' <<<"$tree"; then
     echo "error: $package reaches Bevy" >&2
     exit 1
   fi

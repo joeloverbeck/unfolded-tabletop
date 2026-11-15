@@ -392,8 +392,8 @@ Arkham's prior commit contains its original generator.
 Run `scripts/check` from a clean clone before publication. It bounds its builds
 by default (four Cargo jobs, no debug info; CI sets two), and the environment may override them. It checks full-workspace
 formatting first, then strict Clippy on the workspace and on `unfolded-tabletop`
-with `render` and with `seat`. It asserts that no Bevy-free package reaches Bevy
-and that `unfolded-random` has no dependency, and lints each Bevy-free package
+with `render` and with `seat`. It asserts that no workspace member other than
+`unfolded-tabletop` reaches Bevy, and that `unfolded-random` has no dependency, and lints each Bevy-free package
 alone, since a workspace build can supply a dependency feature that a game
 depending on that package alone would lack. Then it runs the workspace's tests
 and `unfolded-tabletop`'s with `render` and with `seat`. Rustup selects the compiler/components in `rust-toolchain.toml`; the
