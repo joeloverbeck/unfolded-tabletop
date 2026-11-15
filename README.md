@@ -277,6 +277,18 @@ which Bevy does not do. A real render is each consumer's own check.
 
 ## Seeded randomness
 
+`random::fresh_seed` reads eight bytes from the operating system's
+`/dev/urandom` device and returns their little-endian `u64`, or the unchanged
+open/read error. It extracts `Session::new` from Arkham at
+`9f4bbf6050df9dc4f675ab42c0f5fcb879c1a827`, `src/gathering.rs`.
+[Issue #21](https://github.com/joeloverbeck/unfolded-tabletop/issues/21)
+coordinates Arkham's existing startup migration with ordinary new-game setup
+in [Netrunner #22](https://github.com/joeloverbeck/netrunner-unfolded/issues/22).
+When a fresh game is allowed, failure wording and seed persistence remain with
+each consumer. No fallback seed is supplied. Mudsong has no corresponding
+entropy acquisition to migrate. Revert consumer adapters and pins before
+removing this helper; no saved format or generator sequence changes.
+
 `random` holds Arkham's SplitMix64 generator, its rejection-sampled index and its
 shuffle. Origin: `joeloverbeck/arkham-unfolded` at
 `4e7a014541ef46d8dc8185e2759a139480ea60e3`, `src/gathering.rs` and
