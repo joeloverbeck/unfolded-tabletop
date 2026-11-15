@@ -154,6 +154,19 @@ that ran out of time, the plugins of its windowless host, its launch options,
 the environment variable that marks a launched seat, and how long a held
 session may idle.
 
+`ui_target` reads a visible, nonempty Bevy UI node's logical center and whether
+that center lies in its calculated clip and the supplied logical viewport. It
+preserves clipped/offscreen positions with `on_screen: false`, and omits nodes
+without layout or inherited visibility. This is geometry only: the seat still
+checks the actual picking hit before pressing. Control membership, labels,
+ordering, focus and modal rules remain in each game's adapter.
+Origin: Arkham `71281007a41905bf25a95a29486e10fb11b0a83f`,
+`src/gathering_tabletop/seat.rs`. [Issue #15](https://github.com/joeloverbeck/unfolded-tabletop/issues/15)
+coordinates its Arkham migration with Netrunner's #18 diagnostic adapter.
+Mudsong uses its own rectangular hotspots and needs no geometry migration.
+Revert adopting consumers' adapters and pins before removing this additive helper;
+it changes no saves or artwork.
+
 Some things are fixed here and were sized or worded by Arkham, the first table
 to use the seat. No second use has shaped them yet. A test holds some of them
 and not others, so a change to the rest would pass every check:

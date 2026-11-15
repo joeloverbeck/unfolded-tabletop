@@ -60,6 +60,44 @@ use std::{
 
 pub mod socket;
 
+/// A shown UI control's logical pointer position and geometric reachability.
+/// This does not establish that another control is not drawn over it: the seat
+/// checks the actual picking result before pressing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiTarget {
+    pub position: Vec2,
+    pub on_screen: bool,
+}
+
+/// Read a visible, nonempty UI node's center after layout. Hidden nodes and
+/// missing layout or inherited visibility return `None`. Clipped or offscreen
+/// centers remain present with `on_screen: false`, including without a viewport.
+///
+/// The viewport and returned position use logical pixels; Bevy's calculated clip
+/// contains the physical center. Bounds include the viewport's edges. Control
+/// membership, naming, modal policy and ordering belong to the consumer.
+pub fn ui_target(world: &World, entity: Entity, viewport: Option<Vec2>) -> Option<UiTarget> {
+    let node = world.get::<ComputedNode>(entity)?;
+    let transform = world.get::<UiGlobalTransform>(entity)?;
+    if node.is_empty()
+        || !world
+            .get::<InheritedVisibility>(entity)
+            .is_some_and(|visibility| visibility.get())
+    {
+        return None;
+    }
+    let position = transform.translation * node.inverse_scale_factor;
+    let clipped = world
+        .get::<bevy::ui::CalculatedClip>(entity)
+        .is_some_and(|clip| !clip.contains_point(transform.translation));
+    Some(UiTarget {
+        position,
+        on_screen: !clipped
+            && viewport
+                .is_some_and(|size| position.cmpge(Vec2::ZERO).all() && position.cmple(size).all()),
+    })
+}
+
 /// One step of the table's clock. The seat, not wall-clock time, advances it.
 const STEP: Duration = Duration::from_nanos(16_666_667);
 /// Thirty seconds of table time.
