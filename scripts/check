@@ -2,6 +2,10 @@
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+# Bounded builds by default (CI sets two jobs): unbounded parallel links of the
+# Bevy test executables with debug info can exhaust a workstation's memory.
+: "${CARGO_BUILD_JOBS:=4}" "${CARGO_PROFILE_DEV_DEBUG:=0}" "${CARGO_PROFILE_TEST_DEBUG:=0}"
+export CARGO_BUILD_JOBS CARGO_PROFILE_DEV_DEBUG CARGO_PROFILE_TEST_DEBUG
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo clippy --locked --workspace --all-targets --features render -- -D warnings
