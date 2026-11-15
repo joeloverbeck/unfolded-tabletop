@@ -220,6 +220,28 @@ picking and its renderer are stand-ins, and its keys are its own. Arkham's own t
 protocol on its real table. A real render through the seat is each consumer's
 own check.
 
+## Held-seat client
+
+`seat_client` is available on Unix without the renderer. It extracts Arkham's
+`tools/src/seat.rs` at `8301466b5bbc20b99411901cfcd6db2b29865431`:
+request-line normalization, connection, concurrent sending/reading, write
+half-close, and unchanged response output. The caller supplies the output writer
+and a timeout callback for its own interruption/deadline policy, and compares the
+returned answer count with its request count. Refused, missed, skipped, absent
+and malformed statuses mark the exchange unsuccessful. Other string statuses
+are retained as successes, as in Arkham. A final complete JSON response without a
+newline is accepted; there is no response-line size limit or write timeout.
+Signal installation, launch guidance and partner-wait decisions stay in Arkham.
+
+[Issue #17](https://github.com/joeloverbeck/unfolded-tabletop/issues/17) and
+[Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) coordinate
+this candidate for [Cuba Libre #10](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/10).
+Those records carry the owner's 2026-11-14 bounded EVID-6 extension for mechanisms
+used by Cuba and an existing game, the two-hour extraction cap, actual-consumer
+verification and rollback. Cuba's consuming path remains due before coordinated
+adoption is complete. Revert Arkham's adapter and dependency pins before removing
+the producer addition; no saves or artwork change.
+
 ## Screen capture
 
 `capture` holds the part of Arkham's screen capture that both consumers use.
