@@ -3,16 +3,20 @@
 //! commands on a local socket ([`socket`]). This module owns fixed-step stepping,
 //! pointer and key synthesis, capture and the protocol loop both forms share. It reaches
 //! the game only through [`Game`]: produce an observation and its revision, resolve a
-//! name to a screen position (and a hit back to a name), say what has keyboard focus,
-//! report whether the table is settled, advance the table's own clock, and say whether
-//! the table is admitted to play and its render pipelines are ready, and name the keys
-//! the seat may press. The table's surface and the capture of its image come from
-//! [`crate::capture`].
+//! name to a screen position (and a hit back to a name), report what is still
+//! unsettled, and say whether the table is admitted to play. A game may also say what
+//! has keyboard focus, advance a clock of its own and name the keys the seat may press;
+//! otherwise nothing has focus, the seat's steps move Bevy's manual time and no key may
+//! be pressed. The seat decides itself whether the render pipelines are ready before a
+//! capture ([`capture::Pipelines`]), and every response of a seated table states the
+//! revision, whether it is settled and what is pending. The table's surface and the capture of its image
+//! come from [`crate::capture`].
 //!
 //! Each game keeps its policy in its adapter: what it observes and names, the keys
-//! it reads and which of them can commit, its clock, its admission and the words of
-//! an admission that ran out of time, the plugins of its windowless host, its launch
-//! options, and how long a held session may idle when that differs from the default.
+//! it reads and which of them can commit, its clock when it keeps one, its admission and
+//! the words of an admission that ran out of time, the plugins of its windowless host,
+//! its launch options, and how long a held session may idle when that differs from the
+//! default.
 //! A game that starts its seat through [`start`] leaves it the order of the steps, in
 //! either form, and their refusals.
 //!
@@ -36,7 +40,7 @@
 //! that is the game's production code. The seat never triggers observers, queues table
 //! actions or calls handlers.
 
-use crate::capture::{self, Failure, Surface};
+use crate::capture::{self, Failure, Pipelines, Surface};
 use bevy::{
     app::AppExit,
     camera::RenderTarget,
@@ -52,6 +56,7 @@ use bevy::{
     },
     prelude::*,
     render::renderer::RenderAdapterInfo,
+    time::TimeUpdateStrategy,
     window::PrimaryWindow,
 };
 use serde::{Deserialize, Serialize};
@@ -103,8 +108,9 @@ pub fn ui_target(world: &World, entity: Entity, viewport: Option<Vec2>) -> Optio
     })
 }
 
-/// One step of the table's clock. The seat, not wall-clock time, advances it.
-const STEP: Duration = Duration::from_nanos(16_666_667);
+/// One step of the table's clock, one sixtieth of a second. The seat, not wall-clock
+/// time, advances it: every request that moves the table moves it in these steps.
+pub const STEP: Duration = Duration::from_nanos(16_666_667);
 /// Thirty seconds of table time.
 const DEFAULT_SETTLE_STEPS: u32 = 1_800;
 const MAX_SETTLE_STEPS: u32 = 7_200;
@@ -183,7 +189,8 @@ impl Focus {
 pub struct Observed {
     /// The player-visible observation, in the game's own form.
     pub observation: Value,
-    /// What the table shows, such as components, controls, modal state and settling.
+    /// What the table shows, such as components, controls and modal state. The seat
+    /// states the revision and what is pending beside it.
     pub table: Value,
 }
 
@@ -228,7 +235,12 @@ pub enum Logical {
     Typed(&'static str),
 }
 
-/// The whole game-facing interface of the seat.
+/// The whole game-facing interface of the seat. A table supplies what needs knowledge
+/// of its game: its observation and revision, how a name resolves to screen positions
+/// and a hit back to a name, what is still unsettled, and its admission. The seat
+/// answers the rest itself unless the game says otherwise: its clock is Bevy's manual
+/// time, nothing has focus, no key may be pressed, and the seat decides itself whether
+/// the render pipelines are ready before a capture.
 pub trait Game {
     fn observe(&self, world: &mut World) -> Observed;
     /// The observation revision the attempt is at, which a request names to act.
@@ -239,21 +251,71 @@ pub trait Game {
     fn resolve(&self, world: &mut World, name: &Name) -> Result<Vec<Vec2>, String>;
     /// The inverse of `resolve` for one picked entity.
     fn identify(&self, world: &mut World, entity: Entity) -> Hit;
-    /// What a key press would reach now.
-    fn focus(&self, world: &mut World) -> Focus;
     /// The conditions still in progress; empty when the table will accept input.
     fn unsettled(&self, world: &mut World) -> Vec<String>;
-    /// Advance the table's own clock by `by`, which is zero while a capture is read
-    /// back. Only the seat's steps move that clock, never wall-clock time.
-    fn advance(&self, world: &mut World, by: Duration);
     /// Whether the game admits the table to play.
     fn admission(&self, world: &World) -> Admission;
-    /// Whether the render pipelines of what the table shows are ready, so that a
-    /// capture omits nothing.
-    fn pipelines_ready(&self, world: &World) -> bool;
+    /// What a key press would reach now. Unless the game says otherwise, nothing.
+    fn focus(&self, _world: &mut World) -> Focus {
+        Focus::Nothing
+    }
+    /// Advance the table's own clock by `by`, which is zero while a capture is read
+    /// back. Only the seat's steps move that clock, never wall-clock time. Unless the
+    /// game keeps a clock of its own, the table's clock is Bevy's, moved by `by` as
+    /// manual time.
+    fn advance(&self, world: &mut World, by: Duration) {
+        world.insert_resource(TimeUpdateStrategy::ManualDuration(by));
+    }
     /// The keys the seat may press at this table, in the order a refusal lists them.
-    /// Any other key is refused as unknown.
-    fn keys(&self) -> &[SeatKey];
+    /// Any other key is refused as unknown. Unless the game names some, there are none.
+    fn keys(&self) -> &[SeatKey] {
+        &[]
+    }
+    /// Kept only so that a game that answered it still builds; the seat decides
+    /// itself whether the render pipelines are ready ([`capture::Pipelines`]). A capture also
+    /// waits for this, which is ready unless the game says otherwise.
+    #[deprecated(note = "the seat decides itself whether the render pipelines are ready")]
+    fn pipelines_ready(&self, _world: &World) -> bool {
+        true
+    }
+}
+
+/// A table that shows nothing: its observation and table are null, it is at revision
+/// zero and always settled, no name resolves and nothing it shows is named. It is
+/// admitted as its function says. A game's test of its admission alone sits an agent
+/// at it, in the game's own app, and supplies nothing else.
+pub struct Unshown(pub fn(&World) -> Admission);
+
+impl Game for Unshown {
+    fn observe(&self, _: &mut World) -> Observed {
+        Observed {
+            observation: Value::Null,
+            table: Value::Null,
+        }
+    }
+
+    fn revision(&self, _: &mut World) -> u64 {
+        0
+    }
+
+    fn resolve(&self, _: &mut World, name: &Name) -> Result<Vec<Vec2>, String> {
+        Err(format!("{} is not shown.", name.describe()))
+    }
+
+    fn identify(&self, _: &mut World, _: Entity) -> Hit {
+        Hit {
+            name: None,
+            description: Value::Null,
+        }
+    }
+
+    fn unsettled(&self, _: &mut World) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn admission(&self, world: &World) -> Admission {
+        (self.0)(world)
+    }
 }
 
 #[derive(Deserialize)]
@@ -420,6 +482,7 @@ pub struct SeatedAgent;
 pub struct Seat<G> {
     game: G,
     camera: Entity,
+    pipelines: Pipelines,
     image: Option<Handle<Image>>,
     exit: Option<AppExit>,
 }
@@ -432,6 +495,7 @@ impl<G: Game> Seat<G> {
         Self {
             game,
             camera,
+            pipelines: Pipelines::of(app),
             image,
             exit: None,
         }
@@ -635,11 +699,17 @@ impl<G: Game> Seat<G> {
         response
     }
 
+    /// A response line: the game's observation and table, and the seat's own account of
+    /// the revision a request must name and of what is still in progress.
     fn response(&self, app: &mut App, status: Status, error: Option<String>) -> Response {
-        let Observed { observation, table } = self.game.observe(app.world_mut());
+        let world = app.world_mut();
+        let Observed { observation, table } = self.game.observe(world);
+        let revision = self.game.revision(world);
+        let pending = self.game.unsettled(world);
         let mut json = json!({
             "ok": error.is_none(), "mode": "seat", "status": status,
             "observation": observation, "table": table,
+            "revision": revision, "settled": pending.is_empty(), "pending": pending,
         });
         if let Some(error) = error {
             json["error"] = json!(error);
@@ -1024,7 +1094,9 @@ impl<G: Game> Seat<G> {
             if Instant::now() >= deadline || !self.step(app, Duration::ZERO) {
                 return self.refused(app, "Render pipelines did not become ready.".into());
             }
-            if self.game.pipelines_ready(app.world()) {
+            #[allow(deprecated)]
+            let ready_for_game = self.game.pipelines_ready(app.world());
+            if self.pipelines.ready() && ready_for_game {
                 ready += 1;
             } else {
                 ready = 0;

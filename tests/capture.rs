@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use unfolded_tabletop::capture::{self, Failure, Surface};
+use unfolded_tabletop::capture::{self, Failure, Pipelines, Surface};
 
 /// A directory of this test's own, removed when the test ends.
 struct Scratch(PathBuf);
@@ -207,6 +207,19 @@ fn a_host_without_the_named_camera_keeps_running_and_reports_no_camera() {
         app.world().get::<RenderTarget>(other),
         Some(RenderTarget::Image(_))
     ));
+}
+
+#[test]
+fn a_surface_on_a_host_with_no_render_world_finds_its_pipelines_ready() {
+    let mut app = host();
+    capture::install::<Seen>(&mut app, UVec2::new(640, 360));
+    app.update();
+
+    // Nothing is compiled where nothing renders. A stand-in renderer reports otherwise.
+    let pipelines = app.world().resource::<Pipelines>().clone();
+    assert!(pipelines.ready());
+    pipelines.report(false);
+    assert!(!Pipelines::of(&mut app).ready());
 }
 
 /// The captures this host has been asked for, with what each one captures.
