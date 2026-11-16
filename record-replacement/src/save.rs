@@ -39,14 +39,14 @@
 //! [`write()`] validates the payload, seals it, and installs it under the lock. With
 //! the current record's bytes in hand:
 //!
-//! - [`Write::Save`] or [`Write::Replace`] of the record already there, as the
-//!   same bytes or the same JSON formatted differently, writes nothing, validates
-//!   no `.previous`, and adopts the record's bytes as the baseline, whatever the
-//!   baseline was: nothing another writer saved can be lost.
-//! - Otherwise both replace a record that matches the baseline. A record that
-//!   does not, or exists while the baseline is unset, is [`Error::Stale`], unless
-//!   it is not a save this build loads, which is refused as [`load`] would refuse
-//!   it.
+//! - [`Write::Save`] and [`Write::Replace`] replace a record that matches the
+//!   baseline. A record that does not, or exists while the baseline is unset, is
+//!   [`Error::Stale`], even when the payload is the same: a writer that has not
+//!   seen the record is refused. A record that is not a save this build loads is
+//!   refused as [`load`] would refuse it instead.
+//! - When the payload is the record already there, they write nothing and
+//!   validate no `.previous`. The baseline is the record's JSON, so the same
+//!   record formatted differently is unchanged too.
 //! - Where no record is, [`Write::Save`] creates one as [`Write::Create`] does,
 //!   whatever the baseline: a session loaded from one path can be saved to a new
 //!   one. [`Write::Replace`] refuses as [`Error::Missing`] when the baseline is
@@ -59,7 +59,7 @@
 //!   baseline ([`Error::Stale`]), and writes even when the payload is the same.
 //!
 //! Before a record is rotated into `.previous`, an existing `.previous` must load
-//! under the game's format. On success the baseline becomes the bytes now on
+//! under the game's format. On success the baseline becomes the record now on
 //! disk; on any refusal it is unchanged.
 //!
 //! # What no test holds
@@ -132,14 +132,22 @@ pub trait Format {
     fn validate(&self, payload: &Self::Payload) -> Result<(), String>;
 }
 
-/// The bytes last loaded or saved at a record, kept as their SHA-256 digest. A
-/// default baseline is unset: its holder has not seen any record.
+/// The record last loaded or saved, kept as the SHA-256 digest of its JSON
+/// written out again, so the same record formatted differently matches. Bytes
+/// that are not JSON are digested as they are. A default baseline is unset: its
+/// holder has not seen any record.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Baseline(Option<[u8; 32]>);
 
 impl Baseline {
     fn of(bytes: &[u8]) -> Self {
-        Self(Some(Sha256::digest(bytes).into()))
+        let digest = match serde_json::from_slice::<serde_json::Value>(bytes) {
+            Ok(value) => {
+                Sha256::digest(serde_json::to_vec(&value).expect("a JSON value always serialises"))
+            }
+            Err(_) => Sha256::digest(bytes),
+        };
+        Self(Some(digest.into()))
     }
     fn matches(&self, bytes: &[u8]) -> bool {
         *self == Self::of(bytes)
@@ -360,7 +368,7 @@ pub fn write<F: Format>(
     mode: Write,
 ) -> Result<Option<PathBuf>, Error> {
     let bytes = encode(format, payload)?;
-    let mut written = Baseline::of(&bytes);
+    let written = Baseline::of(&bytes);
     let archived = replace_bounded(
         path,
         &bytes,
@@ -373,14 +381,13 @@ pub fn write<F: Format>(
             if mode == Write::Create {
                 return Err(Error::Occupied);
             }
-            if matches!(mode, Write::Save | Write::Replace) && same_record(existing, &bytes) {
-                written = Baseline::of(existing);
-                return Ok(Replacement::Unchanged);
-            }
             if !baseline.matches(existing) {
                 // Name what is there when it is not a save this build loads.
                 decode(format, existing)?;
                 return Err(Error::Stale);
+            }
+            if mode != Write::Archive && *baseline == written {
+                return Ok(Replacement::Unchanged);
             }
             Ok(if mode == Write::Archive {
                 Replacement::Archive
@@ -402,14 +409,6 @@ fn absent(path: &Path, baseline: &Baseline, mode: Write) -> Result<Replacement, 
         return Err(Error::Orphaned);
     }
     Ok(Replacement::Create)
-}
-
-/// The same record, perhaps formatted differently: equal bytes, or equal JSON.
-fn same_record(existing: &[u8], bytes: &[u8]) -> bool {
-    existing == bytes
-        || serde_json::from_slice::<serde_json::Value>(existing).is_ok_and(|existing| {
-            serde_json::from_slice::<serde_json::Value>(bytes).is_ok_and(|bytes| existing == bytes)
-        })
 }
 
 /// The path with its parent resolved through links, so two spellings of one

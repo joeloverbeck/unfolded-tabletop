@@ -259,15 +259,27 @@ fn an_unchanged_write_writes_nothing_and_validates_nothing() {
     fs::write(previous_path(&path), b"damaged recovery").unwrap();
     let modified = fs::metadata(&path).unwrap().modified().unwrap();
 
-    // Even a writer that never saw the record loses nothing by writing its bytes.
-    let mut unseen = Baseline::default();
-    save::write(&NOTES, &path, &mut unseen, &note("second"), Write::Save).unwrap();
+    let before = baseline.clone();
+    for mode in [Write::Save, Write::Replace] {
+        save::write(&NOTES, &path, &mut baseline, &note("second"), mode).unwrap();
+    }
     assert_eq!(fs::read(&path).unwrap(), current);
     assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
     assert_eq!(fs::read(previous_path(&path)).unwrap(), b"damaged recovery");
-    assert_eq!(
-        unseen, baseline,
-        "the unchanged record becomes the baseline"
+    assert_eq!(baseline, before);
+
+    // A writer that never saw the record is stale even with the same payload.
+    assert_refused(
+        save::write(
+            &NOTES,
+            &path,
+            &mut Baseline::default(),
+            &note("second"),
+            Write::Save,
+        ),
+        |e| matches!(e, Error::Stale),
+        &path,
+        &current,
     );
 }
 
