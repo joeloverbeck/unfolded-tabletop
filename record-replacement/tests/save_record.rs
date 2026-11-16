@@ -132,7 +132,7 @@ fn a_record_in_a_previous_format_is_unsupported_and_left_unchanged() {
         &path,
         bytes,
     );
-    // Nor will a save replace it.
+    // Nor will a save replace it, and the refusal still says why.
     assert_refused(
         save::write(
             &NOTES,
@@ -141,7 +141,7 @@ fn a_record_in_a_previous_format_is_unsupported_and_left_unchanged() {
             &note("new"),
             Write::Save,
         ),
-        |e| matches!(e, Error::Stale),
+        |e| matches!(e, Error::Unsupported(None)),
         &path,
         bytes,
     );
@@ -221,14 +221,32 @@ fn a_stale_writer_is_refused_and_the_later_save_kept() {
 }
 
 #[test]
-fn a_saved_record_that_disappeared_is_missing() {
+fn a_replaced_record_that_disappeared_is_missing_but_a_save_creates_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("notes.json");
     let mut baseline = saved(&path, "first");
     fs::remove_file(&path).unwrap();
-    let error = save::write(&NOTES, &path, &mut baseline, &note("next"), Write::Save).unwrap_err();
+    let before = baseline.clone();
+    let error =
+        save::write(&NOTES, &path, &mut baseline, &note("next"), Write::Replace).unwrap_err();
     assert!(matches!(error, Error::Missing), "{error:?}");
     assert!(!path.exists());
+    assert_eq!(baseline, before);
+
+    // Saving a loaded session to a new path creates it there.
+    let elsewhere = dir.path().join("elsewhere.json");
+    save::write(
+        &NOTES,
+        &elsewhere,
+        &mut baseline,
+        &note("next"),
+        Write::Save,
+    )
+    .unwrap();
+    assert_eq!(
+        save::load(&NOTES, &elsewhere).unwrap().unwrap(),
+        (note("next"), baseline)
+    );
 }
 
 #[test]
@@ -251,6 +269,32 @@ fn an_unchanged_write_writes_nothing_and_validates_nothing() {
         unseen, baseline,
         "the unchanged record becomes the baseline"
     );
+}
+
+#[test]
+fn the_same_record_formatted_differently_is_unchanged_and_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.json");
+    let mut baseline = saved(&path, "first");
+    let mut reformatted = fs::read(&path).unwrap();
+    reformatted.extend_from_slice(b"\n \t\n");
+    fs::write(&path, &reformatted).unwrap();
+    fs::write(previous_path(&path), b"damaged recovery").unwrap();
+
+    save::write(&NOTES, &path, &mut baseline, &note("first"), Write::Replace).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), reformatted);
+    assert_eq!(fs::read(previous_path(&path)).unwrap(), b"damaged recovery");
+    // The baseline is now the reformatted bytes, so the writer may continue.
+    fs::remove_file(previous_path(&path)).unwrap();
+    save::write(
+        &NOTES,
+        &path,
+        &mut baseline,
+        &note("second"),
+        Write::Replace,
+    )
+    .unwrap();
+    assert_eq!(fs::read(previous_path(&path)).unwrap(), reformatted);
 }
 
 #[test]

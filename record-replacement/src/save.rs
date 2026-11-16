@@ -39,23 +39,28 @@
 //! [`write()`] validates the payload, seals it, and installs it under the lock. With
 //! the current record's bytes in hand:
 //!
-//! - [`Write::Save`] of the record's own bytes writes nothing, validates no
-//!   `.previous`, and adopts the record as the baseline, whatever the baseline
-//!   was: nothing another writer saved can be lost.
-//! - Otherwise [`Write::Save`] replaces a record that matches the baseline. A record that
-//!   does not, or exists while the baseline is unset, is [`Error::Stale`]. A
-//!   missing record is [`Error::Missing`] when the baseline is set; when it is
-//!   unset the record is created as by [`Write::Create`].
+//! - [`Write::Save`] or [`Write::Replace`] of the record already there, as the
+//!   same bytes or the same JSON formatted differently, writes nothing, validates
+//!   no `.previous`, and adopts the record's bytes as the baseline, whatever the
+//!   baseline was: nothing another writer saved can be lost.
+//! - Otherwise both replace a record that matches the baseline. A record that
+//!   does not, or exists while the baseline is unset, is [`Error::Stale`], unless
+//!   it is not a save this build loads, which is refused as [`load`] would refuse
+//!   it.
+//! - Where no record is, [`Write::Save`] creates one as [`Write::Create`] does,
+//!   whatever the baseline: a session loaded from one path can be saved to a new
+//!   one. [`Write::Replace`] refuses as [`Error::Missing`] when the baseline is
+//!   set: the record it continues is gone. With the baseline unset it creates.
 //! - [`Write::Create`] creates only where no record is: an existing one is
 //!   [`Error::Occupied`], and a `.previous` record without one is
 //!   [`Error::Orphaned`].
 //! - [`Write::Archive`] keeps the current record in a restart archive and
 //!   returns its path. It needs the record ([`Error::Missing`]) to match the
-//!   baseline ([`Error::Stale`]).
+//!   baseline ([`Error::Stale`]), and writes even when the payload is the same.
 //!
 //! Before a record is rotated into `.previous`, an existing `.previous` must load
-//! under the game's format. On success the baseline becomes the written bytes; on
-//! any refusal it is unchanged.
+//! under the game's format. On success the baseline becomes the bytes now on
+//! disk; on any refusal it is unchanged.
 //!
 //! # What no test holds
 //!
@@ -148,8 +153,10 @@ impl Baseline {
 /// How [`write()`] installs a payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Write {
-    /// Replace the record the baseline saw, or create one when the baseline is unset.
+    /// Replace the record the baseline saw, or create one where no record is.
     Save,
+    /// Replace only the record the baseline saw: one that is gone is missing.
+    Replace,
     /// Create a record only where none is.
     Create,
     /// Replace the record the baseline saw, keeping it in a restart archive.
@@ -353,47 +360,56 @@ pub fn write<F: Format>(
     mode: Write,
 ) -> Result<Option<PathBuf>, Error> {
     let bytes = encode(format, payload)?;
+    let mut written = Baseline::of(&bytes);
     let archived = replace_bounded(
         path,
         &bytes,
         F::LIMIT,
         &fault,
-        |existing| admit(path, baseline, &bytes, existing, mode),
+        |existing| {
+            let Some(existing) = existing else {
+                return absent(path, baseline, mode);
+            };
+            if mode == Write::Create {
+                return Err(Error::Occupied);
+            }
+            if matches!(mode, Write::Save | Write::Replace) && same_record(existing, &bytes) {
+                written = Baseline::of(existing);
+                return Ok(Replacement::Unchanged);
+            }
+            if !baseline.matches(existing) {
+                // Name what is there when it is not a save this build loads.
+                decode(format, existing)?;
+                return Err(Error::Stale);
+            }
+            Ok(if mode == Write::Archive {
+                Replacement::Archive
+            } else {
+                Replacement::Replace
+            })
+        },
         |previous| decode(format, &read_record(previous, F::LIMIT)?).map(|_| ()),
     )?;
-    *baseline = Baseline::of(&bytes);
+    *baseline = written;
     Ok(archived)
 }
 
-fn admit(
-    path: &Path,
-    baseline: &Baseline,
-    bytes: &[u8],
-    existing: Option<&[u8]>,
-    mode: Write,
-) -> Result<Replacement, Error> {
-    let Some(existing) = existing else {
-        if mode == Write::Archive || (mode == Write::Save && baseline.is_set()) {
-            return Err(Error::Missing);
-        }
-        if previous_exists(path)? {
-            return Err(Error::Orphaned);
-        }
-        return Ok(Replacement::Create);
-    };
-    if mode == Write::Create {
-        return Err(Error::Occupied);
+fn absent(path: &Path, baseline: &Baseline, mode: Write) -> Result<Replacement, Error> {
+    if mode == Write::Archive || (mode == Write::Replace && baseline.is_set()) {
+        return Err(Error::Missing);
     }
-    if mode == Write::Save && existing == bytes {
-        return Ok(Replacement::Unchanged);
+    if previous_exists(path)? {
+        return Err(Error::Orphaned);
     }
-    if !baseline.matches(existing) {
-        return Err(Error::Stale);
-    }
-    Ok(match mode {
-        Write::Archive => Replacement::Archive,
-        _ => Replacement::Replace,
-    })
+    Ok(Replacement::Create)
+}
+
+/// The same record, perhaps formatted differently: equal bytes, or equal JSON.
+fn same_record(existing: &[u8], bytes: &[u8]) -> bool {
+    existing == bytes
+        || serde_json::from_slice::<serde_json::Value>(existing).is_ok_and(|existing| {
+            serde_json::from_slice::<serde_json::Value>(bytes).is_ok_and(|bytes| existing == bytes)
+        })
 }
 
 /// The path with its parent resolved through links, so two spellings of one
