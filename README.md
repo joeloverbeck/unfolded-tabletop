@@ -27,16 +27,18 @@ None has a lifecycle of its own.
 | `unfolded-hover` | hover opening lifecycle | never | none |
 | `unfolded-record-replacement` | recoverable file replacement | never | `tempfile` |
 | `unfolded-assets` | verified reads, PNG crops, prepared-directory publication | never | `image` (PNG), `rustix`, `serde_json`, `sha2` |
-| `unfolded-seat-client` | held-seat client and its `held-start` recorder, on Unix | never | `anyhow`, `serde_json` |
+| `unfolded-seat-protocol` | the agent seat's wire vocabulary: requests, statuses, the `refused` start line | never | `serde`, `serde_json` |
+| `unfolded-seat-client` | held-seat client and its `held-start` recorder, on Unix | never | `anyhow`, `serde_json`, `unfolded-seat-protocol` |
 | `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
-| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde`, `serde_json`, `tempfile` and `rustix` with `seat` |
+| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde_json`, `tempfile`, `rustix` and `unfolded-seat-protocol` with `seat` |
 
 "Never" holds under every feature set: `scripts/check` fails if `cargo tree`
 finds a `bevy` package below any of them, and fails if `unfolded-random` brings
 any crate at all. A game crate with no interface in it should depend only on the
 Bevy-free packages it uses, so Cargo can never link Bevy into it, whatever else
 its workspace builds. The crate that holds the game's interface also depends
-on `unfolded-tabletop`, which depends on none of them. Arkham, Netrunner
+on `unfolded-tabletop`, which depends on none of them except, under `seat`,
+`unfolded-seat-protocol`. Arkham, Netrunner
 and Cuba Libre keep their interface behind a `tabletop` feature, which enables
 `unfolded-tabletop/seat`.
 
@@ -209,6 +211,14 @@ An agent sits at a game's real table with no window, through one JSON request
 per line and one JSON response per line: on standard input and output, or held
 across shell commands on a local socket.
 
+The protocol's words are spelled once, in `unfolded-seat-protocol`, which needs no
+Bevy: the requests the seat reads, the statuses its responses carry and the one
+`refused` line of a start that fails before a table is seated. The seat, its
+launcher and the held-seat client below use it; the wire did not change when they
+moved to it ([issue #34](https://github.com/joeloverbeck/unfolded-tabletop/issues/34)),
+so a seat and a client at different revisions keep talking. To withdraw it, first
+revert each game's tools and its pin together.
+
 - `Seat` alone steps the table, in fixed steps of one sixtieth of a second. It
   writes pointer and key input where Bevy's window-event conversion writes it,
   settles the table, captures its image through `capture`, and answers
@@ -364,15 +374,41 @@ own check.
 ## Held-seat client
 
 `seat_client`, in `unfolded-seat-client`, is available on Unix. It extracts Arkham's
-`tools/src/seat.rs` at `8301466b5bbc20b99411901cfcd6db2b29865431`:
-request-line normalization, connection, concurrent sending/reading, write
-half-close, and unchanged response output. The caller supplies the output writer
-and a timeout callback for its own interruption/deadline policy, and compares the
-returned answer count with its request count. Refused, missed, skipped, absent
-and malformed statuses mark the exchange unsuccessful. Other string statuses
-are retained as successes, as in Arkham. A final complete JSON response without a
-newline is accepted; there is no response-line size limit or write timeout.
-Signal installation, launch guidance and partner-wait decisions stay in Arkham.
+`tools/src/seat.rs` at `8301466b5bbc20b99411901cfcd6db2b29865431`, and since
+[issue #34](https://github.com/joeloverbeck/unfolded-tabletop/issues/34) also the
+single-request exchange of Arkham's `seat-wait` at
+`c73485c3f066442664073d276fa4d419a3e75cf3`.
+
+`Connection::open` connects, and says when no seat listens there (no socket, or
+one nothing answers on) apart from every other failure. A connection then serves
+one call; each sends, half-closes its input and reads:
+
+- `send` sends request lines, copies each response line unchanged to the caller's
+  writer (`io::sink()` keeps none) and says how it went: every request answered and
+  none failed; every request answered and one refused, missed, skipped or with no
+  status (not JSON, none, or not a string); or fewer answers than requests, which
+  it says first. A string status the protocol does not name is no failure, as in
+  Arkham.
+- `request` sends one `Request` and returns its parsed answer with its status and
+  line, or says how the session ended: the connection closed before it could be
+  sent, was reset, or closed unanswered, or the answer was `bye` or `exited`. An
+  answer that is not JSON or has no status the protocol names is an error. Which
+  answers the caller accepts stays with the caller.
+
+While the seat says nothing, both wake about five times a second to run the
+caller's check, whose error ends the wait: the caller's deadline or interrupt,
+without setting socket timeouts itself. A final complete line without a newline is
+accepted. There is no response-line size limit or write timeout, and a writer
+blocked on a large send is not interrupted. Signal installation, launch guidance,
+exit statuses, wording and partner-wait decisions stay in each game.
+`requests`, `connect`, `exchange` and `read_line` remain from before, so a game that
+pins this revision and keeps its own loop still builds: with them the caller sets
+the read timeout and compares the answer count with its requests.
+
+The protocol's statuses, its request shapes, the `refused` start line and the
+launcher's reading of a start's first line are `unfolded-seat-protocol`'s, which
+the seat, this client and `held-start` share, and which a game's tools can name. Its
+`seat-protocol/tests/protocol.rs` holds every status's and request's wire spelling.
 
 [Issue #17](https://github.com/joeloverbeck/unfolded-tabletop/issues/17) and
 [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) coordinate

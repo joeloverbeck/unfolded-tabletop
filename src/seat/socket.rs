@@ -17,7 +17,6 @@
 use super::{ConnectionEnd, Game, Seat, Status, emit};
 use bevy::prelude::App;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use serde::Deserialize;
 use serde_json::Value;
 use std::{
     fs::{self, File, Metadata, OpenOptions, Permissions},
@@ -34,6 +33,7 @@ use std::{
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
+use unfolded_seat_protocol::StartLine;
 
 /// A Unix-domain socket path is at most this many bytes.
 const PATH_LIMIT: usize = 107;
@@ -385,9 +385,9 @@ pub fn launch(socket: &Path, marker: &str) -> Result<(), String> {
         .map_err(|error| format!("Cannot start the seat: {error}"))?;
     let mut line = String::new();
     let read = BufReader::new(seat.stdout.take().expect("piped")).read_line(&mut line);
-    let startup: Option<Startup> = serde_json::from_str(&line).ok();
+    let startup = StartLine::read(&line);
     if read.is_ok()
-        && let Some(Startup {
+        && let Some(StartLine {
             status: Status::Ready,
             ..
         }) = startup
@@ -407,14 +407,6 @@ pub fn launch(socket: &Path, marker: &str) -> Result<(), String> {
             log.display()
         )),
     }
-}
-
-/// The first line a starting seat prints: `ready`, or one `refused` response.
-#[derive(Deserialize)]
-struct Startup {
-    status: Status,
-    #[serde(default)]
-    error: Option<String>,
 }
 
 /// Create the log afresh, accessible only to its owner. A log an earlier start left at
