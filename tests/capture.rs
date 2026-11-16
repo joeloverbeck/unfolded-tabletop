@@ -160,7 +160,8 @@ fn the_windowless_configuration_leaves_out_the_window_event_loop() {
     assert!(plugins.contains::<bevy::winit::WinitPlugin>());
     assert!(!plugins.enabled::<bevy::winit::WinitPlugin>());
 
-    // Built where no desktop exists, as in CI: the event loop would refuse to start.
+    // Built with the event loop left out. Built, winit would refuse to start off the
+    // main thread, as a test runs, and wherever no desktop exists, as in CI.
     let mut app = App::new();
     app.add_plugins(capture::windowless(Native));
     app.finish();

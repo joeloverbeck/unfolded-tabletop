@@ -108,8 +108,8 @@ pub struct OnSurface;
 /// Whether the render pipelines are ready, as the render world found them after its
 /// last frame: none is queued and every one compiled. [`install`] adds the finding
 /// while the host is built, before pipelined rendering can move the render world to a
-/// thread of its own, and the agent seat waits on it before a capture so that the
-/// capture omits nothing. A host with no render world compiles nothing: it is ready
+/// thread of its own, and [`when_ready`] waits on it before a capture, for the agent
+/// seat as for a capture with no seat, so that the capture omits nothing. A host with no render world compiles nothing: it is ready
 /// unless something reports otherwise, as a renderer that is a stand-in does.
 #[derive(Resource, Clone)]
 pub struct Pipelines(Arc<AtomicBool>);
@@ -182,9 +182,7 @@ pub fn install<C: Component>(app: &mut App, size: UVec2) {
         .iter(app.world())
         .collect::<Vec<_>>();
     for camera in marked {
-        app.world_mut()
-            .entity_mut(camera)
-            .insert(RenderTarget::Image(image.clone().into()));
+        app.world_mut().entity_mut(camera).insert(renders(&image));
     }
     app.insert_resource(Surface {
         image,
@@ -198,7 +196,12 @@ pub fn install<C: Component>(app: &mut App, size: UVec2) {
 fn render_surface(marked: On<Add<OnSurface>>, surface: Res<Surface>, mut commands: Commands) {
     commands
         .entity(marked.entity)
-        .insert(RenderTarget::Image(surface.image.clone().into()));
+        .insert(renders(&surface.image));
+}
+
+/// The render target of a camera that renders `image`.
+fn renders(image: &Handle<Image>) -> RenderTarget {
+    RenderTarget::Image(image.clone().into())
 }
 
 fn name_camera<C: Component>(
