@@ -73,6 +73,8 @@ struct Table {
     /// How many of those findings were still to come when a capture was first asked
     /// for.
     findings_left_when_asked: Option<usize>,
+    /// The table exits, instead of handing the picture back, once a capture is asked for.
+    exits_when_asked: bool,
 }
 
 impl Default for Table {
@@ -89,6 +91,7 @@ impl Default for Table {
             admission: Admission::Admitted,
             pipelines: VecDeque::new(),
             findings_left_when_asked: None,
+            exits_when_asked: false,
         }
     }
 }
@@ -308,10 +311,15 @@ fn renderer_hands_back(
     mut commands: Commands,
     asked: Query<Entity, With<Screenshot>>,
     mut table: ResMut<Table>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     for entity in &asked {
         let left = table.pipelines.len();
         table.findings_left_when_asked.get_or_insert(left);
+        if table.exits_when_asked {
+            exit.write(AppExit::Success);
+            continue;
+        }
         commands.trigger(ScreenshotCaptured {
             entity,
             image: Image::new_fill(
@@ -1068,6 +1076,36 @@ fn a_capture_whose_pipelines_are_never_ready_two_frames_running_is_refused_and_w
     assert_eq!(response["status"], "refused", "{response}");
     assert_eq!(response["error"], "Render pipelines did not become ready.");
     assert_eq!(seat.table().findings_left_when_asked, None);
+    assert!(!path.exists());
+}
+
+#[test]
+fn a_capture_whose_picture_cannot_be_written_says_so() {
+    let mut seat = sit_with(Some(Handle::default()));
+    let scratch = Scratch::new("unsaved");
+    // No image format is named by this ending.
+    let path = scratch.join("table.unsupported");
+
+    let response = seat.ask(json!({"op": "capture", "path": path}));
+
+    assert_eq!(response["status"], "refused", "{response}");
+    let error = response["error"].as_str().unwrap();
+    assert!(error.starts_with("Cannot save the capture: "), "{error}");
+    assert!(!path.exists());
+}
+
+#[test]
+fn a_table_that_exits_during_a_capture_answers_that_it_exited_and_writes_nothing() {
+    let mut seat = sit_with(Some(Handle::default()));
+    let scratch = Scratch::new("exits");
+    let path = scratch.join("table.png");
+    seat.table().exits_when_asked = true;
+
+    let response = seat.ask(json!({"op": "capture", "path": path}));
+
+    // The picture was asked for, then the table exited before it came back.
+    assert!(seat.table().findings_left_when_asked.is_some());
+    assert_eq!(response["status"], "exited", "{response}");
     assert!(!path.exists());
 }
 
