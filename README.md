@@ -16,6 +16,17 @@ what their randomness decides and how its state is saved, when a capture is
 taken and what a failed one means, and what an agent observes and names at their
 table.
 
+## Contents
+
+Read this index, then the sections your work touches:
+
+- [Packages](#packages): which package holds each mechanism, and how a game pins them. Read before adding a dependency or a pin.
+- [Printed mat labels](#printed-mat-labels), [Hover opening lifecycle](#hover-opening-lifecycle), [World-anchored labels](#world-anchored-labels), [Token count labels](#token-count-labels), [Recoverable file replacement](#recoverable-file-replacement), [Table camera](#table-camera), [Screen capture](#screen-capture), [Seeded randomness](#seeded-randomness): one mechanism each, with its origin, contract, consumers and rollback.
+- [Agent seat](#agent-seat) and [Held-seat client](#held-seat-client): the seat's protocol, its client, and `held-start`, which records a game's held start as pull-request evidence.
+- [Development checks](#development-checks): what `scripts/check` holds, and the vendored `wgpu-hal` patch.
+- [Third-consumer waiver](#third-consumer-waiver): the accepted `EVID-6` boundary for extractions that `mudsong` uses.
+- [Development readers and recorded checks](#development-readers-and-recorded-checks): `unfolded-dev-tools`.
+
 ## Packages
 
 Every package below lives in this one repository and changes revision with it.
