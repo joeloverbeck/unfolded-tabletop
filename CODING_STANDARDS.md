@@ -17,6 +17,7 @@ These are the review rules for this repository. They are judgement calls that no
 ## Consumers
 
 - **Newly derived facts.** When a mechanism starts deriving a fact that a consumer used to supply itself, or never had, the pull request names each consumer that gains the fact and what in that consumer it now covers. Search each consumer for the entities the fact matches, such as pickable UI nodes for "pointer over UI", and flag a consumer whose behaviour changes unnamed.
+- **Changed wording.** When a change alters text a game can display, or the error type behind it, the pull request names each game test that reads that text, from the search in `docs/agents/consumers.md`, "Changing shared text". Flag a claim such as "no game's test reads it" that names no search.
 
 ## Bevy
 
