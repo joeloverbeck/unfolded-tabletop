@@ -7,7 +7,9 @@ use bevy::{
     prelude::*,
 };
 use std::time::{Duration, Instant};
-use unfolded_tabletop::loading::{RequiredAssets, font_registered, required_assets};
+use unfolded_tabletop::loading::{
+    FontRegistration, RequiredAssets, font_registered, font_registration, required_assets,
+};
 
 #[derive(Asset, TypePath)]
 struct Note {
@@ -121,10 +123,7 @@ fn an_empty_required_set_never_loads() {
     let fixture = fixture(&[]);
     let report = fixture.report(&[], |_| true);
     assert!(!report.loaded);
-    assert_eq!(
-        report.failures,
-        ["The required artwork set is empty. Play cannot start."]
-    );
+    assert_eq!(report.failures, ["The required asset set is empty."]);
     assert!(report.pending.is_empty());
 }
 
@@ -212,4 +211,22 @@ fn a_font_without_a_registered_family_under_its_alias_does_not_count() {
     let mut unregistered = Font::from_bytes(b"not a font".to_vec());
     unregistered.alias = "asset_id:unregistered".into();
     assert!(!font_registered(&unregistered, &mut context));
+}
+
+#[test]
+fn a_font_not_yet_registered_is_told_from_one_the_text_renderer_refused() {
+    let mut context = bevy::text::FontCx::default();
+    // Bevy's text system sets the alias when it registers a font, so an empty one
+    // has not been registered yet; an alias with no family is bytes it refused.
+    let unaliased = Font::from_bytes(b"not a font".to_vec());
+    assert_eq!(
+        font_registration(&unaliased, &mut context),
+        FontRegistration::Pending
+    );
+    let mut refused = Font::from_bytes(b"not a font".to_vec());
+    refused.alias = "asset_id:refused".into();
+    assert_eq!(
+        font_registration(&refused, &mut context),
+        FontRegistration::Refused
+    );
 }

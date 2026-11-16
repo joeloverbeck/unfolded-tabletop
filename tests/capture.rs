@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use unfolded_tabletop::capture::{self, Ended, Failure, Missed, Pipelines, Surface};
+use unfolded_tabletop::capture::{self, Ended, Failure, Missed, Pipelines, Surface, Unsaved};
 
 /// A directory of this test's own, removed when the test ends.
 struct Scratch(PathBuf);
@@ -106,11 +106,27 @@ fn a_picture_whose_file_ending_names_no_format_is_refused_and_leaves_the_older_f
     let scratch = Scratch::new("refused");
     let unsupported = scratch.join("picture.unsupported");
     std::fs::write(&unsupported, "older file").unwrap();
-    assert!(capture::write_image(red(), &unsupported).is_err());
+    let refused = capture::write_image(red(), &unsupported).unwrap_err();
+    assert!(matches!(refused, Unsaved::Unencoded(_)), "{refused:?}");
     assert_eq!(std::fs::read_to_string(&unsupported).unwrap(), "older file");
 
     let absent = scratch.join("absent/picture.png");
-    assert!(capture::write_image(red(), &absent).is_err());
+    let refused = capture::write_image(red(), &absent).unwrap_err();
+    assert!(
+        matches!(
+            &refused,
+            Unsaved::Unwritten {
+                kind: std::io::ErrorKind::NotFound,
+                ..
+            }
+        ),
+        "{refused:?}"
+    );
+    // The words are the operating system's, as they were.
+    assert_eq!(
+        refused.to_string(),
+        "No such file or directory (os error 2)"
+    );
     assert!(!absent.parent().unwrap().exists());
 }
 

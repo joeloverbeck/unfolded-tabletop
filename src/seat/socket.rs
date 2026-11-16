@@ -80,6 +80,111 @@ pub struct Listener {
     file: Option<FileIdentity>,
 }
 
+/// Why [`Listener::claim`] refused a path, which it left unchanged. `Display` gives
+/// the seat's default wording, `Cannot listen on <path>: ` and then the cause's; a
+/// game that words a refusal itself matches [`cause`](Self::cause).
+#[derive(Debug)]
+pub struct Unclaimed {
+    path: PathBuf,
+    cause: Unclaimable,
+}
+
+impl Unclaimed {
+    /// The path that was not claimed.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Why it was not claimed.
+    pub fn cause(&self) -> &Unclaimable {
+        &self.cause
+    }
+}
+
+impl std::fmt::Display for Unclaimed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Cannot listen on {}: {}",
+            self.path.display(),
+            self.cause
+        )
+    }
+}
+
+impl std::error::Error for Unclaimed {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.source()
+    }
+}
+
+/// The cause of an [`Unclaimed`] path. `Display` gives the seat's default wording of
+/// the cause alone.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Unclaimable {
+    /// The path is longer than a local socket path can be: at most 107 bytes.
+    TooLong,
+    /// The path names no directory.
+    NoDirectory,
+    /// Something already answers on the socket there.
+    Answered,
+    /// The path exists and is not a socket.
+    NotSocket,
+    /// The path appeared while it was being claimed.
+    Exists,
+    /// The directory could not be opened or locked, to take turns with other seats.
+    Unlocked(io::Error),
+    /// Nothing answers on the socket there, and it could not be removed.
+    Leftover(io::Error),
+    /// Whether something answers on the socket there could not be told.
+    Unknown(io::Error),
+    /// The filesystem failed.
+    Io(io::Error),
+}
+
+impl std::fmt::Display for Unclaimable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooLong => write!(
+                f,
+                "a local socket path holds at most {PATH_LIMIT} bytes; choose a shorter one"
+            ),
+            Self::NoDirectory => f.write_str("the path names no directory"),
+            Self::Answered => f.write_str(
+                "an agent seat already answers there and was left untouched; quit that seat or choose another path",
+            ),
+            Self::NotSocket => {
+                f.write_str("the path exists and is not a socket; it was left unchanged")
+            }
+            Self::Exists => f.write_str("the path already exists; it was left unchanged"),
+            Self::Unlocked(error) => write!(f, "cannot lock its directory: {error}"),
+            Self::Leftover(error) => {
+                write!(f, "cannot remove the socket a crashed seat left there: {error}")
+            }
+            Self::Unknown(error) => write!(
+                f,
+                "cannot tell whether a seat answers on the socket there ({error}); it was left unchanged"
+            ),
+            Self::Io(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Unclaimable {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Unlocked(error)
+            | Self::Leftover(error)
+            | Self::Unknown(error)
+            | Self::Io(error) => Some(error),
+            Self::TooLong | Self::NoDirectory | Self::Answered | Self::NotSocket | Self::Exists => {
+                None
+            }
+        }
+    }
+}
+
 impl Listener {
     /// `listener`, owning the socket file `socket` found at `path`.
     fn owning(listener: UnixListener, path: &Path, socket: &Metadata) -> Self {
@@ -94,67 +199,55 @@ impl Listener {
     /// only once owner-only, so the path never exists with wider access. A socket where
     /// nothing answers was left by a crashed seat and is replaced. A socket where a seat
     /// answers, and any other existing path, is refused and left unchanged.
-    pub fn claim(path: &Path) -> Result<Self, String> {
-        let cannot =
-            |error: &dyn std::fmt::Display| format!("Cannot listen on {}: {error}", path.display());
+    pub fn claim(path: &Path) -> Result<Self, Unclaimed> {
+        let cannot = |cause: Unclaimable| Unclaimed {
+            path: path.to_owned(),
+            cause,
+        };
         if path.as_os_str().len() > PATH_LIMIT {
-            return Err(cannot(&format_args!(
-                "a local socket path holds at most {PATH_LIMIT} bytes; choose a shorter one"
-            )));
+            return Err(cannot(Unclaimable::TooLong));
         }
         let parent = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
-            .ok_or_else(|| cannot(&"the path names no directory"))?;
+            .ok_or_else(|| cannot(Unclaimable::NoDirectory))?;
+        let failed = |error: io::Error| cannot(Unclaimable::Io(error));
         let private = tempfile::Builder::new()
             .prefix(".s")
             .permissions(Permissions::from_mode(0o700))
             .tempdir_in(parent)
-            .map_err(|error| cannot(&error))?;
+            .map_err(failed)?;
         let made = private.path().join("s");
-        let listener = UnixListener::bind(&made).map_err(|error| cannot(&error))?;
-        fs::set_permissions(&made, Permissions::from_mode(0o600))
-            .map_err(|error| cannot(&error))?;
+        let listener = UnixListener::bind(&made).map_err(failed)?;
+        fs::set_permissions(&made, Permissions::from_mode(0o600)).map_err(failed)?;
         // Seats claiming paths in one directory take turns, so the leftover found here is
         // the one replaced, never a seat that started meanwhile. A seat removes its own
         // socket while still listening, so a socket where nothing answers is left over.
         let _turn = File::open(parent)
             .and_then(|directory| directory.lock().map(|()| directory))
-            .map_err(|error| cannot(&format_args!("cannot lock its directory: {error}")))?;
+            .map_err(|error| cannot(Unclaimable::Unlocked(error)))?;
         let replaced = match fs::symlink_metadata(path) {
             Err(error) if error.kind() == ErrorKind::NotFound => false,
-            Err(error) => return Err(cannot(&error)),
+            Err(error) => return Err(failed(error)),
             Ok(file) if !file.file_type().is_socket() => {
-                return Err(cannot(
-                    &"the path exists and is not a socket; it was left unchanged",
-                ));
+                return Err(cannot(Unclaimable::NotSocket));
             }
             Ok(_) => match UnixStream::connect(path) {
-                Ok(_) => {
-                    return Err(cannot(
-                        &"an agent seat already answers there and was left untouched; quit that seat or choose another path",
-                    ));
-                }
+                Ok(_) => return Err(cannot(Unclaimable::Answered)),
                 Err(error) if error.kind() == ErrorKind::ConnectionRefused => {
                     match fs::remove_file(path) {
                         Err(error) if error.kind() != ErrorKind::NotFound => {
-                            return Err(cannot(&format_args!(
-                                "cannot remove the socket a crashed seat left there: {error}"
-                            )));
+                            return Err(cannot(Unclaimable::Leftover(error)));
                         }
                         _ => true,
                     }
                 }
-                Err(error) => {
-                    return Err(cannot(&format_args!(
-                        "cannot tell whether a seat answers on the socket there ({error}); it was left unchanged"
-                    )));
-                }
+                Err(error) => return Err(cannot(Unclaimable::Unknown(error))),
             },
         };
         fs::hard_link(&made, path).map_err(|error| match error.kind() {
-            ErrorKind::AlreadyExists => cannot(&"the path already exists; it was left unchanged"),
-            _ => cannot(&error),
+            ErrorKind::AlreadyExists => cannot(Unclaimable::Exists),
+            _ => failed(error),
         })?;
         if replaced {
             eprintln!(
@@ -162,7 +255,7 @@ impl Listener {
                 path.display()
             );
         }
-        let file = fs::symlink_metadata(path).map_err(|error| cannot(&error))?;
+        let file = fs::symlink_metadata(path).map_err(failed)?;
         Ok(Self::owning(listener, path, &file))
     }
 
@@ -368,7 +461,7 @@ fn period_in_words(period: Duration) -> String {
 /// `ready` response unchanged and leave it serving; otherwise return why it could not
 /// start, with no socket left and no seat running.
 pub fn launch(socket: &Path, marker: &str) -> Result<(), String> {
-    let listener = Listener::claim(socket)?;
+    let listener = Listener::claim(socket).map_err(|refused| refused.to_string())?;
     let log = log_path(socket);
     let mut command = Command::new("/proc/self/exe");
     if let Some(name) = std::env::args_os().next() {

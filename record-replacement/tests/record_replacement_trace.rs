@@ -176,11 +176,10 @@ fn replacement_holds_the_same_sidecar_through_both_installations() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("record.json");
     let lock_path = directory.path().join("record.json.lock");
-    replace(
+    replace::<std::io::Error>(
         &path,
         b"original",
         1024,
-        std::io::Error::other,
         |_| Ok(Replacement::Create),
         |_| Ok(()),
     )
@@ -213,11 +212,10 @@ fn traced_replacement_child() {
     let Some(path) = std::env::var_os(TRACED) else {
         return;
     };
-    replace(
+    replace::<std::io::Error>(
         Path::new(&path),
         b"candidate",
         1024,
-        std::io::Error::other,
         |current| {
             assert_eq!(current, Some(b"original".as_slice()));
             Ok(Replacement::Replace)

@@ -22,6 +22,7 @@ use bevy::{
     winit::WinitPlugin,
 };
 use std::{
+    io,
     path::Path,
     sync::{
         Arc, Mutex,
@@ -32,10 +33,10 @@ use std::{
 
 /// Write a captured picture as 8-bit RGB, in the format the path's extension names.
 /// Alpha is dropped, and a floating-point picture is converted from linear light.
-pub fn write_image(image: Image, path: &Path) -> Result<(), String> {
+pub fn write_image(image: Image, path: &Path) -> Result<(), Unsaved> {
     let image = image
         .try_into_dynamic()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| Unsaved::Unconverted(error.to_string()))?;
     // Screenshots from a native window use an 8-bit surface. Preserve Bevy's
     // RGB output (alpha can carry HDR brightness), including linear-to-sRGB
     // conversion if a floating-point render target supplies the capture.
@@ -51,8 +52,40 @@ pub fn write_image(image: Image, path: &Path) -> Result<(), String> {
     } else {
         image.to_rgb8()
     };
-    rgb.save(path).map_err(|error| error.to_string())
+    rgb.save(path).map_err(|error| match &error {
+        image::ImageError::IoError(cause) => Unsaved::Unwritten {
+            kind: cause.kind(),
+            detail: error.to_string(),
+        },
+        _ => Unsaved::Unencoded(error.to_string()),
+    })
 }
+
+/// Why a picture that came back was not written ([`write_image`]). `Display` gives
+/// the converter's, encoder's or operating system's own words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Unsaved {
+    /// The picture's format has no conversion to an image to encode.
+    Unconverted(String),
+    /// The picture could not be encoded as the path's extension names, or the
+    /// extension names no format this build encodes.
+    Unencoded(String),
+    /// The file could not be written: the operating system's kind of error, and its words.
+    Unwritten { kind: io::ErrorKind, detail: String },
+}
+
+impl std::fmt::Display for Unsaved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unconverted(detail)
+            | Self::Unencoded(detail)
+            | Self::Unwritten { detail, .. } => f.write_str(detail),
+        }
+    }
+}
+
+impl std::error::Error for Unsaved {}
 
 /// Window settings for a host that never opens an operating-system window: no
 /// primary window is made, and the application does not exit for the lack of
@@ -220,7 +253,7 @@ fn name_camera<C: Component>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
     /// The picture came back and could not be written.
-    Unsaved(String),
+    Unsaved(Unsaved),
     /// No picture came back: the host stopped stepping, or the deadline passed.
     Incomplete,
 }
@@ -234,7 +267,7 @@ pub enum Missed {
     /// The picture was asked for and did not come back.
     Incomplete(Ended),
     /// The picture came back and could not be written.
-    Unsaved(String),
+    Unsaved(Unsaved),
 }
 
 /// What ended a capture before it had a picture.
@@ -249,7 +282,7 @@ pub enum Ended {
 /// What a capture's observer may still do, and what it did.
 enum Request {
     Waiting,
-    Written(Result<(), String>),
+    Written(Result<(), Unsaved>),
     /// The caller has its answer, written or given up, so nothing that arrives
     /// later is written.
     Ended,

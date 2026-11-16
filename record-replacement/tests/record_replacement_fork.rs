@@ -75,11 +75,10 @@ mod inherited_lock {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("record");
         let mut child = None;
-        replace(
+        replace::<std::io::Error>(
             &path,
             b"first",
             1024,
-            std::io::Error::other,
             |_| {
                 child = Some(BeforeExec::hold());
                 Ok(Replacement::Replace)
@@ -87,11 +86,10 @@ mod inherited_lock {
             |_| Ok(()),
         )
         .unwrap();
-        replace(
+        replace::<std::io::Error>(
             &path,
             b"second",
             1024,
-            std::io::Error::other,
             |current| {
                 assert_eq!(current, Some(b"first".as_slice()));
                 Ok(Replacement::Replace)
@@ -113,11 +111,10 @@ mod inherited_lock {
             fs::write(previous_path(&path), b"older").unwrap();
             let mut child = None;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                replace(
+                replace::<std::io::Error>(
                     &path,
                     b"candidate",
                     1024,
-                    std::io::Error::other,
                     |_| {
                         child = Some(BeforeExec::hold());
                         match exit {
@@ -162,11 +159,10 @@ mod inherited_lock {
                 },
                 "{exit}"
             );
-            replace(
+            replace::<std::io::Error>(
                 &path,
                 b"next",
                 1024,
-                std::io::Error::other,
                 |current| {
                     assert_eq!(current, Some(b"original".as_slice()));
                     Ok(Replacement::Replace)
@@ -199,11 +195,10 @@ mod inherited_lock {
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
         };
-        replace(
+        replace::<std::io::Error>(
             &path,
             b"installed",
             1024,
-            std::io::Error::other,
             |current| {
                 assert_eq!(current, Some(b"original".as_slice()));
                 contend();
@@ -228,11 +223,10 @@ mod inherited_lock {
             return;
         };
         let path = std::path::Path::new(&path);
-        let result = replace(
+        let result = replace::<std::io::Error>(
             path,
             b"competing",
             1024,
-            std::io::Error::other,
             |_| panic!("Competing writer reached admission"),
             |_| panic!("Competing writer reached recovery validation"),
         );
@@ -240,7 +234,7 @@ mod inherited_lock {
             result
                 .unwrap_err()
                 .to_string()
-                .starts_with("The save is busy:")
+                .starts_with("The record is busy:")
         );
         assert_eq!(fs::read(path).unwrap(), b"original");
         assert_eq!(fs::read(previous_path(path)).unwrap(), b"older");

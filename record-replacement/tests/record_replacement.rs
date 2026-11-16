@@ -4,12 +4,12 @@
 
 use std::{
     fs,
-    io::Error,
+    io::{Error, ErrorKind},
     path::{Path, PathBuf},
 };
-use unfolded_record_replacement::{Replacement, previous_path, read, replace};
+use unfolded_record_replacement::{self as record, Replacement, previous_path, read, replace};
 
-const LIMIT_ERROR: &str = "This file exceeds the bounded experiment's record limit.";
+const LIMIT_ERROR: &str = "The record exceeds its size limit.";
 
 // `archives` and `lock_path` build the names by hand: they are the oracle for
 // the public `archives` and `lock_path`, checked at the end of this file.
@@ -52,25 +52,17 @@ fn install(
     bytes: &[u8],
     decision: fn() -> Replacement,
 ) -> Result<Option<PathBuf>, Error> {
-    replace(
-        path,
-        bytes,
-        1024,
-        Error::other,
-        |_| Ok(decision()),
-        |_| Ok(()),
-    )
+    replace::<Error>(path, bytes, 1024, |_| Ok(decision()), |_| Ok(()))
 }
 
 #[test]
 fn exclusive_creation_preserves_a_file_that_appears_after_admission() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("attempt.json");
-    let result = replace(
+    let result = replace::<Error>(
         &path,
         b"new attempt",
         1024,
-        std::io::Error::other,
         |previous| {
             assert!(previous.is_none());
             fs::write(&path, b"competing attempt")?;
@@ -93,17 +85,16 @@ fn oversized_candidate_is_refused_before_creating_directories_or_replacing_bytes
         if path.file_name().unwrap() == "existing" {
             fs::write(&path, b"keep").unwrap();
         }
-        let result = replace(
+        let result = replace::<Error>(
             &path,
             b"too large",
             4,
-            std::io::Error::other,
             |_| panic!("Oversized candidate reached admission"),
             |_| Ok(()),
         );
         assert_eq!(
             result.unwrap_err().to_string(),
-            "This file exceeds the bounded experiment's record limit."
+            "The record exceeds its size limit."
         );
     }
     assert!(!dir.path().join("missing").exists());
@@ -120,11 +111,10 @@ fn continuation_and_restart_keep_original_bytes_and_durable_archives() {
     let original = b"first\n \t\n".to_vec();
     fs::write(&path, &original).unwrap();
     let seen = std::cell::RefCell::new(Vec::new());
-    let archived = replace(
+    let archived = replace::<Error>(
         &path,
         b"continued",
         1024,
-        Error::other,
         |current| {
             seen.borrow_mut().push(current.map(<[u8]>::to_vec));
             Ok(Replacement::Replace)
@@ -164,11 +154,10 @@ fn unchanged_and_refused_decisions_return_before_recovery_validation() {
         let path = dir.path().join("record.json");
         fs::write(&path, b"original\n \t\n").unwrap();
         fs::write(previous_path(&path), b"damaged recovery").unwrap();
-        let result = replace(
+        let result = replace::<Error>(
             &path,
             b"candidate",
             1024,
-            Error::other,
             |current| {
                 assert_eq!(current, Some(b"original\n \t\n".as_slice()));
                 if decision == "unchanged" {
@@ -208,11 +197,10 @@ fn damaged_recovery_blocks_replacement_but_is_ignored_for_a_fresh_path() {
         Err(Error::other("damaged recovery"))
     };
     // No current record: nothing rotates into recovery, so it is not validated.
-    replace(
+    replace::<Error>(
         &path,
         b"original",
         1024,
-        Error::other,
         |current| {
             assert!(current.is_none());
             Ok(Replacement::Create)
@@ -221,14 +209,7 @@ fn damaged_recovery_blocks_replacement_but_is_ignored_for_a_fresh_path() {
     )
     .unwrap();
     for decision in [Replacement::Replace, Replacement::Archive] {
-        let result = replace(
-            &path,
-            b"candidate",
-            1024,
-            Error::other,
-            |_| Ok(decision),
-            validate,
-        );
+        let result = replace::<Error>(&path, b"candidate", 1024, |_| Ok(decision), validate);
         assert_eq!(result.unwrap_err().to_string(), "damaged recovery");
         assert_eq!(fs::read(&path).unwrap(), b"original");
         assert_eq!(fs::read(previous_path(&path)).unwrap(), b"damaged recovery");
@@ -242,11 +223,10 @@ fn damaged_recovery_blocks_replacement_but_is_ignored_for_a_fresh_path() {
 fn admission_refusing_an_absent_record_creates_only_the_directory_and_sidecar() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("nested/record.json");
-    let result = replace(
+    let result = replace::<Error>(
         &path,
         b"candidate",
         1024,
-        Error::other,
         |current| {
             assert!(current.is_none());
             Err(Error::other("missing record"))
@@ -276,11 +256,10 @@ fn non_regular_destinations_are_refused_and_preserved() {
         destinations.push(link);
     }
     for path in destinations {
-        let result = replace(
+        let result = replace::<Error>(
             &path,
             b"candidate",
             1024,
-            Error::other,
             |_| panic!("a non-regular destination reached admission"),
             |_| panic!("a non-regular destination validated recovery"),
         );
@@ -306,12 +285,11 @@ fn existing_record_limit_admits_exactly_the_limit_and_refuses_one_byte_more() {
     let path = dir.path().join("record.json");
     let mut bytes = vec![b' '; LIMIT];
     fs::write(&path, &bytes).unwrap();
-    assert_eq!(read(&path, LIMIT as u64, Error::other).unwrap(), bytes);
-    let unchanged = replace(
+    assert_eq!(read(&path, LIMIT as u64).unwrap(), bytes);
+    let unchanged = replace::<Error>(
         &path,
         &bytes,
         LIMIT as u64,
-        Error::other,
         |current| {
             assert_eq!(current.map(<[u8]>::len), Some(LIMIT));
             Ok(Replacement::Unchanged)
@@ -321,21 +299,22 @@ fn existing_record_limit_admits_exactly_the_limit_and_refuses_one_byte_more() {
     assert!(unchanged.unwrap().is_none());
     bytes.push(b' ');
     fs::write(&path, &bytes).unwrap();
-    assert_eq!(
-        read(&path, LIMIT as u64, Error::other)
-            .unwrap_err()
-            .to_string(),
-        LIMIT_ERROR
+    let oversized = read(&path, LIMIT as u64).unwrap_err();
+    assert!(
+        matches!(oversized, record::Error::TooLarge),
+        "{oversized:?}"
     );
-    let refused = replace(
+    assert_eq!(oversized.to_string(), LIMIT_ERROR);
+    let refused = replace::<record::Error>(
         &path,
         b"small",
         LIMIT as u64,
-        Error::other,
         |_| panic!("an oversized existing record reached admission"),
         |_| Ok(()),
-    );
-    assert_eq!(refused.unwrap_err().to_string(), LIMIT_ERROR);
+    )
+    .unwrap_err();
+    assert!(matches!(refused, record::Error::TooLarge), "{refused:?}");
+    assert_eq!(refused.to_string(), LIMIT_ERROR);
     assert_eq!(fs::read(&path).unwrap(), bytes);
     assert!(!previous_path(&path).exists());
     assert_unlocked(&path);
@@ -354,30 +333,29 @@ fn competing_lock_refuses_and_release_rechecks_the_current_record() {
         .open(lock_path(&path))
         .unwrap();
     lock.try_lock().unwrap();
-    let busy = replace(
+    let busy = replace::<record::Error>(
         &path,
         b"candidate",
         1024,
-        Error::other,
         |_| panic!("a busy record reached admission"),
         |_| panic!("a busy record validated recovery"),
-    );
+    )
+    .unwrap_err();
     assert!(
-        busy.unwrap_err()
-            .to_string()
-            .starts_with("The save is busy: ")
+        matches!(&busy, record::Error::Busy(cause) if cause.kind() == ErrorKind::WouldBlock),
+        "{busy:?}"
     );
+    assert!(busy.to_string().starts_with("The record is busy: "));
     assert_eq!(fs::read(&path).unwrap(), b"original");
     assert_eq!(fs::read(previous_path(&path)).unwrap(), b"original");
     // A cooperating holder changes the active bytes before releasing the actual
     // sidecar. The next writer must read that version, not an earlier one.
     fs::write(&path, b"then current").unwrap();
     drop(lock);
-    let refused = replace(
+    let refused = replace::<Error>(
         &path,
         b"candidate",
         1024,
-        Error::other,
         |current| {
             assert_eq!(current, Some(b"then current".as_slice()));
             Err(Error::other("a later record is already saved"))
@@ -406,11 +384,10 @@ fn recovery_install_failure_cleans_staging_and_retains_only_a_restart_archive() 
         let previous = previous_path(&path);
         fs::write(&path, b"original").unwrap();
         fs::write(&previous, b"valid recovery").unwrap();
-        let result = replace(
+        let result = replace::<Error>(
             &path,
             b"candidate",
             1024,
-            Error::other,
             |_| Ok(decision),
             |recovery| {
                 assert_eq!(fs::read(recovery).unwrap(), b"valid recovery");

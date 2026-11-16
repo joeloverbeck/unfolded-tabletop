@@ -89,7 +89,7 @@ fn fingerprint(root: &Path, excluded: &Path) -> Result<String> {
         .filter(|p| !p.is_empty())
         .collect();
     let mut hash = Sha256::new();
-    field(&mut hash, b"arkham-check-source-v1");
+    field(&mut hash, b"unfolded-check-source-v1");
     for path in paths {
         let full = root.join(OsStr::from_bytes(path));
         if full.starts_with(excluded) {
