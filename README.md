@@ -18,7 +18,7 @@ terms used here.
 | --- | --- | --- |
 | `unfolded-random` | A seeded SplitMix64 generator, its index and shuffle, and a fresh seed from `/dev/urandom` | never |
 | `unfolded-hover` | When a pointer-driven reading view opens, switches and closes | never |
-| `unfolded-record-replacement` | Locked, staged replacement of a save record that keeps the previous one | never |
+| `unfolded-record-replacement` | A game's save record (one checksummed envelope, a write baseline, recovery) on a locked, staged replacement that keeps the previous record | never |
 | `unfolded-assets` | Bounded and SHA-256-verified reads, bounded PNG crops, and publication of a prepared directory | never |
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
 | `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |
@@ -72,7 +72,8 @@ wgpu-hal = { git = "https://github.com/joeloverbeck/unfolded-tabletop", rev = "<
 
 This repository holds mechanisms only. Your game keeps its rules, observations,
 layout, materials, resource meanings, required artwork, renderer admission and
-native-operation policy; what its randomness decides and how that state is saved;
+native-operation policy; what its randomness decides; what it saves, what identifies
+a compatible save and the words for each refused one;
 when a capture is taken and what a failed one means; and what an agent observes
 and names at its table. You connect each mechanism to that policy in an adapter of
 your own, and your checks, not this repository's, show that your game still works:

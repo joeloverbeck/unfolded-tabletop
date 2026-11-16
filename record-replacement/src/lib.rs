@@ -1,11 +1,17 @@
-//! Locked file-replacement lifecycle. Adapters decide record
-//! compatibility and replacement policy; this module owns filesystem sequencing:
-//! bounded reads, a persistent sidecar lock, staged and synced replacement,
-//! previous-record retention, exclusive creation and restart archiving.
+//! A game's save record, and the locked file-replacement lifecycle under it.
 //!
-//! The consumer supplies its record-size bound, error conversion, replacement
-//! admission and recovery validation. Schemas, checksums, content identities,
-//! freshness and replay policy stay in the consumer. Admission and recovery
+//! A game saves through [`save`]: that module owns the envelope, its checksum,
+//! the write baseline, the unchanged shortcut, validation of the previous record
+//! and recovery from it. The game supplies the identity that marks a compatible
+//! save, its payload, its validity check and size limit, when a write is exclusive
+//! or archives the current record, and the wording of every refusal.
+//!
+//! Underneath, [`replace`] and [`read`] own filesystem sequencing for any record,
+//! save or not: bounded reads, a persistent sidecar lock ([`lock_path`]), staged
+//! and synced replacement, previous-record retention ([`previous_path`]),
+//! exclusive creation and restart archiving ([`archives`]). Their caller supplies
+//! its record-size bound, error conversion, replacement admission and recovery
+//! validation, and keeps its own schema and freshness. Admission and recovery
 //! validation run under the same lock as installation, and the lock file is never
 //! truncated or removed. An unchanged decision writes no record bytes and does not
 //! validate recovery.
@@ -19,6 +25,8 @@
 //!
 //! This is not a multi-file transaction, does not sync parent directories, does not
 //! promise durability through power loss, and does not repair corrupt records.
+
+pub mod save;
 
 use std::{
     fs,
@@ -59,11 +67,67 @@ pub fn previous_path(path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
-fn check_size<E>(bytes: &[u8], limit: u64, error: fn(String) -> E) -> Result<(), E> {
+/// The persistent lock sidecar, with `.lock` appended to the whole path. It is
+/// never truncated or removed.
+pub fn lock_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".lock");
+    PathBuf::from(name)
+}
+
+fn archive_prefix(path: &Path) -> String {
+    format!(
+        "{}.archived-",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    )
+}
+
+/// The restart archives retained beside `path`, sorted by name: files named
+/// `<file name>.archived-<random>.json`. An absent directory has none.
+pub fn archives(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let prefix = archive_prefix(path);
+    let entries = match fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(cause) => return Err(cause),
+    };
+    let mut paths = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(&prefix) && name.ends_with(".json") {
+            paths.push(entry.path());
+        }
+    }
+    paths.sort();
+    Ok(paths)
+}
+
+/// A refusal this module words for [`read`] and [`replace`], and [`save`] passes on.
+pub(crate) enum Fault {
+    TooLarge,
+    Busy(String),
+    NotRegularFile,
+}
+
+impl Fault {
+    fn words(self) -> String {
+        match self {
+            Self::TooLarge => "This file exceeds the bounded experiment's record limit.".into(),
+            Self::Busy(cause) => format!("The save is busy: {cause}"),
+            Self::NotRegularFile => "The record destination is not a regular file.".into(),
+        }
+    }
+}
+
+fn check_size<E>(bytes: &[u8], limit: u64, error: &impl Fn(Fault) -> E) -> Result<(), E> {
     if bytes.len() as u64 > limit {
-        return Err(error(
-            "This file exceeds the bounded experiment's record limit.".into(),
-        ));
+        return Err(error(Fault::TooLarge));
     }
     Ok(())
 }
@@ -73,6 +137,14 @@ pub fn read<E: From<std::io::Error>>(
     path: &Path,
     limit: u64,
     error: fn(String) -> E,
+) -> Result<Vec<u8>, E> {
+    read_bounded(path, limit, &|fault: Fault| error(fault.words()))
+}
+
+pub(crate) fn read_bounded<E: From<std::io::Error>>(
+    path: &Path,
+    limit: u64,
+    error: &impl Fn(Fault) -> E,
 ) -> Result<Vec<u8>, E> {
     let mut bytes = Vec::new();
     fs::File::open(path)?
@@ -96,6 +168,24 @@ pub fn replace<E: From<std::io::Error>>(
     admit: impl FnOnce(Option<&[u8]>) -> Result<Replacement, E>,
     validate_recovery: impl FnOnce(&Path) -> Result<(), E>,
 ) -> Result<Option<PathBuf>, E> {
+    replace_bounded(
+        path,
+        bytes,
+        limit,
+        &|fault: Fault| error(fault.words()),
+        admit,
+        validate_recovery,
+    )
+}
+
+pub(crate) fn replace_bounded<E: From<std::io::Error>>(
+    path: &Path,
+    bytes: &[u8],
+    limit: u64,
+    error: &impl Fn(Fault) -> E,
+    admit: impl FnOnce(Option<&[u8]>) -> Result<Replacement, E>,
+    validate_recovery: impl FnOnce(&Path) -> Result<(), E>,
+) -> Result<Option<PathBuf>, E> {
     check_size(bytes, limit, error)?;
     let parent = path
         .parent()
@@ -103,24 +193,18 @@ pub fn replace<E: From<std::io::Error>>(
         .unwrap_or(Path::new("."));
     fs::create_dir_all(parent)?;
     // Never truncate or remove the sidecar: cooperating writers need its inode.
-    let mut lock_path = path.as_os_str().to_os_string();
-    lock_path.push(".lock");
     let lock = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(PathBuf::from(lock_path))?;
+        .open(lock_path(path))?;
     lock.try_lock()
-        .map_err(|cause| error(format!("The save is busy: {cause}")))?;
+        .map_err(|cause| error(Fault::Busy(cause.to_string())))?;
     let _lock = ReplacementLock(lock);
     let existing = match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_file() => Some(read(path, limit, error)?),
-        Ok(_) => {
-            return Err(error(
-                "The record destination is not a regular file.".into(),
-            ));
-        }
+        Ok(metadata) if metadata.is_file() => Some(read_bounded(path, limit, error)?),
+        Ok(_) => return Err(error(Fault::NotRegularFile)),
         Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => None,
         Err(cause) => return Err(cause.into()),
     };
@@ -143,12 +227,8 @@ pub fn replace<E: From<std::io::Error>>(
         backup.write_all(&existing)?;
         backup.as_file().sync_all()?;
         if matches!(replacement, Replacement::Archive) {
-            let prefix = format!(
-                "{}.archived-",
-                path.file_name().unwrap_or_default().to_string_lossy()
-            );
             let mut archive = tempfile::Builder::new()
-                .prefix(&prefix)
+                .prefix(&archive_prefix(path))
                 .suffix(".json")
                 .tempfile_in(parent)?;
             archive.write_all(&existing)?;
