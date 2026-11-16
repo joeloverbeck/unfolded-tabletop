@@ -28,6 +28,7 @@ use bevy::{
 };
 use serde_json::{Value, json};
 use std::{
+    collections::VecDeque,
     io::{BufRead, BufReader, Write},
     os::unix::{
         fs::{FileTypeExt, PermissionsExt},
@@ -37,12 +38,14 @@ use std::{
     time::Duration,
 };
 use unfolded_tabletop::seat::{
-    Admission, Focus, Game, Hit, Logical, Name, Observed, Seat, SeatKey, SeatedAgent, Unadmitted,
-    socket::Listener,
+    Admission, Focus, Game, Hit, Logical, Name, Observed, Pipelines, STEP, Seat, SeatKey,
+    SeatedAgent, Unadmitted, Unshown, socket::Listener,
 };
 
-/// One sixtieth of a second: the seat's step of the table's clock.
-const STEP_NANOS: u64 = 16_666_667;
+/// The table's clock after `steps` of the seat's steps, in nanoseconds.
+fn clock_after(steps: u32) -> u64 {
+    u64::try_from((STEP * steps).as_nanos()).unwrap()
+}
 
 /// What the table of no game holds.
 #[derive(Resource)]
@@ -61,8 +64,12 @@ struct Table {
     wheels: Vec<(f32, f32)>,
     scrolls: Vec<(String, f32, f32)>,
     admission: Admission,
-    /// Frozen steps still to pass before the render pipelines are ready.
-    compiling: u32,
+    /// What the stand-in render world finds of the pipelines on its next frames, one
+    /// frame each. The last finding holds once these run out.
+    pipelines: VecDeque<bool>,
+    /// How many of those findings were still to come when a capture was first asked
+    /// for.
+    asked_with: Option<usize>,
 }
 
 impl Default for Table {
@@ -77,7 +84,8 @@ impl Default for Table {
             wheels: Vec::new(),
             scrolls: Vec::new(),
             admission: Admission::Admitted,
-            compiling: 0,
+            pipelines: VecDeque::new(),
+            asked_with: None,
         }
     }
 }
@@ -169,19 +177,13 @@ impl Game for Plain {
     fn advance(&self, world: &mut World, by: Duration) {
         let mut table = world.resource_mut::<Table>();
         table.clock += by;
-        if by.is_zero() {
-            table.compiling = table.compiling.saturating_sub(1);
-        } else {
+        if !by.is_zero() {
             table.presenting = table.presenting.saturating_sub(1);
         }
     }
 
     fn admission(&self, world: &World) -> Admission {
         world.resource::<Table>().admission.clone()
-    }
-
-    fn pipelines_ready(&self, world: &World) -> bool {
-        world.resource::<Table>().compiling == 0
     }
 
     fn keys(&self) -> &[SeatKey] {
@@ -291,9 +293,22 @@ fn read_wheel(mut events: MessageReader<MouseWheel>, mut table: ResMut<Table>) {
     }
 }
 
+/// Stands in for Bevy's render world: what it finds of the pipelines after a frame.
+fn render_world_reports(mut table: ResMut<Table>, pipelines: Res<Pipelines>) {
+    if let Some(ready) = table.pipelines.pop_front() {
+        pipelines.report(ready);
+    }
+}
+
 /// Stands in for Bevy's renderer: hand a picture back to every capture asked for.
-fn renderer_hands_back(mut commands: Commands, asked: Query<Entity, With<Screenshot>>) {
+fn renderer_hands_back(
+    mut commands: Commands,
+    asked: Query<Entity, With<Screenshot>>,
+    mut table: ResMut<Table>,
+) {
     for entity in &asked {
+        let left = table.pipelines.len();
+        table.asked_with.get_or_insert(left);
         commands.trigger(ScreenshotCaptured {
             entity,
             image: Image::new_fill(
@@ -340,7 +355,7 @@ fn sit_with(image: Option<Handle<Image>>) -> Sitting {
         .init_resource::<Table>()
         .add_systems(Update, (read_keys, pick, read_wheel));
     if image.is_some() {
-        app.add_systems(Update, renderer_hands_back);
+        app.add_systems(Update, (render_world_reports, renderer_hands_back).chain());
     }
     app.world_mut().spawn((Window::default(), PrimaryWindow));
     let camera = app.world_mut().spawn(RenderTarget::default()).id();
@@ -382,6 +397,12 @@ fn lines(output: &[u8]) -> Vec<Value> {
 }
 
 #[test]
+fn the_seats_step_is_one_sixtieth_of_a_second() {
+    // 1,000,000,000 ns / 60 = 16,666,666.67 ns, rounded up, as Arkham had it.
+    assert_eq!(STEP, Duration::from_nanos(16_666_667));
+}
+
+#[test]
 fn sitting_marks_the_table_and_an_observation_is_the_games_own() {
     let mut seat = sit();
     assert!(seat.app.world().contains_resource::<SeatedAgent>());
@@ -394,6 +415,7 @@ fn sitting_marks_the_table_and_an_observation_is_the_games_own() {
             "ok": true, "mode": "seat", "status": "observed",
             "observation": {"revision": 0, "keys": [], "clicked": []},
             "table": {"settled": true, "clock_nanos": 0},
+            "revision": 0, "settled": true, "pending": [],
         })
     );
 }
@@ -408,7 +430,7 @@ fn a_key_is_pressed_and_released_through_bevys_keyboard_input_in_two_fixed_steps
     assert_eq!(response["ok"], true);
     // Read once: the key went down in one update and came up in the next.
     assert_eq!(response["observation"]["keys"], json!(["Tab"]));
-    assert_eq!(response["table"]["clock_nanos"], 2 * STEP_NANOS);
+    assert_eq!(response["table"]["clock_nanos"], clock_after(2));
 }
 
 #[test]
@@ -533,7 +555,7 @@ fn a_busy_table_refuses_input_and_settles_in_fixed_steps() {
     let settled = seat.ask(json!({"op": "settle"}));
     assert_eq!(settled["status"], "settled", "{settled}");
     assert_eq!(settled["steps"], 3);
-    assert_eq!(settled["table"]["clock_nanos"], 5 * STEP_NANOS);
+    assert_eq!(settled["table"]["clock_nanos"], clock_after(5));
 }
 
 #[test]
@@ -614,7 +636,7 @@ fn an_activation_rests_on_the_named_component_then_presses_and_releases() {
     assert_eq!(activated["covered"], Value::Null);
     assert_eq!(activated["observation"]["clicked"], json!(["card"]));
     // One step to rest the pointer, one to press and one to release.
-    assert_eq!(activated["table"]["clock_nanos"], 3 * STEP_NANOS);
+    assert_eq!(activated["table"]["clock_nanos"], clock_after(3));
 }
 
 #[test]
@@ -647,7 +669,7 @@ fn a_point_rests_the_pointer_on_the_named_component_and_presses_nothing() {
     assert_eq!(pointed["observation"]["clicked"], json!([]));
     assert_eq!(pointed["observation"]["revision"], 0);
     // One step to rest the pointer, and none to press.
-    assert_eq!(pointed["table"]["clock_nanos"], STEP_NANOS);
+    assert_eq!(pointed["table"]["clock_nanos"], clock_after(1));
     // The pointer stays where it rests: the table sees it over the card.
     let hovered = seat.app.world().resource::<HoverMap>();
     let over: Vec<Entity> = hovered[&PointerId::Mouse].keys().copied().collect();
@@ -1012,18 +1034,38 @@ fn a_capture_waits_for_the_pipelines_on_a_frozen_clock_and_answers_after_the_fil
     // The directories above the file do not exist: the seat makes them.
     let path = scratch.join("pictures/table.png");
     seat.ask(json!({"op": "key", "revision": 0, "key": "Tab"}));
-    seat.table().compiling = 3;
+    // Ready on one frame is not enough: the finding trails the renderer by a frame.
+    seat.table().pipelines = [false, true, false, true, true, true, true].into();
 
     let response = seat.ask(json!({"op": "capture", "path": path}));
 
     assert_eq!(response["status"], "captured", "{response}");
     assert_eq!(response["path"], json!(path));
-    assert_eq!(seat.table().compiling, 0);
+    // Ready on the fourth and fifth frames running, so the picture is asked for on the
+    // sixth, which takes the sixth finding first: one is left. Asked for after the
+    // first ready frame, four would be left.
+    assert_eq!(seat.table().asked_with, Some(1));
     // Only the key's two steps moved the clock.
-    assert_eq!(response["table"]["clock_nanos"], 2 * STEP_NANOS);
+    assert_eq!(response["table"]["clock_nanos"], clock_after(2));
     let picture = image::open(&path).unwrap().to_rgb8();
     assert_eq!(picture.dimensions(), (2, 1));
     assert_eq!(picture.get_pixel(0, 0).0, [255, 0, 0]);
+}
+
+#[test]
+fn a_capture_whose_pipelines_are_never_ready_two_frames_running_is_refused_and_writes_nothing() {
+    let mut seat = sit_with(Some(Handle::default()));
+    let scratch = Scratch::new("never-ready");
+    let path = scratch.join("table.png");
+    // Ready twice, never on consecutive frames, then never again.
+    seat.table().pipelines = [true, false, true, false].into();
+
+    let response = seat.ask(json!({"op": "capture", "path": path}));
+
+    assert_eq!(response["status"], "refused", "{response}");
+    assert_eq!(response["error"], "Render pipelines did not become ready.");
+    assert_eq!(seat.table().asked_with, None);
+    assert!(!path.exists());
 }
 
 /// One connection to a held seat: send every request, then read every response.
@@ -1161,4 +1203,195 @@ fn a_claimed_path_answers_a_protocol_of_the_games_own_until_its_listener_drops()
     );
     drop(listener);
     assert!(!socket.exists(), "the path goes with its listener");
+}
+
+/// A table that supplies only what needs knowledge of its game: its observation and
+/// revision, its names, its hits, what is unsettled and its admission. The seat answers
+/// its clock, its focus and its keys. Its presentation runs on Bevy's time.
+struct Bare;
+
+impl Game for Bare {
+    fn observe(&self, world: &mut World) -> Observed {
+        Observed {
+            observation: json!({"keys": world.resource::<Table>().keys}),
+            table: Value::Null,
+        }
+    }
+
+    fn revision(&self, world: &mut World) -> u64 {
+        world.resource::<Table>().revision
+    }
+
+    fn resolve(&self, _: &mut World, _: &Name) -> Result<Vec<Vec2>, String> {
+        Err("This table shows nothing.".into())
+    }
+
+    fn identify(&self, _: &mut World, _: Entity) -> Hit {
+        Hit {
+            name: None,
+            description: Value::Null,
+        }
+    }
+
+    fn unsettled(&self, world: &mut World) -> Vec<String> {
+        Plain.unsettled(world)
+    }
+
+    fn admission(&self, world: &World) -> Admission {
+        Plain.admission(world)
+    }
+}
+
+/// [`Bare`] with keys of its own; the seat still answers its focus.
+struct Keyed;
+
+impl Game for Keyed {
+    fn observe(&self, world: &mut World) -> Observed {
+        Bare.observe(world)
+    }
+
+    fn revision(&self, world: &mut World) -> u64 {
+        Bare.revision(world)
+    }
+
+    fn resolve(&self, world: &mut World, name: &Name) -> Result<Vec<Vec2>, String> {
+        Bare.resolve(world, name)
+    }
+
+    fn identify(&self, world: &mut World, entity: Entity) -> Hit {
+        Bare.identify(world, entity)
+    }
+
+    fn unsettled(&self, world: &mut World) -> Vec<String> {
+        Bare.unsettled(world)
+    }
+
+    fn admission(&self, world: &World) -> Admission {
+        Bare.admission(world)
+    }
+
+    fn keys(&self) -> &[SeatKey] {
+        &KEYS
+    }
+}
+
+/// The bare table's presentation: one step of it for each update that Bevy's time moves.
+fn present(time: Res<Time<Real>>, mut table: ResMut<Table>) {
+    if !time.delta().is_zero() {
+        table.presenting = table.presenting.saturating_sub(1);
+    }
+}
+
+/// A table of `game` with no clock of its own, and an agent seated at it.
+fn sit_bare<G: Game>(game: G) -> (App, Seat<G>) {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, InputPlugin))
+        .add_message::<PointerInput>()
+        .init_resource::<HoverMap>()
+        .init_resource::<Table>()
+        .add_systems(Update, (read_keys, present));
+    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    let camera = app.world_mut().spawn(RenderTarget::default()).id();
+    // Bevy's first update only starts its clock, and the seat's opening makes it.
+    app.update();
+    let seat = Seat::new(game, &mut app, camera, None);
+    (app, seat)
+}
+
+#[test]
+fn with_no_clock_of_its_own_a_tables_steps_move_bevys_time_in_place_of_the_wall_clock() {
+    let (mut app, mut seat) = sit_bare(Bare);
+    app.world_mut().resource_mut::<Table>().presenting = 3;
+    // Long enough for a wall clock to be told from the seat's steps.
+    std::thread::sleep(Duration::from_millis(50));
+
+    let (settled, _) = seat.respond(&mut app, r#"{"op":"settle"}"#);
+
+    assert_eq!(settled["status"], "settled", "{settled}");
+    assert_eq!(settled["steps"], 3);
+    assert_eq!(app.world().resource::<Time<Real>>().elapsed(), 3 * STEP);
+}
+
+#[test]
+fn with_no_keys_of_its_own_a_table_lets_the_seat_press_none() {
+    let (mut app, mut seat) = sit_bare(Bare);
+
+    let (refused, _) = seat.respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#);
+
+    assert_eq!(refused["status"], "refused");
+    assert_eq!(refused["error"], "Unknown key \"Tab\". Known keys: .");
+    assert_eq!(app.world().resource::<Table>().keys, Vec::<String>::new());
+}
+
+#[test]
+fn with_no_focus_of_its_own_a_table_has_nothing_focused_for_a_key_that_can_commit() {
+    let (mut app, mut seat) = sit_bare(Keyed);
+
+    let (refused, _) = seat.respond(
+        &mut app,
+        r#"{"op":"key","revision":0,"key":"Enter","focused":"Done"}"#,
+    );
+    let (pressed, _) = seat.respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#);
+
+    assert_eq!(
+        refused["error"],
+        "Enter names \"Done\", but nothing has focus. Nothing was pressed."
+    );
+    assert_eq!(pressed["status"], "pressed", "{pressed}");
+    assert_eq!(pressed["observation"]["keys"], json!(["Tab"]));
+}
+
+#[test]
+fn every_response_states_the_revision_and_what_is_pending_without_the_game() {
+    let (mut app, mut seat) = sit_bare(Bare);
+    {
+        let mut table = app.world_mut().resource_mut::<Table>();
+        table.revision = 7;
+        table.presenting = 2;
+    }
+
+    let (busy, _) = seat.respond(&mut app, r#"{"op":"observe"}"#);
+    let (settled, _) = seat.respond(&mut app, r#"{"op":"settle"}"#);
+
+    assert_eq!(
+        busy,
+        json!({
+            "ok": true, "mode": "seat", "status": "observed",
+            "observation": {"keys": []}, "table": null,
+            "revision": 7, "settled": false, "pending": ["presentation"],
+        })
+    );
+    assert_eq!(settled["revision"], 7);
+    assert_eq!(settled["settled"], true);
+    assert_eq!(settled["pending"], json!([]));
+}
+
+/// A game's admission, as a game's test of that one concern supplies it.
+fn refusing(_: &World) -> Admission {
+    Admission::Refused("No artwork.".into())
+}
+
+#[test]
+fn a_test_of_a_tables_admission_alone_supplies_only_its_admission() {
+    let (mut app, mut seat) = sit_bare(Unshown(refusing));
+
+    let (observed, _) = seat.respond(&mut app, r#"{"op":"observe"}"#);
+    let (activated, _) = seat.respond(
+        &mut app,
+        r#"{"op":"activate","revision":0,"component":"Deck"}"#,
+    );
+
+    assert_eq!(
+        seat.admit(&mut app, Duration::from_secs(30)),
+        Err(Unadmitted::Refused("No artwork.".into()))
+    );
+    assert_eq!(
+        observed,
+        json!({
+            "ok": true, "mode": "seat", "status": "observed",
+            "observation": null, "table": null,
+            "revision": 0, "settled": true, "pending": [],
+        })
+    );
+    assert_eq!(activated["error"], "component Deck is not shown.");
 }

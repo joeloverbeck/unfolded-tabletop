@@ -25,7 +25,7 @@ use std::{
 use unfolded_tabletop::{
     capture,
     seat::{
-        Admission, Focus, Game, Hit, Name, Observed, SeatKey,
+        Admission, Game, Hit, Name, Observed,
         start::{ADMISSION, IDLE, Start, Table},
     },
 };
@@ -77,26 +77,12 @@ impl Game for Empty {
         }
     }
 
-    fn focus(&self, _: &mut World) -> Focus {
-        Focus::Nothing
-    }
-
     fn unsettled(&self, _: &mut World) -> Vec<String> {
         Vec::new()
     }
 
-    fn advance(&self, _: &mut World, _: Duration) {}
-
     fn admission(&self, world: &World) -> Admission {
         world.resource::<Admitting>().0.clone()
-    }
-
-    fn pipelines_ready(&self, _: &World) -> bool {
-        true
-    }
-
-    fn keys(&self) -> &[SeatKey] {
-        &[]
     }
 }
 
