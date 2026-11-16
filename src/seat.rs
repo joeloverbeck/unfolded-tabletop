@@ -9,7 +9,8 @@
 //! otherwise nothing has focus, the seat's steps move Bevy's manual time and no key may
 //! be pressed. The seat decides itself whether the render pipelines are ready before a
 //! capture ([`capture::Pipelines`]), and every response of a seated table states the
-//! revision, whether it is settled and what is pending. The table's surface and the capture of its image
+//! revision, whether it is settled and what is pending. The table's surface, and the
+//! loop that waits for it to be ready and captures its image ([`capture::when_ready`]),
 //! come from [`crate::capture`].
 //!
 //! Each game keeps its policy in its adapter: what it observes and names, the keys
@@ -51,7 +52,7 @@
 //! that is the game's production code. The seat never triggers observers, queues table
 //! actions or calls handlers.
 
-use crate::capture::{self, Failure, Pipelines, Surface};
+use crate::capture::{self, Missed, Pipelines, Surface};
 use bevy::{
     app::AppExit,
     camera::RenderTarget,
@@ -418,7 +419,6 @@ pub struct SeatedAgent;
 pub struct Seat<G> {
     game: G,
     camera: Entity,
-    pipelines: Pipelines,
     image: Option<Handle<Image>>,
     exit: Option<AppExit>,
 }
@@ -428,10 +428,12 @@ impl<G: Game> Seat<G> {
     /// (the no-GPU test host) every operation but `capture` is available.
     pub fn new(game: G, app: &mut App, camera: Entity, image: Option<Handle<Image>>) -> Self {
         app.insert_resource(SeatedAgent);
+        // The host's finding, or a ready one where nothing renders, for a stand-in
+        // renderer to report through.
+        Pipelines::of(app);
         Self {
             game,
             camera,
-            pipelines: Pipelines::of(app),
             image,
             exit: None,
         }
@@ -455,13 +457,7 @@ impl<G: Game> Seat<G> {
     /// Advance the table's clock by `advance` and run one update. Returns false once
     /// the table has asked to exit.
     fn step(&mut self, app: &mut App, advance: Duration) -> bool {
-        if self.exit.is_some() {
-            return false;
-        }
-        self.game.advance(app.world_mut(), advance);
-        app.update();
-        self.exit = app.should_exit();
-        self.exit.is_none()
+        step(&self.game, &mut self.exit, app, advance)
     }
 
     /// Step in wall-clock time until the game admits the table, which can wait on
@@ -1022,38 +1018,32 @@ impl<G: Game> Seat<G> {
         {
             return self.refused(app, format!("Cannot create {}: {error}", parent.display()));
         }
-        let deadline = Instant::now() + CAPTURE_LIMIT;
-        // Frozen updates draw anything the last request changed. The readiness flag
-        // trails the renderer by a frame, so require it on two consecutive frames.
-        let mut ready = 0;
-        while ready < 2 {
-            if Instant::now() >= deadline || !self.step(app, Duration::ZERO) {
-                return self.refused(app, "Render pipelines did not become ready.".into());
-            }
-            #[allow(deprecated)]
-            let ready_for_game = self.game.pipelines_ready(app.world());
-            if self.pipelines.ready() && ready_for_game {
-                ready += 1;
-            } else {
-                ready = 0;
-                std::thread::sleep(Duration::from_millis(2));
-            }
-        }
-        // The shared capture steps the seat's frozen clock until the file is written,
-        // inside the limit the readiness wait began.
-        let captured = capture::image_to_file(app, image, path, deadline, |app| {
-            self.step(app, Duration::ZERO)
-        });
+        // Frozen updates draw anything the last request changed. The shared loop waits
+        // for the render pipelines, and for a game that still answers the deprecated
+        // `pipelines_ready`, then steps the seat's frozen clock until the file is written.
+        let Self { game, exit, .. } = self;
+        #[allow(deprecated)]
+        let captured = capture::when_ready(
+            app,
+            image,
+            path,
+            Instant::now() + CAPTURE_LIMIT,
+            |world| game.pipelines_ready(world),
+            |app| step(game, exit, app, Duration::ZERO),
+        );
         match captured {
             Ok(()) => {
                 let mut response = self.response(app, Status::Captured, None);
                 response.json["path"] = json!(path);
                 response
             }
-            Err(Failure::Unsaved(error)) => {
+            Err(Missed::Unready(_)) => {
+                self.refused(app, "Render pipelines did not become ready.".into())
+            }
+            Err(Missed::Unsaved(error)) => {
                 self.refused(app, format!("Cannot save the capture: {error}"))
             }
-            Err(Failure::Incomplete) => self.refused(
+            Err(Missed::Incomplete(_)) => self.refused(
                 app,
                 format!(
                     "The capture did not complete within {} seconds; no file was written.",
@@ -1062,6 +1052,18 @@ impl<G: Game> Seat<G> {
             ),
         }
     }
+}
+
+/// Advance the table's clock by `advance` and run one update. Returns false once the
+/// table has asked to exit, and from then on.
+fn step<G: Game>(game: &G, exit: &mut Option<AppExit>, app: &mut App, advance: Duration) -> bool {
+    if exit.is_some() {
+        return false;
+    }
+    game.advance(app.world_mut(), advance);
+    app.update();
+    *exit = app.should_exit();
+    exit.is_none()
 }
 
 /// Where the pointer came to rest on a named target.

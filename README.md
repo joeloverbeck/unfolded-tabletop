@@ -24,7 +24,7 @@ terms used here.
 | `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |
 | `unfolded-dev-tools` | Bounded context readers, a recorder for checks, and the `compare-captures` tool | never |
 | `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow, gathering its own input | Bevy 0.20.0 |
-| `unfolded-tabletop::capture`, feature `render` | Writing a captured picture, and a windowless surface whose image can be captured | Bevy 0.20.0 |
+| `unfolded-tabletop::capture`, feature `render` | A host's plugins with no window, a surface every marked camera renders to, and one capture that waits until the table is ready | Bevy 0.20.0 |
 | `unfolded-tabletop::card`, feature `render` | Rounded physical-card meshes: face, body and outline | Bevy 0.20.0 |
 | `unfolded-tabletop::token`, feature `render` | Solid token bodies with a textured face | Bevy 0.20.0 |
 | `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |
