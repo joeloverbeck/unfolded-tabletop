@@ -117,7 +117,8 @@ pub fn archives(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 pub enum Error {
     /// The record, or the candidate to be written, exceeds the caller's limit.
     TooLarge,
-    /// Another writer holds the lock. The cause is the operating system's.
+    /// The lock could not be taken: another writer holds it, of kind `WouldBlock`, or
+    /// the operating system failed. The words are the lock's own.
     Busy(std::io::Error),
     /// The destination is a link, directory or other non-regular file.
     NotRegularFile,
@@ -136,10 +137,12 @@ impl fmt::Display for Error {
     }
 }
 
+/// Each cause that carries an error already says it, so only that error's own
+/// source is passed on.
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Busy(cause) | Self::Io(cause) => Some(cause),
+            Self::Busy(cause) | Self::Io(cause) => cause.source(),
             Self::TooLarge | Self::NotRegularFile => None,
         }
     }
@@ -212,15 +215,13 @@ pub fn replace<E: From<Error>>(
         .open(lock_path(path))
         .map_err(Error::Io)?;
     lock.try_lock().map_err(|cause| {
-        // Keep the lock's own wording, which reads differently from a bare
-        // `WouldBlock`.
+        // Keep the lock's own words, with the kind of error underneath them.
         let words = cause.to_string();
-        Error::Busy(match cause {
-            fs::TryLockError::Error(cause) => cause,
-            fs::TryLockError::WouldBlock => {
-                std::io::Error::new(std::io::ErrorKind::WouldBlock, words)
-            }
-        })
+        let kind = match cause {
+            fs::TryLockError::Error(cause) => cause.kind(),
+            fs::TryLockError::WouldBlock => std::io::ErrorKind::WouldBlock,
+        };
+        Error::Busy(std::io::Error::new(kind, words))
     })?;
     let _lock = ReplacementLock(lock);
     let existing = match fs::symlink_metadata(path) {

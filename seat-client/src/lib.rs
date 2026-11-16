@@ -120,6 +120,7 @@ impl fmt::Display for Ended {
 /// Why a whole exchange ended before every answer was read. `E` is the caller's
 /// check's own error.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Unsent<E> {
     /// The caller's check ended the exchange, with its error.
     Stopped(E),
@@ -146,7 +147,9 @@ impl<E: fmt::Debug + fmt::Display> Error for Unsent<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Stopped(_) => None,
-            Self::Unreadable(error) | Self::Unwritten(error) | Self::Unwoken(error) => Some(error),
+            // Its text does not say the read's error; the others' texts do.
+            Self::Unreadable(error) => Some(error),
+            Self::Unwritten(error) | Self::Unwoken(error) => error.source(),
         }
     }
 }

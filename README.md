@@ -95,10 +95,13 @@ A mechanism's failure names its cause as data, and the words are yours:
   the mechanism's causes reach it through `From`. Where you supply the words, as
   in `save::Format::validate` or `Admission::Refused`, they come back unchanged.
 
-The seat's start and serving calls (`seat::start`, `Seat::open`, `Seat::serve`
-and the `socket` launch calls) still return text: the `refused` start line's
-error, or your table's exit reason. `unfolded-dev-tools` reports to the person
-running a tool.
+Some calls still return text:
+- the seat's start and serving calls (`seat::start`, `Seat::open`, `Seat::serve`
+  and the `socket` launch calls): the `refused` start line's error, or your
+  table's exit reason;
+- `loading::required_assets`, whose failures and pending assets are lines.
+
+`unfolded-dev-tools` reports to the person running a tool.
 
 ## Tools
 

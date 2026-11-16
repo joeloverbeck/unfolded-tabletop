@@ -4,7 +4,8 @@
 //! Consumers own which assets they require and what a missing or changed one means.
 //!
 //! Every function here refuses with an [`Error`]: its [`Cause`] as data, and the
-//! path it concerns. Its `Display` gives the default wording, which names no path.
+//! path it concerns. Its `Display` gives the default wording, which names no path
+//! except the output a publication refused.
 use sha2::{Digest, Sha256};
 use std::{
     fmt, fs, io,
@@ -60,6 +61,7 @@ impl fmt::Display for Error {
     }
 }
 
+/// The cause's text is this error's, so only the cause's own source is passed on.
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.cause.source()
@@ -138,10 +140,12 @@ impl fmt::Display for Cause {
     }
 }
 
+/// A cause that carries an error already says it, so only that error's own source
+/// is passed on.
 impl std::error::Error for Cause {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unpublished(error) | Self::Io(error) => Some(error),
+            Self::Unpublished(error) | Self::Io(error) => error.source(),
             _ => None,
         }
     }
@@ -207,8 +211,8 @@ pub fn relative_path(value: &str) -> Result<&Path, Error> {
 }
 
 /// The asset at `relative` under `root`, when it and every directory above it is
-/// regular, with no symbolic link. A refusal concerns the asset's whole path, or
-/// the root when the root is refused.
+/// regular, with no symbolic link. A refusal concerns the asset's whole path, the
+/// root when the root is refused, or `relative` as given when it is not relative.
 pub fn regular_file(root: &Path, relative: &str) -> Result<PathBuf, Error> {
     let at_root = |cause: Cause| Error::at(root, cause);
     if !fs::symlink_metadata(root)
@@ -263,8 +267,8 @@ pub fn verify_bytes(bytes: &[u8], expected_length: u64, expected_hash: &str) -> 
 }
 
 /// The asset at `path` under `root`, read as [`regular_file`] admits it, refused
-/// unless its length and SHA-256 are the selected asset's. Every refusal concerns
-/// the asset's whole path, or the root when the root is refused.
+/// unless its length and SHA-256 are the selected asset's. A refusal concerns what
+/// [`regular_file`]'s would, and the asset's whole path after that.
 pub fn read_verified(root: &Path, path: &str, length: u64, hash: &str) -> Result<Vec<u8>, Error> {
     let path = regular_file(root, path)?;
     if fs::metadata(&path)

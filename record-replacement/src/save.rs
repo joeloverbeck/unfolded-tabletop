@@ -212,7 +212,8 @@ pub enum Error {
     Orphaned,
     /// A recovery destination is the source record or its `.previous`.
     SameRecord,
-    /// Another writer holds the lock. The cause is the operating system's.
+    /// The lock could not be taken, as for the record's
+    /// [`Error::Busy`](crate::Error::Busy).
     Busy(io::Error),
     /// A record, or the payload to be written, exceeds the format's limit.
     TooLarge,
@@ -248,7 +249,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Busy(cause) | Self::Io(cause) => Some(cause),
+            Self::Busy(cause) | Self::Io(cause) => cause.source(),
             _ => None,
         }
     }

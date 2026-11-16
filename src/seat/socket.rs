@@ -112,6 +112,7 @@ impl std::fmt::Display for Unclaimed {
     }
 }
 
+/// The cause's text is this error's, so only the cause's own source is passed on.
 impl std::error::Error for Unclaimed {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.cause.source()
@@ -171,13 +172,15 @@ impl std::fmt::Display for Unclaimable {
     }
 }
 
+/// A cause that carries an error already says it, so only that error's own source
+/// is passed on.
 impl std::error::Error for Unclaimable {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unlocked(error)
             | Self::Leftover(error)
             | Self::Unknown(error)
-            | Self::Io(error) => Some(error),
+            | Self::Io(error) => error.source(),
             Self::TooLong | Self::NoDirectory | Self::Answered | Self::NotSocket | Self::Exists => {
                 None
             }

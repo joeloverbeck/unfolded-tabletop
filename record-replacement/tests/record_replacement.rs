@@ -345,7 +345,12 @@ fn competing_lock_refuses_and_release_rechecks_the_current_record() {
         matches!(&busy, record::Error::Busy(cause) if cause.kind() == ErrorKind::WouldBlock),
         "{busy:?}"
     );
-    assert!(busy.to_string().starts_with("The record is busy: "));
+    // The lock's own words (std's `TryLockError`), said once: no source repeats them.
+    assert_eq!(
+        busy.to_string(),
+        "The record is busy: lock acquisition failed because the operation would block"
+    );
+    assert!(std::error::Error::source(&busy).is_none());
     assert_eq!(fs::read(&path).unwrap(), b"original");
     assert_eq!(fs::read(previous_path(&path)).unwrap(), b"original");
     // A cooperating holder changes the active bytes before releasing the actual
