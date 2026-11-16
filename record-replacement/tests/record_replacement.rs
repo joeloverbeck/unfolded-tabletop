@@ -11,6 +11,8 @@ use unfolded_record_replacement::{Replacement, previous_path, read, replace};
 
 const LIMIT_ERROR: &str = "This file exceeds the bounded experiment's record limit.";
 
+// `archives` and `lock_path` build the names by hand: they are the oracle for
+// the public `archives` and `lock_path`, checked at the end of this file.
 fn archives(path: &Path) -> Vec<PathBuf> {
     let prefix = format!("{}.archived-", path.file_name().unwrap().to_string_lossy());
     let mut paths: Vec<_> = fs::read_dir(path.parent().unwrap())
@@ -433,4 +435,53 @@ fn recovery_install_failure_cleans_staging_and_retains_only_a_restart_archive() 
         install(&path, b"recovered", || Replacement::Replace).unwrap();
         assert_eq!(fs::read(&previous).unwrap(), b"original");
     }
+}
+
+#[test]
+fn the_public_names_are_the_lock_previous_and_archives_replace_leaves() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("attempt.json");
+    assert_eq!(
+        unfolded_record_replacement::archives(&path).unwrap(),
+        Vec::<PathBuf>::new()
+    );
+    install(&path, b"first", || Replacement::Replace).unwrap();
+    let archive = install(&path, b"second", || Replacement::Archive)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        unfolded_record_replacement::lock_path(&path),
+        dir.path().join("attempt.json.lock")
+    );
+    assert!(lock_path(&path).is_file());
+    assert_eq!(
+        previous_path(&path),
+        dir.path().join("attempt.json.previous")
+    );
+    assert_eq!(
+        unfolded_record_replacement::archives(&path).unwrap(),
+        vec![archive]
+    );
+    assert_eq!(
+        unfolded_record_replacement::archives(&path).unwrap(),
+        archives(&path)
+    );
+    // Another record's archive in the same directory is not this one's.
+    install(&dir.path().join("attempt.json2"), b"x", || {
+        Replacement::Replace
+    })
+    .unwrap();
+    install(&dir.path().join("attempt.json2"), b"y", || {
+        Replacement::Archive
+    })
+    .unwrap();
+    assert_eq!(
+        unfolded_record_replacement::archives(&path).unwrap().len(),
+        1
+    );
+    assert!(
+        unfolded_record_replacement::archives(&dir.path().join("absent").join("x.json"))
+            .unwrap()
+            .is_empty()
+    );
 }

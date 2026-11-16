@@ -6,6 +6,8 @@ What a consumer needs to know when it moves its pin. Each entry names the issue 
 
 ## Unreleased
 
+- **Breaking:** `unfolded_record_replacement::save` owns a game's save record: its envelope, checksum, write baseline, unchanged shortcut, previous-record validation and recovery. To adopt it, implement `save::Format` (payload, identity, accepted identities, validity, limit), choose a `save::Write` for each write, word each `save::Error`, and delete your own envelope. Your saved format changes with it: saves written before it are refused and left on disk, and nothing migrates them. `replace`, `read` and `previous_path` are unchanged; `lock_path` and `archives` name the lock and restart archives, so tests need not spell them (#36).
+
 - Deprecated `count_label`, and the seat client's `connect`, `exchange` and `read_line`, which no current consumer calls. They still work. Use `label_anchor::LabelAnchor` on a node of your own, and `Connection::open`, `Connection::send` and `Connection::request` (#56).
 - `held-start --help` and `compare-captures --help` describe each tool in full (#56).
 
