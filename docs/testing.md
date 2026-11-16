@@ -14,7 +14,7 @@ The tests need no graphics adapter, desktop, game assets or sibling checkout. Ru
 - **Bounded builds.** `.cargo/config.toml` sets four jobs and no debug info for every Cargo command run here, since unbounded parallel links of the Bevy test executables can exhaust a session's memory. The environment may override them; CI sets two jobs.
 - **ptrace.** `record-replacement/tests/record_replacement_trace.rs` traces its own child's renames. Ordinary Linux hosts and GitHub's Ubuntu runners allow it; a container that forbids ptrace fails it.
 - **Unix-domain sockets** under the system's temporary directory, whose path must leave each socket within 107 bytes: `tests/seat.rs`, `tests/seat_start.rs`, `seat-client/tests/seat_client.rs` and `seat-client/tests/held_start.rs` listen on them, and the last two of those also start child processes.
-- **`git`**: `dev-tools/tests/cli` needs it to build a repository for the recorder's source fingerprints. `seat-client/tests/held_start.rs` needs it to build a repository for `--clean`.
+- **`git`**: `dev-tools/tests/cli` needs it to build a repository for the recorder's source fingerprints. `seat-client/tests/held_start.rs` needs it to build a repository for `--clean`, and `dev-tools/tests/move_pin.rs` to build the checkouts whose pins it moves.
 - **Linux's `/proc`, `sh` and `sleep`**: `dev-tools/tests/process.rs` starts its children with `sh` and `sleep`, and the process support it tests reads `/proc`.
 
 `tests/seat.rs` takes about 30 seconds: one case waits out the capture limit for pipelines that are never ready.

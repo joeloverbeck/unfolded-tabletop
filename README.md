@@ -82,7 +82,7 @@ continuity.
 
 ## Tools
 
-Both tools run from a checkout of this repository, and a game need not pin them.
+These tools run from a checkout of this repository, and a game need not pin them.
 Run either with `--help` for its full description.
 
 - **`held-start`** records one held start of a game's agent seat as pull-request
@@ -100,6 +100,14 @@ Run either with `--help` for its full description.
   ```sh
   cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools --bin compare-captures -- \
     <before.png> <after.png> [--ignore x,y,width,height] [--threshold <level>] [--limit <count>]
+  ```
+
+- **`move-pin`** moves every pin of this repository in a game's checkout to one
+  revision and refreshes its lockfiles:
+
+  ```sh
+  cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools --bin move-pin -- \
+    <game checkout> <full commit hash>
   ```
 
 ## Working on this repository

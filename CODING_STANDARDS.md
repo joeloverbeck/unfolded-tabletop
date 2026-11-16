@@ -14,6 +14,10 @@ These are the review rules for this repository. They are judgement calls that no
 - **README is a consumer's front door.** It changes only when what a consumer does to adopt, pin or run something changes. A new mechanism adds one row to its Mechanisms table. Everything else has one home: a mechanism's contract, what it leaves to the consumer and what no test holds go in its rustdoc; what a consumer must do when moving its pin goes in `CHANGELOG.md`; a mechanism's origin and coordinating issues go in `docs/provenance.md`; its evidence boundary goes in `docs/governance.md`; a test's host requirements go in `docs/testing.md`; a tool's full behaviour goes in its `--help`. Flag a README passage that explains how a mechanism works, records history, or lists what tests hold.
 - **Changelog entries.** A change a consumer can see (a new or changed public item, a deprecation, a changed wire, number or wording) adds one entry under `CHANGELOG.md`'s "Unreleased", naming its issue, and marks it **Breaking** when it can stop a consumer building or change what its game does.
 
+## Consumers
+
+- **Newly derived facts.** When a mechanism starts deriving a fact that a consumer used to supply itself, or never had, the pull request names each consumer that gains the fact and what in that consumer it now covers. Search each consumer for the entities the fact matches, such as pickable UI nodes for "pointer over UI", and flag a consumer whose behaviour changes unnamed.
+
 ## Bevy
 
 - **Sub-apps at build time.** Code that adds to a sub-app (the render world, its extract) adds it while the app is built: in a plugin's `build`, or in a function a game calls before `finish`. `PipelinedRenderingPlugin::cleanup` moves the `RenderApp` to a thread of its own, so after `finish` and `cleanup` the app has no render sub-app, and code that looks for one silently finds none. Only Arkham's seat keeps pipelined rendering (`docs/agents/consumers.md`), so only its run exercises that case.
