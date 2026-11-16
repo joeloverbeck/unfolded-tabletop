@@ -8,6 +8,10 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **Rewriting an adapter.** List the old file's user-facing strings (`git show main:<file> | grep -oE '"[A-Z][^"]+ [^"]+"'`) and account for each one in the pull request: kept, moved, or changed and why.
 
+**Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted.
+
+**Native inspection.** The seat presses keys and sends picking pointer events, but not the mouse buttons and wheel the table camera reads. Until #63 lands, right-drag orbit and wheel zoom in a real window need a person at it: name that inspection the owner's in a game's issue, and record in its pull request whether it was done.
+
 **Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision and whether its tree is clean:
 
 ```sh
