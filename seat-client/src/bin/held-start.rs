@@ -18,8 +18,7 @@ use unfolded_seat_protocol::{Request, Status};
 const SOCKET_REMOVAL: Duration = Duration::from_secs(10);
 /// How long one response may take once the seat has been admitted.
 const RESPONSE: Duration = Duration::from_secs(180);
-const USAGE: &str =
-    "usage: held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
+const USAGE: &str = "usage: held-start [--clean] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
 /// What `--help` prints after the usage: everything a caller needs to read a record.
 const HELP: &str = "\
 Record one held start of a game's agent seat as evidence for a pull request. Run it
@@ -51,8 +50,11 @@ Before anything is launched it refuses: a line that is no seat request, a `quit`
 sends its own), a capture path that is not a plain file name, a name it writes itself
 (record, stdout, stderr, seat.log, sock, sock.log), two captures to one file, a capture
 whose file exists, and a case already recorded in <out-dir>, so a later run cannot
-replace an earlier one. Record a \"before\" case before changing the game, and compare
-the captures with `compare-captures`.
+replace an earlier one. With --clean it also refuses a working directory that is not
+a Git working tree, or whose tracked files differ from its revision.
+
+Record a \"before\" case with --clean, from the game's `main`, before changing the
+game, and compare the captures with `compare-captures`.
 
 Exit status: 0 once the record is written, whatever the start did; 2 when no record
 could be made.
@@ -88,11 +90,19 @@ fn main() -> ExitCode {
 
 fn run(mut arguments: &[String]) -> Result<String> {
     let mut lines = Vec::new();
-    while let [flag, line, rest @ ..] = arguments
-        && flag == "--request"
-    {
-        lines.push(line);
-        arguments = rest;
+    let mut clean = false;
+    loop {
+        match arguments {
+            [flag, rest @ ..] if flag == "--clean" => {
+                clean = true;
+                arguments = rest;
+            }
+            [flag, line, rest @ ..] if flag == "--request" => {
+                lines.push(line);
+                arguments = rest;
+            }
+            _ => break,
+        }
     }
     let [out, case, separator, program, rest @ ..] = arguments else {
         bail!(USAGE);
@@ -116,6 +126,11 @@ fn run(mut arguments: &[String]) -> Result<String> {
         );
     }
     let extras = extras(&lines, case, &out)?;
+    let directory = std::env::current_dir().context("cannot read the working directory")?;
+    let (revision, tree) = revision(&directory);
+    if clean && tree != Tree::Clean {
+        bail!("--clean: {revision}");
+    }
     let socket = file(".sock");
     let mut record = String::new();
     let line = |record: &mut String, key: &str, value: &dyn std::fmt::Display| {
@@ -134,9 +149,8 @@ fn run(mut arguments: &[String]) -> Result<String> {
             shown(&socket.display().to_string())
         ),
     );
-    let directory = std::env::current_dir().context("cannot read the working directory")?;
     line(&mut record, "working directory", &directory.display());
-    line(&mut record, "revision", &revision(&directory));
+    line(&mut record, "revision", &revision);
 
     let status = Command::new(program)
         .args(rest)
@@ -190,9 +204,17 @@ fn run(mut arguments: &[String]) -> Result<String> {
     Ok(record)
 }
 
+/// Whether a working tree's tracked files match its revision.
+#[derive(PartialEq)]
+enum Tree {
+    Clean,
+    Changed,
+    Absent,
+}
+
 /// The working directory's Git revision and whether its tree is clean, or why there
 /// is none.
-fn revision(directory: &Path) -> String {
+fn revision(directory: &Path) -> (String, Tree) {
     let git = |arguments: &[&str]| {
         Command::new("git")
             .arg("-C")
@@ -210,14 +232,14 @@ fn revision(directory: &Path) -> String {
     ) {
         (Some(head), Some(changes)) => {
             let changed = changes.lines().count();
-            let tree = if changed == 0 {
-                "clean".to_owned()
+            let (words, tree) = if changed == 0 {
+                ("clean".to_owned(), Tree::Clean)
             } else {
-                format!("{changed} changed tracked files")
+                (format!("{changed} changed tracked files"), Tree::Changed)
             };
-            format!("{} ({tree})", head.trim())
+            (format!("{} ({words})", head.trim()), tree)
         }
-        _ => "none: not a Git working tree".to_owned(),
+        _ => ("none: not a Git working tree".to_owned(), Tree::Absent),
     }
 }
 
