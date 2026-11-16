@@ -4,7 +4,12 @@
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use image::RgbaImage;
-use std::{fmt, path::PathBuf, process::ExitCode, str::FromStr};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    process::ExitCode,
+    str::FromStr,
+};
 
 /// What `--help` prints above the options.
 const ABOUT: &str = "\
@@ -15,6 +20,11 @@ exceeds the threshold. Pixels inside the ignored rectangle are left out. It prin
 options, the count of differing pixels, the largest difference outside the ignored
 rectangle and the box around the differing pixels, written as x,y,width,height so it
 can be handed back as --ignore.
+
+When each picture sits beside the `held-start` record of its case (`<case>.record`
+for `<case>.<name>`), and both records name their executable's SHA-256, it also says
+whether the executables were the same. Two captures from one executable cannot show
+a change between builds, however they compare.
 
 Exit status: 0 when the count is within the limit, 1 when it exceeds it, and 2 on an
 error: an unreadable file, one whose contents are not PNG, pictures of different sizes
@@ -169,7 +179,33 @@ fn compare(args: &Args) -> Result<u64> {
         Some(bounds) => println!("bounding box: {bounds}"),
         None => println!("bounding box: none"),
     }
+    if let (Some(before), Some(after)) = (built(&args.before), built(&args.after)) {
+        if before == after {
+            println!(
+                "executables: the same, sha256 {before}; these captures cannot show a change between builds"
+            );
+        } else {
+            println!("executables: different");
+        }
+    }
     Ok(count)
+}
+
+/// The SHA-256 of the executable that made a capture, from the `held-start` record
+/// of its case: `<case>.record` beside `<case>.<name>`, the longest such case first.
+fn built(capture: &Path) -> Option<String> {
+    let directory = capture.parent()?;
+    let name = capture.file_name()?.to_str()?;
+    let record = name
+        .match_indices('.')
+        .rev()
+        .map(|(end, _)| directory.join(format!("{}.record", &name[..end])))
+        .find(|record| record.is_file())?;
+    let text = std::fs::read_to_string(record).ok()?;
+    text.lines()
+        .find_map(|line| line.strip_prefix("executable: "))
+        .and_then(|executable| executable.rsplit_once(" sha256 "))
+        .map(|(_, digest)| digest.to_owned())
 }
 
 fn picture(path: &PathBuf) -> Result<RgbaImage> {

@@ -8,11 +8,11 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **Rewriting an adapter.** List the old file's user-facing strings (`git show main:<file> | grep -oE '"[A-Z][^"]+ [^"]+"'`) and account for each one in the pull request: kept, moved, or changed and why.
 
-**Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted.
+**Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted. When a manifest was left behind at an earlier move, it refuses and names each pin; `--align` moves them all.
 
 **Native inspection.** The seat presses keys and sends picking pointer events, but not the mouse buttons and wheel the table camera reads. Until #63 lands, right-drag orbit and wheel zoom in a real window need a person at it: name that inspection the owner's in a game's issue, and record in its pull request whether it was done.
 
-**Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision and whether its tree is clean:
+**Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision, whether its tree is clean, and the SHA-256 of the executable that ran. `compare-captures` reads both records and says when the two captures came from one executable, which cannot show a change:
 
 ```sh
 cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \
@@ -28,6 +28,7 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **Seat host:** keeps Bevy's pipelined rendering. A change to the render world is exercised only here.
 - **Verify:** `scripts/check`. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
 - **Held capture:** requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/arkham-tabletop --experiment gathering --agent-seat --save <fresh path>`. Two starts of the unchanged table differed in about 200 pixels by at most 3 levels, so compare with `--threshold 3`. Batch form, with `capture` and `quit` requests on standard input, still works.
+- **One-shot capture:** the ignored art test captures the pouch through `capture::when_ready`. Name the test after `--`, not before it, and set `ARKHAM_POUCH_RENDER_DIR` to a directory that does not exist yet, which the test creates: `ARKHAM_GATHERING_TEST_ASSETS=<collection> ARKHAM_POUCH_RENDER_DIR=<new dir> scripts/dev cargo test --locked --features tabletop --lib -- --ignored --exact gathering_tabletop::art::tests::real_collection_loads_every_verified_image_font_and_pouch`.
 - **Merge:** after CI's "Rust checks" passes, use `scripts/tools merge-reviewed --pr <n> --head <sha> --base <main sha>`. Auto-close is off. Close an accepted issue with `scripts/tools publish comment --issue <n> --body-file <f> --close` (`docs/agents/github-administration.md`).
 - **Public text:** issues, comments and PR bodies go through `scripts/tools publish` (`issue`, `comment`, `pr-body`), whose preflight refuses private path forms. Name an evidence file by its case or file name, never by a `local/…` path.
 - **Work-item limit:** none of its own.

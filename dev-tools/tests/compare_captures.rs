@@ -191,3 +191,61 @@ fn help_names_the_exit_statuses() {
     );
     assert!(text.contains("--threshold <THRESHOLD>"), "{text}");
 }
+
+/// Two captures as `held-start` writes them, `before.table.png` and `after.table.png`,
+/// each beside its case's record naming the executable that made it.
+fn compare_recorded(before_executable: &str, after_executable: &str) -> Run {
+    let directory = tempfile::tempdir().unwrap();
+    for (case, executable) in [("before", before_executable), ("after", after_executable)] {
+        plain()
+            .save(directory.path().join(format!("{case}.table.png")))
+            .unwrap();
+        std::fs::write(
+            directory.path().join(format!("{case}.record")),
+            format!("command: game --socket x\n{executable}\nfirst status: ready\n"),
+        )
+        .unwrap();
+    }
+    run_on(
+        &directory.path().join("before.table.png"),
+        &directory.path().join("after.table.png"),
+        &[],
+    )
+}
+
+const ONE: &str = "executable: /games/one sha256 1111111111111111111111111111111111111111111111111111111111111111";
+const TWO: &str = "executable: /games/two sha256 2222222222222222222222222222222222222222222222222222222222222222";
+
+#[test]
+fn captures_recorded_from_one_executable_are_said_to_show_no_change_between_builds() {
+    let run = compare_recorded(ONE, ONE);
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+    assert!(
+        run.stdout.ends_with(
+            "executables: the same, sha256 1111111111111111111111111111111111111111111111111111111111111111; \
+             these captures cannot show a change between builds\n"
+        ),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn captures_recorded_from_different_executables_say_so() {
+    let run = compare_recorded(ONE, TWO);
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+    assert!(
+        run.stdout
+            .ends_with("bounding box: none\nexecutables: different\n"),
+        "{}",
+        run.stdout
+    );
+
+    // A record from before executables were recorded says nothing of them.
+    let run = compare_recorded(ONE, "revision: none");
+    assert!(
+        run.stdout.ends_with("bounding box: none\n"),
+        "{}",
+        run.stdout
+    );
+}
