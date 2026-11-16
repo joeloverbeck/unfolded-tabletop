@@ -1,0 +1,12 @@
+# Bounded builds for every Cargo command run here, not only `scripts/check`'s:
+# unbounded parallel links of the Bevy test executables with debug info can exhaust
+# an agent session's memory scope (8 GB). The environment overrides these; CI sets
+# two jobs. A game that depends on this repository does not read this file.
+[build]
+jobs = 4
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

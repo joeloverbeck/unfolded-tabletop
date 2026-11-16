@@ -5,7 +5,8 @@
 //! ```
 //!
 //! It runs the command with `--socket <out-dir>/<case>.sock` appended, as an agent's
-//! shell would, and keeps what a reviewer needs to check a claim about that start:
+//! shell would, with `<out-dir>` made absolute, and keeps what a reviewer needs to check
+//! a claim about that start:
 //! `<case>.stdout` and `<case>.stderr`, the seat's log as `<case>.seat.log`, and
 //! `<case>.record`. The record names the command, the working directory and its Git
 //! revision, the launching command's exit status, its stdout line count and first
@@ -53,8 +54,10 @@ fn run(arguments: &[String]) -> Result<String> {
     if case.is_empty() || case.contains('/') {
         bail!("the case {case:?} must be a plain file name");
     }
-    let out = Path::new(out);
-    fs::create_dir_all(out).with_context(|| format!("cannot create {}", out.display()))?;
+    // A game may refuse a relative socket path, as Arkham does, so every path is absolute.
+    let out = std::path::absolute(out)
+        .with_context(|| format!("cannot find the absolute path of {out}"))?;
+    fs::create_dir_all(&out).with_context(|| format!("cannot create {}", out.display()))?;
     let file = |suffix: &str| out.join(format!("{case}{suffix}"));
     let record_path = file(".record");
     if record_path.exists() {

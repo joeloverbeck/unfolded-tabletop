@@ -68,3 +68,7 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context: root `GLOSSARY.md` plus `docs/adr/`, created lazily. See `docs/agents/domain.md`.
+
+## Constitution rules
+
+Read a rule by ID with `scripts/rule <ID>...` (for example `scripts/rule BOUND-2 INT-1`): its exact current text, under the revision a quotation names.

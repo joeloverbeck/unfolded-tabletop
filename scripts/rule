@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Print the current text of constitution rules by ID, after the revision they belong
+# to, so a reading or a brief can quote them exactly:
+#
+#   scripts/rule BOUND-2 EVID-6 INT-1
+#
+# It searches the core and every module in docs/principles/, and fails on an ID
+# none of them holds.
+set -euo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+if [[ $# -eq 0 ]]; then
+  echo "usage: scripts/rule <ID>... (such as BOUND-2 INT-1)" >&2
+  exit 2
+fi
+grep -m1 '^\*\*Constitution revision:\*\*' docs/principles/principles-for-repos.md
+missing=0
+for id in "$@"; do
+  # A rule runs from its own heading to the next heading of any level.
+  text=$(awk -v heading="### $id " '
+    index($0, heading) == 1 { found = 1; print; next }
+    found && /^#+ / { exit }
+    found { print }
+  ' docs/principles/*.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+  if [[ -z $text ]]; then
+    echo "error: no rule $id in docs/principles" >&2
+    missing=1
+    continue
+  fi
+  printf '\n%s\n' "$text"
+done
+exit "$missing"
