@@ -1,6 +1,6 @@
 # Shared tabletop candidate
 
-Read `README.md` before work. Issues in this repository own current work; the
+Read `README.md`'s opening and its Contents before work, then the sections the work touches. Issues in this repository own current work; the
 original coordinated extraction is recorded in
 https://github.com/joeloverbeck/netrunner-unfolded/issues/1. Preserve consumer
 rules, layout, asset policy and native-operation policy in their repositories.
