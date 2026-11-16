@@ -4,7 +4,9 @@ What each game needs from work that changes it: how it renders at the seat, how 
 
 To find a consumer's use of an API here, search its main checkout with `--exclude-dir=target --exclude-dir=local --exclude-dir=.claude`; those hold build output, evidence snapshots and stale worktrees.
 
-Commit messages and pull requests in a game say `For #N`. Closing an issue is the owner's acceptance, so leave closing keywords out.
+Commit messages and pull requests in a game say `For #N`. Closing an issue is the owner's acceptance, so leave closing keywords out. Each game deletes a branch on GitHub when its pull request merges.
+
+**Rewriting an adapter.** List the old file's user-facing strings (`git show main:<file> | grep -oE '"[A-Z][^"]+ [^"]+"'`) and account for each one in the pull request: kept, moved, or changed and why.
 
 **Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision and whether its tree is clean:
 
@@ -15,12 +17,12 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools
   <out-dir>/<before case>.table.png <out-dir>/<after case>.table.png [--threshold 3]
 ```
 
-Record the "before" case from clean `main`, then the "after" case from the branch. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
+Record the "before" case with `--clean` from `main`, then the "after" case from the branch. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
 
 ## Arkham Unfolded
 
 - **Seat host:** keeps Bevy's pipelined rendering. A change to the render world is exercised only here.
-- **Verify:** `scripts/check`. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
+- **Verify:** `scripts/check`. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
 - **Held capture:** requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/arkham-tabletop --experiment gathering --agent-seat --save <fresh path>`. Two starts of the unchanged table differed in about 200 pixels by at most 3 levels, so compare with `--threshold 3`. Batch form, with `capture` and `quit` requests on standard input, still works.
 - **Merge:** after CI's "Rust checks" passes, use `scripts/tools merge-reviewed --pr <n> --head <sha> --base <main sha>`. Auto-close is off. Close an accepted issue with `scripts/tools publish comment --issue <n> --body-file <f> --close` (`docs/agents/github-administration.md`).
 - **Public text:** issues, comments and PR bodies go through `scripts/tools publish` (`issue`, `comment`, `pr-body`), whose preflight refuses private path forms. Name an evidence file by its case or file name, never by a `local/…` path.
@@ -38,10 +40,10 @@ Record the "before" case from clean `main`, then the "after" case from the branc
 ## Cuba Libre Unfolded
 
 - **Seat host:** pipelined rendering disabled at the seat. Its own admission waits on its render-world pipeline flag.
-- **Verify:** the five commands in README, "Checks and development seat". No CI runs them.
+- **Verify:** `scripts/check`. CI runs it on every pull request, and `main` requires it.
 - **Held capture:** run from its checkout, since its art resolves against the working directory: requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/cuba-libre --cards <cards> --save <fresh path> --agent-seat`. Two starts of the unchanged table were identical.
 - **Native capture:** the ignored native regression, `CUBA_TEST_CARDS=<cards> cargo test --locked --features tabletop --test native -- --ignored --test-threads=1`, captures through the seat. Set `CUBA_NATIVE_EVIDENCE` to a new directory.
-- **Merge:** `gh pr merge --merge --match-head-commit <sha>`. Merged branches are not deleted on GitHub; delete the remote branch once its head is in `main`.
+- **Merge:** `gh pr merge --merge --match-head-commit <sha>`, after CI passes. `main` requires the branch to be up to date: when `main` moves, merge it in, run `scripts/check` again and wait for CI.
 - **Work-item limit:** none of its own.
 
 ## mudsong (private)

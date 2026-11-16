@@ -142,6 +142,18 @@ fn record_from(
         .unwrap()
 }
 
+/// `held-start --clean <out> <case> -- <this executable> game ready`, run in `directory`.
+fn record_clean(directory: &Path, out: &Path, case: &str) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_held-start"))
+        .args(["--clean", out.to_str().unwrap(), case, "--"])
+        .arg(std::env::current_exe().unwrap())
+        .args(["game", "ready"])
+        .current_dir(directory)
+        .env("GIT_CEILING_DIRECTORIES", directory.parent().unwrap())
+        .output()
+        .unwrap()
+}
+
 fn read(path: PathBuf) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
@@ -305,6 +317,62 @@ fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
     assert!(record.contains("socket after: removed\n"), "{record}");
 }
 
+fn clean_refuses_an_absent_or_changed_tree_before_launch(scratch: &Path) {
+    let out = scratch.join("clean");
+    let unlaunched = |case: &str| {
+        for written in ["record", "stdout", "sock"] {
+            assert!(
+                !out.join(format!("{case}.{written}")).exists(),
+                "{case}.{written}"
+            );
+        }
+    };
+    // Not a Git working tree: the scratch directory, with no repository above it.
+    let refused = record_clean(scratch, &out, "nogit");
+    assert_eq!(refused.status.code(), Some(2), "{refused:?}");
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        error.contains("--clean: none: not a Git working tree"),
+        "{error}"
+    );
+    unlaunched("nogit");
+
+    let repository = scratch.join("repository");
+    std::fs::create_dir(&repository).unwrap();
+    let git = |arguments: &[&str]| {
+        let done = Command::new("git")
+            .args([
+                "-c",
+                "user.name=held-start",
+                "-c",
+                "user.email=held-start@example.invalid",
+            ])
+            .args(arguments)
+            .current_dir(&repository)
+            .env("GIT_CEILING_DIRECTORIES", scratch)
+            .output()
+            .unwrap();
+        assert!(done.status.success(), "git {arguments:?}: {done:?}");
+    };
+    std::fs::write(repository.join("tracked"), b"committed").unwrap();
+    git(&["init", "-q"]);
+    git(&["add", "tracked"]);
+    git(&["commit", "-q", "-m", "committed"]);
+    std::fs::write(repository.join("tracked"), b"changed").unwrap();
+    let refused = record_clean(&repository, &out, "dirty");
+    assert_eq!(refused.status.code(), Some(2), "{refused:?}");
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("(1 changed tracked files)"), "{error}");
+    unlaunched("dirty");
+
+    std::fs::write(repository.join("tracked"), b"committed").unwrap();
+    let recorded = record_clean(&repository, &out, "tidy");
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(out.join("tidy.record"));
+    assert!(record.contains(" (clean)\n"), "{record}");
+    assert!(record.contains("first status: ready\n"), "{record}");
+}
+
 fn help_prints_the_usage_and_writes_nothing(scratch: &Path) {
     let empty = scratch.join("help");
     std::fs::create_dir(&empty).unwrap();
@@ -317,7 +385,7 @@ fn help_prints_the_usage_and_writes_nothing(scratch: &Path) {
     let text = String::from_utf8(help.stdout).unwrap();
     assert!(
         text.starts_with(
-            "usage: held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]\n"
+            "usage: held-start [--clean] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]\n"
         ),
         "{text}"
     );
@@ -340,7 +408,7 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 9] = [
+    let tests: [Test; 10] = [
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
@@ -372,6 +440,10 @@ fn main() -> ExitCode {
         (
             "a_session_that_ends_early_records_the_unanswered_requests",
             a_session_that_ends_early_records_the_unanswered_requests,
+        ),
+        (
+            "clean_refuses_an_absent_or_changed_tree_before_launch",
+            clean_refuses_an_absent_or_changed_tree_before_launch,
         ),
         (
             "help_prints_the_usage_and_writes_nothing",
