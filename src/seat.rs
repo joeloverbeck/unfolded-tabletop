@@ -8,8 +8,8 @@
 //! has keyboard focus, advance a clock of its own and name the keys the seat may press;
 //! otherwise nothing has focus, the seat's steps move Bevy's manual time and no key may
 //! be pressed. The seat decides itself whether the render pipelines are ready before a
-//! capture ([`Pipelines`]), and every response states the revision, whether the table
-//! is settled and what is pending. The table's surface and the capture of its image
+//! capture ([`capture::Pipelines`]), and every response of a seated table states the
+//! revision, whether it is settled and what is pending. The table's surface and the capture of its image
 //! come from [`crate::capture`].
 //!
 //! Each game keeps its policy in its adapter: what it observes and names, the keys
@@ -40,7 +40,7 @@
 //! that is the game's production code. The seat never triggers observers, queues table
 //! actions or calls handlers.
 
-use crate::capture::{self, Failure, Surface};
+use crate::capture::{self, Failure, Pipelines, Surface};
 use bevy::{
     app::AppExit,
     camera::RenderTarget,
@@ -55,11 +55,7 @@ use bevy::{
         pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput},
     },
     prelude::*,
-    render::{
-        Render, RenderApp,
-        render_resource::{CachedPipelineState, PipelineCache},
-        renderer::{RenderAdapterInfo, render_system},
-    },
+    render::renderer::RenderAdapterInfo,
     time::TimeUpdateStrategy,
     window::PrimaryWindow,
 };
@@ -68,10 +64,6 @@ use serde_json::{Value, json};
 use std::{
     io::{BufRead, Write},
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
     time::{Duration, Instant},
 };
 
@@ -280,7 +272,7 @@ pub trait Game {
         &[]
     }
     /// Kept only so that a game that answered it still builds; the seat decides
-    /// itself whether the render pipelines are ready ([`Pipelines`]). A capture also
+    /// itself whether the render pipelines are ready ([`capture::Pipelines`]). A capture also
     /// waits for this, which is ready unless the game says otherwise.
     #[deprecated(note = "the seat decides itself whether the render pipelines are ready")]
     fn pipelines_ready(&self, _world: &World) -> bool {
@@ -481,52 +473,6 @@ impl Connection {
     }
 }
 
-/// Whether the render pipelines are ready, as the render world found them after its
-/// last frame: none is queued and every one compiled. The seat installs it when it sits
-/// at a table and waits on it before a capture, so that the capture omits nothing; no
-/// game answers it. Where the table has no render world, nothing is compiled and it is
-/// ready unless something reports otherwise, as a renderer that is a stand-in does.
-#[derive(Resource, Clone)]
-pub struct Pipelines(Arc<AtomicBool>);
-
-impl Pipelines {
-    /// The seat's finding, in the table's app, for one that has a render world.
-    fn install(app: &mut App) -> Self {
-        if let Some(pipelines) = app.world().get_resource::<Self>() {
-            return pipelines.clone();
-        }
-        let render = app.get_sub_app_mut(RenderApp);
-        let pipelines = Self(Arc::new(AtomicBool::new(render.is_none())));
-        if let Some(render) = render {
-            render
-                .insert_resource(pipelines.clone())
-                .add_systems(Render, find_pipelines.after(render_system));
-        }
-        app.insert_resource(pipelines.clone());
-        pipelines
-    }
-
-    /// Whether the last finding was that every pipeline is ready.
-    pub fn ready(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
-
-    /// Record what the render world found after a frame.
-    pub fn report(&self, ready: bool) {
-        self.0.store(ready, Ordering::Release);
-    }
-}
-
-/// The render world's finding after each frame it renders.
-fn find_pipelines(pipelines: Res<Pipelines>, cache: Res<PipelineCache>) {
-    pipelines.report(
-        cache.waiting_pipelines().next().is_none()
-            && cache
-                .pipelines()
-                .all(|pipeline| matches!(pipeline.state, CachedPipelineState::Ok(_))),
-    );
-}
-
 /// Present while an agent sits at the table. The agent operates the table, never the
 /// desktop it runs on, so a game can refuse to the agent what it would otherwise hand
 /// to the desktop, such as an address to open.
@@ -549,7 +495,7 @@ impl<G: Game> Seat<G> {
         Self {
             game,
             camera,
-            pipelines: Pipelines::install(app),
+            pipelines: Pipelines::of(app),
             image,
             exit: None,
         }

@@ -37,9 +37,12 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use unfolded_tabletop::seat::{
-    Admission, Focus, Game, Hit, Logical, Name, Observed, Pipelines, STEP, Seat, SeatKey,
-    SeatedAgent, Unadmitted, Unshown, socket::Listener,
+use unfolded_tabletop::{
+    capture::Pipelines,
+    seat::{
+        Admission, Focus, Game, Hit, Logical, Name, Observed, STEP, Seat, SeatKey, SeatedAgent,
+        Unadmitted, Unshown, socket::Listener,
+    },
 };
 
 /// The table's clock after `steps` of the seat's steps, in nanoseconds.
@@ -69,7 +72,7 @@ struct Table {
     pipelines: VecDeque<bool>,
     /// How many of those findings were still to come when a capture was first asked
     /// for.
-    asked_with: Option<usize>,
+    findings_left_when_asked: Option<usize>,
 }
 
 impl Default for Table {
@@ -85,7 +88,7 @@ impl Default for Table {
             scrolls: Vec::new(),
             admission: Admission::Admitted,
             pipelines: VecDeque::new(),
-            asked_with: None,
+            findings_left_when_asked: None,
         }
     }
 }
@@ -308,7 +311,7 @@ fn renderer_hands_back(
 ) {
     for entity in &asked {
         let left = table.pipelines.len();
-        table.asked_with.get_or_insert(left);
+        table.findings_left_when_asked.get_or_insert(left);
         commands.trigger(ScreenshotCaptured {
             entity,
             image: Image::new_fill(
@@ -1044,7 +1047,7 @@ fn a_capture_waits_for_the_pipelines_on_a_frozen_clock_and_answers_after_the_fil
     // Ready on the fourth and fifth frames running, so the picture is asked for on the
     // sixth, which takes the sixth finding first: one is left. Asked for after the
     // first ready frame, four would be left.
-    assert_eq!(seat.table().asked_with, Some(1));
+    assert_eq!(seat.table().findings_left_when_asked, Some(1));
     // Only the key's two steps moved the clock.
     assert_eq!(response["table"]["clock_nanos"], clock_after(2));
     let picture = image::open(&path).unwrap().to_rgb8();
@@ -1064,7 +1067,7 @@ fn a_capture_whose_pipelines_are_never_ready_two_frames_running_is_refused_and_w
 
     assert_eq!(response["status"], "refused", "{response}");
     assert_eq!(response["error"], "Render pipelines did not become ready.");
-    assert_eq!(seat.table().asked_with, None);
+    assert_eq!(seat.table().findings_left_when_asked, None);
     assert!(!path.exists());
 }
 

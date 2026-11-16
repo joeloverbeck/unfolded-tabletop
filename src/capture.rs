@@ -6,14 +6,19 @@ use bevy::{
     camera::RenderTarget,
     prelude::*,
     render::{
-        render_resource::TextureFormat,
+        Render, RenderApp,
+        render_resource::{CachedPipelineState, PipelineCache, TextureFormat},
+        renderer::render_system,
         view::screenshot::{Screenshot, ScreenshotCaptured},
     },
     window::{ExitCondition, PrimaryWindow},
 };
 use std::{
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -70,10 +75,59 @@ impl Surface {
     }
 }
 
+/// Whether the render pipelines are ready, as the render world found them after its
+/// last frame: none is queued and every one compiled. [`install`] adds the finding
+/// while the host is built, before pipelined rendering can move the render world to a
+/// thread of its own, and the agent seat waits on it before a capture so that the
+/// capture omits nothing. A host with no render world compiles nothing: it is ready
+/// unless something reports otherwise, as a renderer that is a stand-in does.
+#[derive(Resource, Clone)]
+pub struct Pipelines(Arc<AtomicBool>);
+
+impl Pipelines {
+    /// The host's finding, or a ready one for a host that has none.
+    pub fn of(app: &mut App) -> Self {
+        app.world_mut()
+            .get_resource_or_insert_with(|| Self(Arc::new(AtomicBool::new(true))))
+            .clone()
+    }
+
+    /// Whether the last finding was that every pipeline is ready.
+    pub fn ready(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+
+    /// Record what the render world found after a frame. Only the render world and a
+    /// stand-in for it report.
+    pub fn report(&self, ready: bool) {
+        self.0.store(ready, Ordering::Release);
+    }
+}
+
+/// The render world's finding after each frame it renders.
+fn find_pipelines(pipelines: Res<Pipelines>, cache: Res<PipelineCache>) {
+    pipelines.report(
+        cache.waiting_pipelines().next().is_none()
+            && cache
+                .pipelines()
+                .all(|pipeline| matches!(pipeline.state, CachedPipelineState::Ok(_))),
+    );
+}
+
 /// Give the host a logical primary window with nothing behind it and an image for
 /// camera `C` to render. Bevy's picking ignores every pointer without a primary
-/// window, and draws UI to the image only for the default UI camera.
+/// window, and draws UI to the image only for the default UI camera. Where the host
+/// has a render world, it also finds whether the render pipelines are ready
+/// ([`Pipelines`]): call it after the render plugins are added.
 pub fn install<C: Component>(app: &mut App, size: UVec2) {
+    let render = app.get_sub_app_mut(RenderApp);
+    let pipelines = Pipelines(Arc::new(AtomicBool::new(render.is_none())));
+    if let Some(render) = render {
+        render
+            .insert_resource(pipelines.clone())
+            .add_systems(Render, find_pipelines.after(render_system));
+    }
+    app.insert_resource(pipelines);
     app.world_mut().spawn((
         Window {
             resolution: (size.x, size.y).into(),

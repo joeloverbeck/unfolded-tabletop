@@ -277,18 +277,21 @@ otherwise. Nothing has focus. A step of the seat moves Bevy's manual time
 pressed. A game overrides `focus`, `advance` or `keys` to answer them itself,
 as Arkham does for its controls' focus, its presentation clock and its keys,
 with those among them that can commit. The seat itself decides whether the
-render pipelines are ready before a capture: when it sits at a table with a
-render world, it adds a system after Bevy's `render_system` that finds whether
-any pipeline is queued or not compiled, and a capture waits for ready on two
-consecutive frames (`seat::Pipelines`). `Game::pipelines_ready` is deprecated
-and stays only so that a game that has not moved still builds; a capture also
-waits for it. Every response states, beside the game's `observation` and
-`table`, the `revision` a request must name, whether the table is `settled`
-and what is `pending`, as `revision` and `unsettled` answer them. These fields
-are additions: no other field or wording changed. `seat::Unshown` is a table
-that shows nothing and is admitted as its function says, for a game's test
-of its admission alone. [Issue #33](https://github.com/joeloverbeck/unfolded-tabletop/issues/33)
-narrows the four games' adapters to these methods. To withdraw it, first
+render pipelines are ready before a capture. `capture::install`, which builds
+the windowless surface, adds a system after Bevy's `render_system` that finds
+whether any pipeline is queued or not compiled (`capture::Pipelines`). It does
+so while the table is built, before pipelined rendering moves the render world
+to a thread of its own. A capture waits for ready on two consecutive frames.
+`Game::pipelines_ready` is deprecated and stays only so that a game that has
+not moved still builds; a capture also waits for it. Every response of a
+seated table states, beside the game's `observation` and `table`, the
+`revision` a request must name, whether the table is `settled` and what is
+`pending`, as `revision` and `unsettled` answer them. The one `refused` line
+of a start that fails before a table is seated (`seat::refuse`) has none of
+them. These fields are additions: no other field or wording changed.
+`seat::Unshown` is a table that shows nothing and is admitted as its function
+says, for a game's test of its admission alone. [Issue #33](https://github.com/joeloverbeck/unfolded-tabletop/issues/33)
+coordinates the four games' move to these defaults. To withdraw them, first
 revert each game's adapter and its pin together. These are each game's too: the words of an admission that
 ran out of time, the plugins and contents of its windowless table, its launch
 options, the environment variable that marks a launched seat, its admission limit,
@@ -424,7 +427,10 @@ repository, pins it for its application. No game's domain enters the module.
   floating-point picture is converted from linear light.
 - `no_window`, `install` and `Surface` give a host with no operating-system
   window a focused logical primary window and an image for one camera to render,
-  as the default UI camera.
+  as the default UI camera. Where the host has a render world, `install` also
+  adds `Pipelines`, the render world's finding after each frame of whether every
+  pipeline is compiled. Call it after the render plugins are added. A host with
+  no render world finds them ready.
 - `image_to_file` asks Bevy for a capture of an image and returns once the file
   is written. The caller supplies the step that runs one update of its host and
   the deadline; the module waits two milliseconds between steps.
@@ -434,7 +440,8 @@ observers, their timed diagnostics and its exits, and frame pacing, on which no
 capture here depends. The module does not enable Bevy's window event loop, so
 the application that enabled it leaves it out of a windowless host itself. What
 must be ready before a capture, the clock the step advances, the time allowed
-and the wording of a failure belong to each consumer.
+and the wording of a failure belong to each consumer; the agent seat, one of
+them, waits for `Pipelines`.
 
 `tests/capture.rs` pins the pixels, the surface and the capture as Arkham had
 them before the move, without a graphics adapter. One behaviour differs on
