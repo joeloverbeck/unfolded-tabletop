@@ -109,23 +109,26 @@ generalized it from the token count labels below and Netrunner's board labels at
 
 Install `LabelAnchorPlugin`, spawn the node with `PositionType::Absolute`, and add
 a `LabelAnchor`: `LabelAnchor::entity(token, offset)` or `LabelAnchor::point(at)`.
-Each frame, in `PostUpdate` after transform propagation and the camera's update and
-before UI layout, it writes the node's `left`, `top` and `Visibility`, and nothing
-else:
+Each frame, in `PostUpdate` after transform propagation, so that a camera or
+anchor moved this frame is projected where it now is, it writes the node's `left`,
+`top` and `Visibility`:
 
 - An entity anchor reads the entity's own `Transform`, as for a root token: the
-  offset is scaled by its scale but not rotated, and a parent is not followed. The
-  node is removed once the entity has no `Transform`.
+  offset is scaled by its scale but not rotated, and a parent's transform is not
+  read. The node is removed once the entity has no `Transform`.
 - A point anchor is a fixed world point and is never removed.
-- The node's top edge is centred on the projected point by its measured width, or,
-  with `left_edge()`, starts there. A margin the caller sets still shifts it.
+- The node's top edge is centered on the projected point by its measured width,
+  or, with `left_edge()`, starts there.
 - The node is hidden when projection fails and, with `within_viewport()`, while
   the point falls outside the camera's logical viewport rectangle.
 
 Tracking requires one `Camera3d`; with none, or several, it changes nothing. It
-makes no promise about several views or offsets that rotate with a parent. The
-node's text, font, colour, padding, accessibility name, pickability, stacking and
-lifetime are the caller's, as are when a count updates and whether a zero shows.
+makes no promise about several views or offsets that rotate with a parent.
+Everything else on the node is the caller's and is left as set: its text, font,
+color, size, margin, padding, accessibility name, pickability, stacking and
+lifetime, as are when a count updates and whether a zero shows. Since
+`Visibility` is rewritten each frame, a caller hides a node itself with
+`Display::None` or by despawning it.
 
 ## Token count labels
 
@@ -134,12 +137,12 @@ lifetime are the caller's, as are when a count updates and whether a zero shows.
 `src/tabletop_counters.rs`. [Issue #11](https://github.com/joeloverbeck/unfolded-tabletop/issues/11)
 coordinated Arkham's counter migration with Netrunner's compact credit
 and click totals under [Netrunner #12](https://github.com/joeloverbeck/netrunner-unfolded/issues/12).
-Since issue #35 its `spawn` adds a `LabelAnchor` to the non-pickable, centred
-digit string it makes, and `CountLabelPlugin` installs `LabelAnchorPlugin` unless
-a game has already installed it; a game that installs both installs
-`LabelAnchorPlugin` first. They remain so that a game can return to them by
-reverting its adapter and pin together; new code spawns its own node with a
-`LabelAnchor`. Mudsong has no corresponding counter-label consumer to migrate.
+Since issue #35 its `spawn` adds a `LabelAnchor` to the non-pickable, centered
+digit string it makes, and `CountLabelPlugin` installs `LabelAnchorPlugin`, which a
+game may also install, in either order. `Label` still names the count's token but
+moves nothing. They remain so that a game can return to them by reverting its
+adapter and pin together; new code spawns its own node with a `LabelAnchor`.
+Mudsong has no corresponding counter-label consumer to migrate.
 
 Each consumer retains its own checks and rendered inspection. Revert consumer
 adapters and dependency pins before withdrawing either producer addition; Arkham's

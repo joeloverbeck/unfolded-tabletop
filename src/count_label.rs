@@ -10,18 +10,18 @@
 use crate::label_anchor::{LabelAnchor, LabelAnchorPlugin};
 use bevy::prelude::*;
 
-/// Installs [`LabelAnchorPlugin`] unless it already is. A game that installs
-/// both installs `LabelAnchorPlugin` first.
+/// Installs [`LabelAnchorPlugin`], which a game may also install itself, before
+/// or after this.
 pub struct CountLabelPlugin;
 
 impl Plugin for CountLabelPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<LabelAnchorPlugin>() {
-            app.add_plugins(LabelAnchorPlugin);
-        }
+        app.add_plugins(LabelAnchorPlugin);
     }
 }
 
+/// Which token a count was spawned over. It moves nothing: the count's
+/// [`LabelAnchor`] does.
 #[derive(Component)]
 pub struct Label {
     pub token: Entity,
