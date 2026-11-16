@@ -40,6 +40,10 @@ if [[ "$random_tree" != "unfolded-random v"* || "$random_tree" == *$'\n'* ]]; th
   printf 'error: unfolded-random has dependencies:\n%s\n' "$random_tree" >&2
   exit 1
 fi
+# Rustdoc holds each mechanism's contract (CODING_STANDARDS.md, "Documentation"), so
+# its links must resolve. `seat` enables `render`, so these cover every module.
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --workspace
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps -p unfolded-tabletop --features seat
 cargo test --locked --workspace
 cargo test --locked -p unfolded-tabletop --features render
 cargo test --locked -p unfolded-tabletop --features seat
