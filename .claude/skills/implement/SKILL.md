@@ -21,3 +21,5 @@ Before writing a pull request's Evidence section, confirm each test it cites: it
 Once done, call the Skill tool with "code-review" to review the work. When the work spans repositories, review each repository's pull request before it merges, and check its Evidence section against the logs it cites.
 
 Commit your work to the current branch.
+
+To merge this repository's pull request: wait until `gh run list --branch <branch> --event pull_request` shows its run (`gh pr checks --watch` exits at once with "no checks reported" before the run exists), `gh run watch <id> --exit-status`, then `gh pr merge <n> --merge --match-head-commit <sha>`.
