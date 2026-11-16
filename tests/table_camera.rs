@@ -367,7 +367,7 @@ fn the_plugin_reads_the_games_clock_writes_the_table_camera_and_reports_navigati
     assert!((pose.yaw - 0.1).abs() < 0.00001, "yaw {}", pose.yaw);
     // Yaw 0.1 and pitch 1 at 72 from (0, 0, 7): (sin 0.1 cos 1, sin 1, cos 0.1 cos 1) * 72 on.
     let written = app.world().get::<Transform>(camera).unwrap();
-    let eye = Vec3::new(0.0, 0.0, 7.0) + Vec3::new(0.053_940_2, 0.841_471, 0.537_603_0) * 72.0;
+    let eye = Vec3::new(0.0, 0.0, 7.0) + Vec3::new(0.053_940_2, 0.841_471, 0.537_603) * 72.0;
     assert!(written.translation.abs_diff_eq(eye, 0.0001), "{written:?}");
     assert_eq!(
         app.world().get::<Transform>(other),
