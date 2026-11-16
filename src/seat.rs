@@ -227,6 +227,7 @@ pub enum Unadmitted {
 }
 
 /// A key a game lets the seat press.
+#[derive(Clone, Debug)]
 pub struct SeatKey {
     /// The name a request gives it: its `KeyCode` name.
     pub name: &'static str,
@@ -240,6 +241,7 @@ pub struct SeatKey {
 }
 
 /// The logical key a keyboard sends with a physical one.
+#[derive(Clone, Debug)]
 pub enum Logical {
     Named(Key),
     /// A character key, by the text it types.

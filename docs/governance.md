@@ -34,7 +34,7 @@ On 2026-11-14 the owner accepted a bounded `EVID-6` extension, recorded in [Cuba
 | --- | --- | --- |
 | `unfolded-assets`, `card`, `token`, `loading`, the `wgpu-hal` patch | Two-consumer specialization | [Netrunner #1](https://github.com/joeloverbeck/netrunner-unfolded/issues/1) |
 | `unfolded-record-replacement` | Two-consumer specialization; also the Cuba Libre extension, since Cuba Libre saves through it beside Arkham and Netrunner | [Netrunner #9](https://github.com/joeloverbeck/netrunner-unfolded/issues/9), #13, #36 |
-| `camera` | Two-consumer specialization | [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11) |
+| `camera` | Two-consumer specialization; also the Cuba Libre extension, since Cuba Libre moves its camera through it beside Arkham and Netrunner | [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11), #37 |
 | `count_label` | Two-consumer specialization | #11 |
 | `printed` | Two-consumer specialization | #25 |
 | `random::fresh_seed` | Two-consumer specialization | #21 |
