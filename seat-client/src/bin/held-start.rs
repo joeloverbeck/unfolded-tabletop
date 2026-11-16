@@ -22,6 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 use unfolded_seat_client as seat_client;
+use unfolded_seat_protocol::{Request, Status};
 
 /// How long the seat may take to remove its socket after `quit` or a refusal.
 const SOCKET_REMOVAL: Duration = Duration::from_secs(10);
@@ -118,7 +119,7 @@ fn run(arguments: &[String]) -> Result<String> {
     if let Some(error) = first.as_ref().and_then(|first| first["error"].as_str()) {
         line(&mut record, "first error", &error);
     }
-    if first_status == "ready" {
+    if first.as_ref().and_then(Status::of) == Some(Status::Ready) {
         line(&mut record, "observe, quit", &converse(&socket));
     }
     let deadline = Instant::now() + SOCKET_REMOVAL;
@@ -172,17 +173,16 @@ fn revision(directory: &Path) -> String {
 /// none did.
 fn converse(socket: &Path) -> String {
     let requests = [
-        r#"{"op":"observe"}"#.to_owned(),
-        r#"{"op":"quit"}"#.to_owned(),
+        Request::Observe {}.to_string(),
+        Request::Quit {}.to_string(),
     ];
-    let stream = match seat_client::connect(socket) {
-        Ok(stream) => stream,
+    let connection = match seat_client::Connection::open(socket) {
+        Ok(connection) => connection,
         Err(error) => return format!("cannot connect: {error}"),
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
     let deadline = Instant::now() + RESPONSE;
     let mut answers = Vec::new();
-    let exchanged = seat_client::exchange(&stream, &requests, &mut answers, || {
+    let exchanged = connection.send(&requests, &mut answers, || {
         if Instant::now() >= deadline {
             bail!("no response within {} seconds", RESPONSE.as_secs());
         }

@@ -4223,6 +4223,15 @@ dependencies = [
  "anyhow",
  "serde_json",
  "tempfile",
+ "unfolded-seat-protocol",
+]
+
+[[package]]
+name = "unfolded-seat-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4232,9 +4241,9 @@ dependencies = [
  "bevy",
  "image",
  "rustix",
- "serde",
  "serde_json",
  "tempfile",
+ "unfolded-seat-protocol",
 ]
 
 [[package]]

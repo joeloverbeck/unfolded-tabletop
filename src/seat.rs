@@ -20,13 +20,14 @@
 //! A game that starts its seat through [`start`] leaves it the order of the steps, in
 //! either form, and their refusals.
 //!
-//! The module was extracted from Arkham, its first table. The protocol's vocabulary
-//! and the wording of its responses are as Arkham had them, and so are its fixed
-//! numbers: the step, the settling limits and the time a capture may take. No second
-//! use has shaped them yet. `point`, which rests the pointer on a named target as an
-//! activation does and presses nothing, was added later; `mudsong`, a private
-//! repository that pins the library for its application, is the consumer that
-//! sends it.
+//! The module was extracted from Arkham, its first table. The protocol's vocabulary,
+//! its requests and statuses, is `unfolded_seat_protocol`'s, which the held-seat
+//! client shares. The vocabulary and the wording of its responses are as Arkham had
+//! them, and so are its fixed numbers: the step, the settling limits and the time a
+//! capture may take. No second use has shaped them yet. `point`, which rests the
+//! pointer on a named target as an activation does and presses nothing, was added
+//! later; `mudsong`, a private repository that pins the library for its application,
+//! is the consumer that sends it.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! scrolls and keys act only on the revision they were decided on, a key that can commit
@@ -59,13 +60,13 @@ use bevy::{
     time::TimeUpdateStrategy,
     window::PrimaryWindow,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, Write},
-    path::{Path, PathBuf},
+    path::Path,
     time::{Duration, Instant},
 };
+use unfolded_seat_protocol::{MODE, Request, Status, refusal};
 
 pub mod socket;
 pub mod start;
@@ -315,90 +316,6 @@ impl Game for Unshown {
 
     fn admission(&self, world: &World) -> Admission {
         (self.0)(world)
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-enum Request {
-    Observe {},
-    Activate {
-        revision: u64,
-        #[serde(default)]
-        component: Option<String>,
-        #[serde(default)]
-        choice: Option<String>,
-    },
-    Point {
-        revision: u64,
-        #[serde(default)]
-        component: Option<String>,
-        #[serde(default)]
-        choice: Option<String>,
-    },
-    Scroll {
-        revision: u64,
-        #[serde(default)]
-        component: Option<String>,
-        #[serde(default)]
-        choice: Option<String>,
-        #[serde(default)]
-        x: f32,
-        y: f32,
-    },
-    Key {
-        key: String,
-        revision: u64,
-        #[serde(default)]
-        focused: Option<String>,
-    },
-    Settle {
-        #[serde(default)]
-        steps: Option<u32>,
-    },
-    Capture {
-        path: PathBuf,
-    },
-    Quit {},
-}
-
-/// A response's status, which decides what follows it on its connection and in the
-/// session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Status {
-    Ready,
-    Observed,
-    Activated,
-    /// The pointer rests on the named target, and nothing was pressed.
-    Pointed,
-    Scrolled,
-    Pressed,
-    Settled,
-    Unsettled,
-    Captured,
-    /// The request was not acted on, for the reason in its error.
-    Refused,
-    /// Something else was over the target of an activation or a point: nothing was
-    /// pressed, or the press was cancelled before release.
-    Missed,
-    /// An earlier refusal or miss stopped its activations, keys and scrolls.
-    Skipped,
-    /// `quit` ended the session.
-    Bye,
-    /// The table ended the session itself.
-    Exited,
-}
-
-impl Status {
-    /// The table was not as the request assumed and the request clicked nothing, so the
-    /// rest of the connection stops acting.
-    fn stops_connection(self) -> bool {
-        matches!(self, Self::Refused | Self::Missed)
-    }
-
-    fn ends_session(self) -> bool {
-        matches!(self, Self::Bye | Self::Exited)
     }
 }
 
@@ -707,7 +624,7 @@ impl<G: Game> Seat<G> {
         let revision = self.game.revision(world);
         let pending = self.game.unsettled(world);
         let mut json = json!({
-            "ok": error.is_none(), "mode": "seat", "status": status,
+            "ok": error.is_none(), "mode": MODE, "status": status,
             "observation": observation, "table": table,
             "revision": revision, "settled": pending.is_empty(), "pending": pending,
         });
@@ -1151,10 +1068,7 @@ fn covered_at((tried, hits): (Vec2, Vec<Hit>)) -> Value {
 /// launching command ([`socket::launch`]) reads as the seat's first line. The error
 /// is returned for the caller's standard error and unsuccessful exit.
 pub fn refuse<T>(error: String) -> Result<T, String> {
-    println!(
-        "{}",
-        json!({"ok": false, "mode": "seat", "status": "refused", "error": error})
-    );
+    println!("{}", refusal(&error));
     Err(error)
 }
 
