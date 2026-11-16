@@ -517,3 +517,119 @@ fn a_recovery_the_game_refuses_creates_nothing() {
     assert!(!fresh.exists());
     assert!(!unfolded_record_replacement::lock_path(&fresh).exists());
 }
+
+#[test]
+fn a_baseline_holds_only_the_payload_last_loaded_or_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.json");
+    let baseline = saved(&path, "first");
+    assert!(baseline.holds(&NOTES, &note("first")).unwrap());
+    assert!(!baseline.holds(&NOTES, &note("second")).unwrap());
+    assert!(!Baseline::default().holds(&NOTES, &note("first")).unwrap());
+    let error = baseline.holds(&NOTES, &note("")).unwrap_err();
+    assert!(matches!(error, Error::Invalid(_)), "{error:?}");
+}
+
+/// A format that accepts every revision of a note but writes revision 7.
+struct AnyRevision;
+impl Format for AnyRevision {
+    type Payload = Note;
+    const LIMIT: u64 = 256;
+    fn identity(&self, note: &Note) -> Identity {
+        NOTES.identity(note)
+    }
+    fn accepts(&self, identity: &Identity) -> bool {
+        identity.get("kind") == Some("note")
+    }
+    fn validate(&self, note: &Note) -> Result<(), String> {
+        NOTES.validate(note)
+    }
+}
+
+#[test]
+fn envelope_and_payload_faults_are_named_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.json");
+    saved(&path, "hello");
+    let (identity, payload) = save::unseal(&fs::read(&path).unwrap()).unwrap();
+    let record: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+
+    let mut missing = record.clone();
+    missing.as_object_mut().unwrap().remove("checksum");
+    let mut undecodable = payload.clone();
+    undecodable["text"] = 7.into();
+    let later: Identity = [("kind", "note"), ("revision", "8")].into_iter().collect();
+    // An unaccepted identity is unsupported even when its checksum is wrong too.
+    let mut unaccepted = record.clone();
+    unaccepted["identity"]["revision"] = "9".into();
+    unaccepted["checksum"] = "wrong".into();
+
+    type Load = fn(&Path) -> Result<Option<(Note, Baseline)>, Error>;
+    let strict: Load = |path| save::load(&NOTES, path);
+    let loose: Load = |path| save::load(&AnyRevision, path);
+    type Refused = fn(&Error) -> bool;
+    let cases: [(Vec<u8>, Load, Refused); 4] = [
+        (
+            serde_json::to_vec(&missing).unwrap(),
+            strict,
+            |e| matches!(e, Error::Malformed(detail) if detail.contains("missing field")),
+        ),
+        (save::seal(&identity, &undecodable), strict, |e| {
+            matches!(e, Error::Unreproducible(_))
+        }),
+        (
+            save::seal(&later, &payload),
+            loose,
+            |e| matches!(e, Error::Unreproducible(detail) if detail.contains("identity")),
+        ),
+        (serde_json::to_vec(&unaccepted).unwrap(), strict, |e| {
+            matches!(e, Error::Unsupported(Some(_)))
+        }),
+    ];
+    for (bytes, load, refused) in cases {
+        fs::write(&path, &bytes).unwrap();
+        let error = load(&path).unwrap_err();
+        assert!(refused(&error), "{error:?}");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn a_replace_with_an_unset_baseline_creates_and_an_archive_always_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.json");
+    let mut baseline = Baseline::default();
+    save::write(&NOTES, &path, &mut baseline, &note("first"), Write::Replace).unwrap();
+    let first = fs::read(&path).unwrap();
+    let archive = save::write(&NOTES, &path, &mut baseline, &note("first"), Write::Archive)
+        .unwrap()
+        .unwrap();
+    assert_eq!(fs::read(archive).unwrap(), first);
+    assert_eq!(fs::read(previous_path(&path)).unwrap(), first);
+}
+
+#[test]
+fn recovery_names_a_missing_previous_an_orphaned_destination_and_a_linked_spelling() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("notes.json");
+    let ok = |_: &Note| Ok::<_, Error>(());
+
+    let error = save::recover(&NOTES, &source, &dir.path().join("fresh.json"), ok).unwrap_err();
+    assert!(
+        matches!(&error, Error::Io(cause) if cause.kind() == std::io::ErrorKind::NotFound),
+        "{error:?}"
+    );
+
+    let mut baseline = saved(&source, "first");
+    save::write(&NOTES, &source, &mut baseline, &note("second"), Write::Save).unwrap();
+    let orphan = dir.path().join("orphan.json");
+    fs::write(previous_path(&orphan), b"someone's history").unwrap();
+    let error = save::recover(&NOTES, &source, &orphan, ok).unwrap_err();
+    assert!(matches!(error, Error::Orphaned), "{error:?}");
+    assert!(!orphan.exists());
+
+    let link = dir.path().join("link");
+    std::os::unix::fs::symlink(dir.path(), &link).unwrap();
+    let error = save::recover(&NOTES, &source, &link.join("notes.json"), ok).unwrap_err();
+    assert!(matches!(error, Error::SameRecord), "{error:?}");
+}

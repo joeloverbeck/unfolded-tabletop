@@ -18,7 +18,7 @@ terms used here.
 | --- | --- | --- |
 | `unfolded-random` | A seeded SplitMix64 generator, its index and shuffle, and a fresh seed from `/dev/urandom` | never |
 | `unfolded-hover` | When a pointer-driven reading view opens, switches and closes | never |
-| `unfolded-record-replacement` | A game's save record (one checksummed envelope, a write baseline, recovery) on a locked, staged replacement that keeps the previous record | never |
+| `unfolded-record-replacement` | A game's save record, on a locked, staged replacement that keeps the previous record | never |
 | `unfolded-assets` | Bounded and SHA-256-verified reads, bounded PNG crops, and publication of a prepared directory | never |
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
 | `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |

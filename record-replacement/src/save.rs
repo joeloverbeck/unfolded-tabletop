@@ -56,7 +56,10 @@
 //!   [`Error::Orphaned`].
 //! - [`Write::Archive`] keeps the current record in a restart archive and
 //!   returns its path. It needs the record ([`Error::Missing`]) to match the
-//!   baseline ([`Error::Stale`]), and writes even when the payload is the same.
+//!   baseline ([`Error::Stale`], or the refusal [`load`] would give a record this
+//!   build cannot load), and writes even when the payload is the same. A game
+//!   that also needs the record to be a particular payload asks
+//!   [`Baseline::holds`] first.
 //!
 //! Before a record is rotated into `.previous`, an existing `.previous` must load
 //! under the game's format. On success the baseline becomes the record now on
@@ -67,7 +70,12 @@
 //! Durability through power loss, parent-directory syncing and multi-file
 //! atomicity, as for [`replace`](crate::replace). Two processes holding the same
 //! baseline are kept apart by the lock and the baseline check, but a test holds
-//! only the stale refusal, not every interleaving.
+//! only the stale refusal, not every interleaving. A baseline matches the same
+//! JSON value, so records that differ only in whitespace match; whether a record
+//! with its keys reordered matches depends on serde_json's `preserve_order`
+//! feature being off, and two records whose numbers read as the same value match.
+//! Either case can only cause an extra stale refusal or an unchanged write, never
+//! a write over a record its holder has not seen as that value.
 
 use crate::{Fault, Replacement, previous_path, read_bounded, replace_bounded};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -79,7 +87,7 @@ use std::{
 };
 
 /// The envelope tag every record carries; a record without it is unsupported.
-const RECORD: &str = "unfolded-save-1";
+const ENVELOPE_TAG: &str = "unfolded-save-1";
 
 /// The names and values that identify a compatible save, such as a game's kind,
 /// rules revision or content digest. Written as a JSON object with sorted keys.
@@ -152,9 +160,14 @@ impl Baseline {
     fn matches(&self, bytes: &[u8]) -> bool {
         *self == Self::of(bytes)
     }
-    /// Whether this baseline has seen a record.
-    pub fn is_set(&self) -> bool {
+    fn is_set(&self) -> bool {
         self.0.is_some()
+    }
+    /// Whether this baseline is the record `format` would write for `payload`:
+    /// whether its holder's payload is what it last loaded or saved. Nothing is
+    /// read from disk; [`write()`] then checks the baseline against the record.
+    pub fn holds<F: Format>(&self, format: &F, payload: &F::Payload) -> Result<bool, Error> {
+        Ok(*self == Self::of(&encode(format, payload)?))
     }
 }
 
@@ -224,10 +237,8 @@ impl fmt::Display for Error {
             Self::SameRecord => {
                 f.write_str("Recovery needs a destination distinct from both source records.")
             }
-            Self::Busy(cause) => write!(f, "The save is busy: {cause}"),
-            Self::TooLarge => {
-                f.write_str("This file exceeds the bounded experiment's record limit.")
-            }
+            Self::Busy(cause) => f.write_str(&Fault::Busy(cause.clone()).words()),
+            Self::TooLarge => f.write_str(&Fault::TooLarge.words()),
             Self::NotRegularFile => f.write_str("The save is not a regular file."),
             Self::Io(cause) => cause.fmt(f),
         }
@@ -242,7 +253,7 @@ impl From<io::Error> for Error {
     }
 }
 
-fn fault(fault: Fault) -> Error {
+fn from_fault(fault: Fault) -> Error {
     match fault {
         Fault::TooLarge => Error::TooLarge,
         Fault::Busy(cause) => Error::Busy(cause),
@@ -260,7 +271,7 @@ struct Envelope {
 }
 
 fn checksum(identity: &Identity, payload: &serde_json::Value) -> String {
-    let sealed = serde_json::to_vec(&(RECORD, identity, payload))
+    let sealed = serde_json::to_vec(&(ENVELOPE_TAG, identity, payload))
         .expect("an identity and a JSON value always serialise");
     format!("{:x}", Sha256::digest(sealed))
 }
@@ -270,7 +281,7 @@ fn checksum(identity: &Identity, payload: &serde_json::Value) -> String {
 /// checksum is intact.
 pub fn seal(identity: &Identity, payload: &serde_json::Value) -> Vec<u8> {
     serde_json::to_vec(&Envelope {
-        record: RECORD.into(),
+        record: ENVELOPE_TAG.into(),
         identity: identity.clone(),
         checksum: checksum(identity, payload),
         payload: payload.clone(),
@@ -282,16 +293,16 @@ pub fn seal(identity: &Identity, payload: &serde_json::Value) -> Vec<u8> {
 /// payload as JSON, after the checksum. A game's tests use it with [`seal`] to
 /// edit a record.
 pub fn unseal(bytes: &[u8]) -> Result<(Identity, serde_json::Value), Error> {
-    open(bytes, |_| true)
+    open_envelope(bytes, |_| true)
 }
 
-fn open(
+fn open_envelope(
     bytes: &[u8],
     accepts: impl FnOnce(&Identity) -> bool,
 ) -> Result<(Identity, serde_json::Value), Error> {
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|cause| Error::Malformed(cause.to_string()))?;
-    if value.get("record").and_then(serde_json::Value::as_str) != Some(RECORD) {
+    if value.get("record").and_then(serde_json::Value::as_str) != Some(ENVELOPE_TAG) {
         let recorded = value
             .get("identity")
             .and_then(|identity| serde_json::from_value(identity.clone()).ok());
@@ -316,7 +327,7 @@ fn encode<F: Format>(format: &F, payload: &F::Payload) -> Result<Vec<u8>, Error>
 }
 
 fn decode<F: Format>(format: &F, bytes: &[u8]) -> Result<F::Payload, Error> {
-    let (identity, payload) = open(bytes, |identity| format.accepts(identity))?;
+    let (identity, payload) = open_envelope(bytes, |identity| format.accepts(identity))?;
     let payload: F::Payload = serde_json::from_value(payload)
         .map_err(|cause| Error::Unreproducible(cause.to_string()))?;
     format.validate(&payload).map_err(Error::Unreproducible)?;
@@ -332,7 +343,7 @@ fn read_record(path: &Path, limit: u64) -> Result<Vec<u8>, Error> {
     if !fs::symlink_metadata(path)?.is_file() {
         return Err(Error::NotRegularFile);
     }
-    read_bounded(path, limit, &fault)
+    read_bounded(path, limit, &from_fault)
 }
 
 /// Load the record at `path` and the baseline of its bytes, or `None` when no
@@ -373,7 +384,7 @@ pub fn write<F: Format>(
         path,
         &bytes,
         F::LIMIT,
-        &fault,
+        &from_fault,
         |existing| {
             let Some(existing) = existing else {
                 return absent(path, baseline, mode);

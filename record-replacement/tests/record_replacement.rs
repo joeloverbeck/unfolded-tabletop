@@ -9,11 +9,10 @@ use std::{
 };
 use unfolded_record_replacement::{Replacement, previous_path, read, replace};
 
-// These two build the names by hand: they are the oracle for the public
-// `lock_path` and `archives`, checked below.
-
 const LIMIT_ERROR: &str = "This file exceeds the bounded experiment's record limit.";
 
+// `archives` and `lock_path` build the names by hand: they are the oracle for
+// the public `archives` and `lock_path`, checked at the end of this file.
 fn archives(path: &Path) -> Vec<PathBuf> {
     let prefix = format!("{}.archived-", path.file_name().unwrap().to_string_lossy());
     let mut paths: Vec<_> = fs::read_dir(path.parent().unwrap())
