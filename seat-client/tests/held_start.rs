@@ -29,6 +29,13 @@ fn game(arguments: &[String]) -> ExitCode {
     };
     assert_eq!(flag, "--socket");
     let socket = Path::new(socket);
+    // As Arkham's seat does, the stand-in refuses a socket path that is not absolute.
+    if !socket.is_absolute() {
+        println!(
+            r#"{{"ok":false,"mode":"seat","status":"refused","error":"--socket needs an absolute path"}}"#
+        );
+        return ExitCode::FAILURE;
+    }
     match case.as_str() {
         "ready" => {
             let log = std::fs::File::create(log_of(socket)).unwrap();
@@ -94,13 +101,18 @@ impl Drop for Scratch {
 
 /// `held-start <out> <case> -- <this executable> game <game case>`, run in `out`.
 fn record(out: &Path, case: &str, game_case: &str) -> std::process::Output {
+    record_from(out, out, case, game_case)
+}
+
+/// The same, run in `directory` and naming `out` as given, which may be relative to it.
+fn record_from(directory: &Path, out: &Path, case: &str, game_case: &str) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_held-start"))
         .args([out.to_str().unwrap(), case, "--"])
         .arg(std::env::current_exe().unwrap())
         .args(["game", game_case])
-        .current_dir(out)
+        .current_dir(directory)
         // So that a Git repository above the temporary directory is not found.
-        .env("GIT_CEILING_DIRECTORIES", out.parent().unwrap())
+        .env("GIT_CEILING_DIRECTORIES", directory.parent().unwrap())
         .output()
         .unwrap()
 }
@@ -150,6 +162,22 @@ fn a_case_already_recorded_is_refused_and_kept(scratch: &Path) {
     assert!(!scratch.join("down.sock").exists(), "nothing was started");
 }
 
+fn a_relative_out_directory_still_hands_the_game_an_absolute_socket(scratch: &Path) {
+    let recorded = record_from(scratch, Path::new("relative"), "up", "ready");
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("relative/up.record"));
+    let socket = scratch.join("relative/up.sock");
+    assert!(
+        record.contains(&format!("game ready --socket {}\n", socket.display())),
+        "{record}"
+    );
+    assert!(record.contains("first status: ready\n"), "{record}");
+    assert!(
+        record.contains("observe, quit: observed, bye\n"),
+        "{record}"
+    );
+}
+
 /// One test: its name and what it runs.
 type Test = (&'static str, fn(&Path));
 
@@ -161,7 +189,7 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 3] = [
+    let tests: [Test; 4] = [
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
@@ -173,6 +201,10 @@ fn main() -> ExitCode {
         (
             "a_case_already_recorded_is_refused_and_kept",
             a_case_already_recorded_is_refused_and_kept,
+        ),
+        (
+            "a_relative_out_directory_still_hands_the_game_an_absolute_socket",
+            a_relative_out_directory_still_hands_the_game_an_absolute_socket,
         ),
     ];
     if arguments.iter().any(|argument| argument == "--list") {

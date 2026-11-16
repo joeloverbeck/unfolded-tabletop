@@ -428,8 +428,9 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-clie
   <out-dir> <case> -- <game executable> <its seat options>
 ```
 
-It appends `--socket <out-dir>/<case>.sock` and runs the command with no standard
-input. It keeps that command's standard output and error as `<case>.stdout` and
+It appends `--socket <out-dir>/<case>.sock`, with `<out-dir>` made absolute since a
+game may refuse a relative socket path as Arkham does, and runs the command with no
+standard input. It keeps that command's standard output and error as `<case>.stdout` and
 `<case>.stderr`, and copies the seat's log to `<case>.seat.log`. `<case>.record`
 names:
 
@@ -443,7 +444,8 @@ names:
 The record is also printed. A case already recorded in the directory is refused,
 so a later run cannot replace an earlier one. Record a "before" run under its own
 case before changing the game. `seat-client/tests/held_start.rs` holds a ready
-start, a refused one and the refusal of a recorded case. Its stand-in game is the
+start, a refused one, the refusal of a recorded case and a relative `<out-dir>`
+handed to a game that refuses a relative socket. Its stand-in game is the
 test executable itself, so it has no test harness of its own. It starts child
 processes, listens on a Unix-domain socket under the system's temporary directory,
 and runs `git` when it is installed, which finds no repository there.
@@ -518,10 +520,14 @@ Arkham's prior commit contains its original generator.
 
 ## Development checks
 
-Run `scripts/check` from a clean clone before publication. It bounds its builds
-by default (four Cargo jobs, no debug info; CI sets two), and the environment may override them. It checks full-workspace
-formatting first, then strict Clippy on the workspace and on `unfolded-tabletop`
-with `render` and with `seat`. It asserts that no workspace member other than
+Run `scripts/check` from a clean clone before publication. `.cargo/config.toml`
+bounds every Cargo command run here, not only the check's: four jobs and no debug
+info, since unbounded parallel links of the Bevy test executables can exhaust a
+session's memory. The environment may override them; CI sets two jobs. The check
+runs full-workspace formatting first. It then fails if code outside
+`unfolded-seat-protocol` spells a seat status as a string literal; tests keep the
+spelling as the wire's oracle. Next comes strict Clippy, on the workspace and on
+`unfolded-tabletop` with `render` and with `seat`. It asserts that no workspace member other than
 `unfolded-tabletop` reaches Bevy, and that `unfolded-random` has no dependency, and lints each Bevy-free package
 alone, since a workspace build can supply a dependency feature that a game
 depending on that package alone would lack. Then it runs the workspace's tests
