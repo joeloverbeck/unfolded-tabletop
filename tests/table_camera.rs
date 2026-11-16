@@ -16,8 +16,8 @@ use bevy::{
 };
 use std::time::Duration;
 use unfolded_tabletop::camera::{
-    CameraStep, DISTANCE, Framing, Input, KEYS, Navigation, Orbit, PAN_KEYS, PITCH, Pose, Scene,
-    TableCamera, TableCameraPlugin, TableCameraSystems, TableFacts, VIEW_KEYS,
+    CameraStep, DISTANCE, Framing, InScene, Input, KEYS, Navigation, Orbit, PAN_KEYS, PITCH, Pose,
+    Scene, TableCamera, TableCameraPlugin, TableCameraSystems, TableFacts, VIEW_KEYS,
 };
 
 /// A home like Arkham's overview, so the recorded numbers apply unchanged.
@@ -283,19 +283,25 @@ fn the_pointer_over_ui_or_outside_the_scene_neither_zooms_nor_starts_a_drag() {
 }
 
 #[test]
-fn the_limits_and_default_pose_are_the_ones_the_motion_keeps() {
+fn the_readable_limits_and_default_pose_are_arkhams() {
+    // The numbers the motion README records, and Arkham's framing pose.
     assert_eq!((*PITCH.start(), *PITCH.end()), (0.35, 1.35));
     assert_eq!((*DISTANCE.start(), *DISTANCE.end()), (6.0, 90.0));
+    assert_eq!((Pose::DEFAULT_YAW, Pose::DEFAULT_PITCH), (0.0, 1.0));
     let framing = Framing::new(Vec3::new(1.0, 0.0, 2.0), 20.0);
-    let orbit = Orbit::new(framing);
-    assert_eq!(orbit.pose(), Pose::at(framing));
-    assert_eq!(orbit.pose().yaw, Pose::DEFAULT_YAW);
-    assert_eq!(orbit.pose().pitch, Pose::DEFAULT_PITCH);
+    let at = Pose {
+        yaw: 0.0,
+        pitch: 1.0,
+        distance: 20.0,
+        target: Vec3::new(1.0, 0.0, 2.0),
+    };
+    assert_eq!(Pose::at(framing), at);
+    assert_eq!(Orbit::new(framing).pose(), at);
     // At yaw 0 and pitch 1 the camera sits above positive Z: (0, sin 1, cos 1).
-    let direction = Pose::at(framing).direction();
-    assert!(direction.abs_diff_eq(Vec3::new(0.0, 0.841_471, 0.540_302_3), 0.000_001));
-    let eye = Pose::at(framing).transform().translation;
-    assert!(eye.abs_diff_eq(framing.target + direction * 20.0, 0.0001));
+    let direction = Vec3::new(0.0, 0.841_471, 0.540_302_3);
+    assert!(at.direction().abs_diff_eq(direction, 0.000_001));
+    let eye = at.transform().translation;
+    assert!(eye.abs_diff_eq(Vec3::new(1.0, 0.0, 2.0) + direction * 20.0, 0.0001));
 }
 
 #[test]
@@ -307,7 +313,15 @@ fn set_home_moves_nothing_until_home_is_pressed() {
     assert_eq!(orbit.home(), fitted);
     assert_eq!(orbit.pose(), before);
     pressed(KeyCode::Home).drive(&mut orbit, &TableFacts::default());
-    assert_eq!(orbit.pose(), Pose::at(fitted));
+    assert_eq!(
+        orbit.pose(),
+        Pose {
+            yaw: 0.0,
+            pitch: 1.0,
+            distance: 12.0,
+            target: Vec3::new(-1.0, 0.0, 4.0),
+        }
+    );
 }
 
 /// A clock of the game's own, as Arkham keeps one.
@@ -351,10 +365,10 @@ fn the_plugin_reads_the_games_clock_writes_the_table_camera_and_reports_navigati
     app.update();
     let pose = app.world().resource::<Orbit>().pose();
     assert!((pose.yaw - 0.1).abs() < 0.00001, "yaw {}", pose.yaw);
-    assert_eq!(
-        app.world().get::<Transform>(camera),
-        Some(&pose.transform())
-    );
+    // Yaw 0.1 and pitch 1 at 72 from (0, 0, 7): (sin 0.1 cos 1, sin 1, cos 0.1 cos 1) * 72 on.
+    let written = app.world().get::<Transform>(camera).unwrap();
+    let eye = Vec3::new(0.0, 0.0, 7.0) + Vec3::new(0.053_940_2, 0.841_471, 0.537_603_0) * 72.0;
+    assert!(written.translation.abs_diff_eq(eye, 0.0001), "{written:?}");
     assert_eq!(
         app.world().get::<Transform>(other),
         Some(&Transform::default())
@@ -384,9 +398,10 @@ fn the_plugin_reads_the_games_clock_writes_the_table_camera_and_reports_navigati
 }
 
 #[test]
-fn the_plugin_finds_the_pointer_over_a_ui_node_and_focus_on_a_button() {
+fn the_plugin_finds_the_pointer_over_a_ui_node_not_in_the_scene_and_focus_on_a_button() {
     let mut app = table_app();
     let node = app.world_mut().spawn(Node::default()).id();
+    let in_scene = app.world_mut().spawn((Node::default(), InScene)).id();
     let mesh = app.world_mut().spawn(Transform::default()).id();
     let button = app.world_mut().spawn(Button).id();
     let hovering = |entity: Entity| {
@@ -408,6 +423,11 @@ fn the_plugin_finds_the_pointer_over_a_ui_node_and_focus_on_a_button() {
     app.insert_resource(hovering(node));
     app.update();
     assert_eq!(app.world().resource::<Orbit>().pose().distance, zoomed);
+    // A UI node that stands for something in the scene: 68.4 * 0.95.
+    app.insert_resource(hovering(in_scene));
+    app.update();
+    let distance = app.world().resource::<Orbit>().pose().distance;
+    assert!((distance - 64.98).abs() < 0.0001, "{distance}");
     app.world_mut()
         .resource_mut::<AccumulatedMouseScroll>()
         .delta = Vec2::ZERO;

@@ -6,7 +6,8 @@
 //! [`VIEW_KEYS`] or the wheel, and which part of the window shows the scene. The
 //! camera reads the keys, mouse buttons, wheel, primary window and frame time itself,
 //! works out whether the pointer is over a UI node and whether keyboard focus is on a
-//! button, moves, and writes the camera's transform. After [`TableCameraSystems`],
+//! button, moves, and writes the camera's transform. A UI node marked [`InScene`]
+//! counts as part of the scene. After [`TableCameraSystems`],
 //! [`Navigation`] says whether this frame's input moved it.
 //!
 //! [`Orbit`] owns the orbit, camera-relative WASD pan, wheel normalization, scene-drag
@@ -193,7 +194,8 @@ impl Scene {
 /// the camera reads whatever was last written.
 ///
 /// The camera adds what it finds itself: the pointer over a UI node counts as outside
-/// the scene, and keyboard focus on a button takes the [`VIEW_KEYS`].
+/// the scene unless the node is [`InScene`], and keyboard focus on a button takes the
+/// [`VIEW_KEYS`].
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
 pub struct TableFacts {
     /// No drag, wheel or key moves the camera, and a held scene drag ends.
@@ -214,6 +216,11 @@ pub struct Navigation {
     /// That move ended following.
     pub stopped_following: bool,
 }
+
+/// A UI node that stands for something in the scene, such as a count over a token:
+/// the pointer over it is still over the scene.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct InScene;
 
 /// The camera whose transform the table camera writes.
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -270,7 +277,7 @@ struct Devices<'w, 's> {
 #[derive(SystemParam)]
 struct Interface<'w, 's> {
     hover: Option<Res<'w, HoverMap>>,
-    nodes: Query<'w, 's, (), With<Node>>,
+    nodes: Query<'w, 's, (), (With<Node>, Without<InScene>)>,
     focus: Option<Res<'w, InputFocus>>,
     controls: Query<'w, 's, (), With<Button>>,
 }
