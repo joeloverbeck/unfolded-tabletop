@@ -27,7 +27,7 @@ None has a lifecycle of its own.
 | `unfolded-hover` | hover opening lifecycle | never | none |
 | `unfolded-record-replacement` | recoverable file replacement | never | `tempfile` |
 | `unfolded-assets` | verified reads, PNG crops, prepared-directory publication | never | `image` (PNG), `rustix`, `serde_json`, `sha2` |
-| `unfolded-seat-client` | held-seat client, on Unix | never | `anyhow`, `serde_json` |
+| `unfolded-seat-client` | held-seat client and its `held-start` recorder, on Unix | never | `anyhow`, `serde_json` |
 | `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
 | `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde`, `serde_json`, `tempfile` and `rustix` with `seat` |
 
@@ -359,6 +359,35 @@ used by Cuba and an existing game, the two-hour extraction cap, actual-consumer
 verification and rollback. Cuba's `cuba-tools` sends its requests through it.
 Revert Arkham's adapter and dependency pins before removing
 the producer addition; no saves or artwork change.
+
+The package's `held-start` binary records one held start of any game's seat as
+evidence for a pull request. Run it from the game's checkout, so that it records
+that checkout's revision:
+
+```sh
+cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \
+  <out-dir> <case> -- <game executable> <its seat options>
+```
+
+It appends `--socket <out-dir>/<case>.sock` and runs the command with no standard
+input. It keeps that command's standard output and error as `<case>.stdout` and
+`<case>.stderr`, and copies the seat's log to `<case>.seat.log`. `<case>.record`
+names:
+
+- the command, the working directory, and that directory's Git revision with
+  whether its tracked files are unchanged;
+- the launching command's exit status, its standard-output line count, and the
+  first line's status and any error;
+- when that status is `ready`, the statuses that `observe` and `quit` answered;
+- whether the socket was removed within ten seconds, and the log's last two lines.
+
+The record is also printed. A case already recorded in the directory is refused,
+so a later run cannot replace an earlier one. Record a "before" run under its own
+case before changing the game. `seat-client/tests/held_start.rs` holds a ready
+start, a refused one and the refusal of a recorded case. Its stand-in game is the
+test executable itself, so it has no test harness of its own. It starts child
+processes, listens on a Unix-domain socket under the system's temporary directory,
+and runs `git` when it is installed, which finds no repository there.
 
 ## Screen capture
 
