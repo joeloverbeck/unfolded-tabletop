@@ -72,7 +72,7 @@ fn a_known_change_reports_its_count_largest_difference_and_box() {
         "threshold: 0, limit: 0, ignored: none\n\
          differing pixels: 2\n\
          largest difference: 100\n\
-         bounding box: x 2, y 1, width 4, height 4\n"
+         bounding box: 2,1,4,4\n"
     );
 }
 
@@ -82,10 +82,10 @@ fn a_change_inside_the_ignored_rectangle_is_not_counted() {
     assert_eq!(run.code, Some(1), "{}", run.stderr);
     assert_eq!(
         run.stdout,
-        "threshold: 0, limit: 0, ignored: x 1, y 0, width 2, height 2\n\
+        "threshold: 0, limit: 0, ignored: 1,0,2,2\n\
          differing pixels: 1\n\
          largest difference: 5\n\
-         bounding box: x 5, y 4, width 1, height 1\n"
+         bounding box: 5,4,1,1\n"
     );
 }
 
@@ -94,9 +94,8 @@ fn a_difference_at_the_threshold_does_not_count() {
     let run = compare(&plain(), &changed(), &["--threshold", "5"]);
     assert_eq!(run.code, Some(1), "{}", run.stderr);
     assert!(
-        run.stdout.ends_with(
-            "differing pixels: 1\nlargest difference: 100\nbounding box: x 2, y 1, width 1, height 1\n"
-        ),
+        run.stdout
+            .ends_with("differing pixels: 1\nlargest difference: 100\nbounding box: 2,1,1,1\n"),
         "{}",
         run.stdout
     );
@@ -124,9 +123,8 @@ fn a_change_in_transparency_alone_differs() {
     let run = compare(&plain(), &after, &[]);
     assert_eq!(run.code, Some(1), "{}", run.stderr);
     assert!(
-        run.stdout.ends_with(
-            "differing pixels: 1\nlargest difference: 255\nbounding box: x 7, y 5, width 1, height 1\n"
-        ),
+        run.stdout
+            .ends_with("differing pixels: 1\nlargest difference: 255\nbounding box: 7,5,1,1\n"),
         "{}",
         run.stdout
     );
@@ -153,9 +151,21 @@ fn a_file_that_is_not_a_png_is_an_error() {
     std::fs::write(&text, "not a picture").unwrap();
     let run = run_on(&picture, &text, &[]);
     assert_eq!(run.code, Some(2), "{}", run.stdout);
-    assert!(run.stderr.contains("b.png"), "{}", run.stderr);
+    assert!(run.stderr.contains("b.png is not a PNG"), "{}", run.stderr);
     let missing = run_on(&picture, &directory.path().join("none.png"), &[]);
     assert_eq!(missing.code, Some(2), "{}", missing.stdout);
+}
+
+#[test]
+fn the_printed_box_can_be_ignored_as_printed() {
+    // The box `a_known_change_…` prints, handed back as `--ignore`, leaves nothing.
+    let run = compare(&plain(), &changed(), &["--ignore", "2,1,4,4"]);
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+    assert!(
+        run.stdout.contains("differing pixels: 0\n"),
+        "{}",
+        run.stdout
+    );
 }
 
 #[test]

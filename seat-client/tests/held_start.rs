@@ -70,7 +70,7 @@ fn game(arguments: &[String]) -> ExitCode {
 
 /// The stand-in seat: one connection, `observed` for `observe`, `settled` for
 /// `settle`, `captured` for `capture` after writing a small file at its path, and `bye`
-/// for `quit`.
+/// for `quit`. A `key` request ends the session unanswered, as a seat that fails would.
 fn serve(socket: &Path) -> ExitCode {
     let listener = UnixListener::bind(socket).unwrap();
     eprintln!("listening");
@@ -85,6 +85,7 @@ fn serve(socket: &Path) -> ExitCode {
                 "captured"
             }
             Some("quit") => "bye",
+            Some("key") => break,
             _ => "refused",
         };
         writeln!(stream, r#"{{"ok":true,"mode":"seat","status":"{status}"}}"#).unwrap();
@@ -287,6 +288,23 @@ fn a_refused_start_records_its_extra_requests_as_not_sent(scratch: &Path) {
     assert!(record.contains(&expected), "{record}");
 }
 
+fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
+    let recorded = record_requests(
+        scratch,
+        "cut",
+        "ready",
+        &[
+            r#"{"op":"key","key":"Enter","revision":0}"#,
+            r#"{"op":"settle"}"#,
+        ],
+    );
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("cut.record"));
+    let expected = "first status: ready\nobserve: observed\nrequest 1: {\"op\":\"key\",\"key\":\"Enter\",\"revision\":0}\n  status: unanswered\nrequest 2: {\"op\":\"settle\"}\n  status: unanswered\nquit: unanswered\nexchange: ";
+    assert!(record.contains(expected), "{record}");
+    assert!(record.contains("socket after: removed\n"), "{record}");
+}
+
 /// One test: its name and what it runs.
 type Test = (&'static str, fn(&Path));
 
@@ -298,7 +316,7 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 7] = [
+    let tests: [Test; 8] = [
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
@@ -326,6 +344,10 @@ fn main() -> ExitCode {
         (
             "a_refused_start_records_its_extra_requests_as_not_sent",
             a_refused_start_records_its_extra_requests_as_not_sent,
+        ),
+        (
+            "a_session_that_ends_early_records_the_unanswered_requests",
+            a_session_that_ends_early_records_the_unanswered_requests,
         ),
     ];
     if arguments.iter().any(|argument| argument == "--list") {

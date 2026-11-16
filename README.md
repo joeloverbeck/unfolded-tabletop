@@ -484,8 +484,8 @@ Each `--request` line is a seat request, sent in the given order on the same
 connection after `observe` and before `quit`, and only when the start is `ready`;
 otherwise the record lists it as `not sent`. With no `--request`, `observe` and `quit`
 share one line, as before; with any, each request gets lines of its own. If the
-session ends early, a request with no answer is `unanswered`, and the record ends
-the exchange with its error. A `capture` names a plain file name, which `held-start`
+session ends early, a request with no answer is `unanswered`, and an `exchange:`
+line says why: the count the seat answered, or the error. A `capture` names a plain file name, which `held-start`
 rewrites to the absolute `<out-dir>/<case>.<name>`, so the picture sits beside the
 record and its revision line. Before anything is launched, `held-start` refuses a
 line that is no seat request, a `quit` (it sends its own), a capture path that is
@@ -501,9 +501,10 @@ case before changing the game, and compare the captures with `compare-captures`
 start, a refused one, the refusal of a recorded case, a relative `<out-dir>`
 handed to a game that refuses a relative socket, a ready start sending a `settle`
 and a `capture` between `observe` and `quit`, each refusal above before launch, and
-a refused start's requests recorded as not sent. Its stand-in game is the
+a refused start's requests recorded as not sent, and a session that ends early with
+its requests unanswered. Its stand-in game is the
 test executable itself, so it has no test harness of its own; its seat writes a
-small file for a capture and renders nothing. It starts child
+small file for a capture, renders nothing and ends its session at a `key` request. It starts child
 processes, listens on a Unix-domain socket under the system's temporary directory,
 and runs `git` when it is installed, which finds no repository there.
 
@@ -696,13 +697,15 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools
 A pixel differs when its largest difference in red, green, blue or transparency
 exceeds the threshold (default 0). Pixels inside the ignored rectangle are left out.
 It prints its options, the count of differing pixels, the largest difference outside
-the ignored rectangle and the box around the differing pixels, then exits 0 when the
+the ignored rectangle and the box around the differing pixels, written as
+`x,y,width,height` so it can be handed back as `--ignore`, then exits 0 when the
 count is within the limit (default 0), 1 when it exceeds it and 2 on an error: an
-unreadable file, one that is not PNG, pictures of different sizes or malformed
+unreadable file, one whose contents are not PNG, pictures of different sizes or malformed
 options. Two held starts of one unchanged table can differ by rendering noise; on
 this repository's development machine, Arkham's differed by at most 3 levels.
 `dev-tools/tests/compare_captures.rs` holds identical pictures, a known change's
-count, largest difference and box, the ignored rectangle, the threshold, the limit,
+count, largest difference and box, the ignored rectangle, that box ignored as
+printed, the threshold, the limit,
 a change in transparency alone, and each error, on pictures the tests make.
 
 It is not part of `run_cli`, so the commands Arkham and Netrunner wrap are

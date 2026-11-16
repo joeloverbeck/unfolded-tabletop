@@ -33,7 +33,8 @@ struct Args {
     limit: u64,
 }
 
-/// A rectangle of pixels; written and read as `x,y,width,height`.
+/// A rectangle of pixels; written and read as `x,y,width,height`, so a printed box
+/// can be handed back as `--ignore`.
 #[derive(Clone, Copy)]
 struct Rectangle {
     x: u32,
@@ -73,7 +74,7 @@ impl fmt::Display for Rectangle {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "x {}, y {}, width {}, height {}",
+            "{},{},{},{}",
             self.x, self.y, self.width, self.height
         )
     }
@@ -161,15 +162,14 @@ fn compare(args: &Args) -> Result<u64> {
 }
 
 fn picture(path: &PathBuf) -> Result<RgbaImage> {
-    let reader = image::ImageReader::open(path)
-        .with_context(|| format!("cannot read {}", path.display()))?
-        .with_guessed_format()
-        .with_context(|| format!("cannot read {}", path.display()))?;
-    if reader.format() != Some(image::ImageFormat::Png) {
+    let bytes = std::fs::read(path).with_context(|| format!("cannot read {}", path.display()))?;
+    // Judged by its contents, not its name.
+    if image::guess_format(&bytes).ok() != Some(image::ImageFormat::Png) {
         bail!("{} is not a PNG", path.display());
     }
-    Ok(reader
-        .decode()
-        .with_context(|| format!("cannot decode {}", path.display()))?
-        .into_rgba8())
+    Ok(
+        image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+            .with_context(|| format!("cannot decode {}", path.display()))?
+            .into_rgba8(),
+    )
 }

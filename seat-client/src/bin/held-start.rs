@@ -12,7 +12,8 @@
 //! revision, the launching command's exit status, its stdout line count and first
 //! status, and whether the socket was removed. When the start prints `ready`, the
 //! record also holds what `observe` and `quit` answered, and what each `--request`,
-//! sent in order between them on the same connection, answered. A `capture` request
+//! sent in order between them on the same connection, answered; a start that is not
+//! `ready` lists each as not sent. A `capture` request
 //! names a plain file name, which is written as `<out-dir>/<case>.<name>`. A case
 //! already recorded in the directory is refused, as is a capture whose file exists,
 //! so a later run cannot replace an earlier one.
@@ -194,8 +195,9 @@ fn revision(directory: &Path) -> String {
 }
 
 /// Read each `--request` line before anything is launched: a seat request other than
-/// `quit`, whose capture names a plain file name that is not yet written. Its capture
-/// path becomes `<out>/<case>.<name>`.
+/// `quit`, whose capture names a plain file name that is none of `held-start`'s own
+/// files, no earlier capture's and not yet written. Its capture path becomes
+/// `<out>/<case>.<name>`.
 fn extras(lines: &[&String], case: &str, out: &Path) -> Result<Vec<Extra>> {
     let mut extras: Vec<Extra> = Vec::with_capacity(lines.len());
     for line in lines {
@@ -303,7 +305,8 @@ fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
 }
 
 /// Send `requests` on one connection: the status each answer carried, in order, and
-/// the error that ended the exchange early, if one did.
+/// why the exchange ended early, if it did: an error, or a session that ended with
+/// requests unanswered.
 fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>) {
     let connection = match seat_client::Connection::open(socket) {
         Ok(connection) => connection,
@@ -326,7 +329,15 @@ fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>)
                 .unwrap_or_else(|| "malformed".to_owned())
         })
         .collect();
-    (statuses, exchanged.err().map(|error| format!("{error:#}")))
+    let ended = match exchanged {
+        Ok(seat_client::Outcome::Short { answered }) => Some(format!(
+            "the seat answered {answered} of {} requests before its session ended",
+            requests.len()
+        )),
+        Ok(_) => None,
+        Err(error) => Some(format!("{error:#}")),
+    };
+    (statuses, ended)
 }
 
 /// Copy the seat's log, which the launcher writes at the socket's path with `.log`
