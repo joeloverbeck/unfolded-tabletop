@@ -186,7 +186,7 @@ fn focus_applies_once_without_replacing_home_or_live_following() {
 
         orbit.set_following(true);
         let follow_target = Vec3::new(3.0, 0.0, 7.0);
-        orbit.update_follow_target(Some((follow_target, 15.0)));
+        orbit.update_follow_target(Some((follow_target, 15.0).into()));
         input.dt = 1.0;
         input.step(&mut orbit);
         assert_eq!(orbit.pose().target, follow_target);
@@ -389,7 +389,7 @@ fn manual_navigation_overrides_following_and_freezes_pending_framing() {
         let mut orbit = Orbit::new(HOME);
         let mut input = Inputs::default();
         orbit.set_following(true);
-        orbit.update_follow_target(Some(ASIDE));
+        orbit.update_follow_target(Some(ASIDE.into()));
         match gesture {
             0 => {
                 input.buttons.press(MouseButton::Right);
@@ -417,7 +417,7 @@ fn follow_interpolates_and_follow_off_freezes_framing() {
     let mut input = Inputs::default();
     orbit.focus(HOME);
     orbit.set_following(true);
-    orbit.update_follow_target(Some(DETAIL));
+    orbit.update_follow_target(Some(DETAIL.into()));
     assert_eq!(orbit.pose().distance, 72.0);
     assert!(orbit.is_moving());
     let step = input.step(&mut orbit);
@@ -430,7 +430,7 @@ fn follow_interpolates_and_follow_off_freezes_framing() {
     assert!((orbit.pose().target.z - 7.6).abs() < 0.00001);
     assert!(!orbit.is_moving());
     orbit.set_following(true);
-    orbit.update_follow_target(Some(DETAIL));
+    orbit.update_follow_target(Some(DETAIL.into()));
     input.step(&mut orbit);
     assert!((orbit.pose().target.z - 7.96).abs() < 0.00001);
 }
