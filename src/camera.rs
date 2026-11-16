@@ -1,4 +1,16 @@
 //! Table camera motion and input capture, with consumer-owned framing and UI policy.
+//!
+//! [`Orbit`] owns the orbit, camera-relative WASD pan, wheel normalization,
+//! scene-drag capture and follow interpolation. The consumer supplies its home
+//! target and distance, its focus and follow targets, and its UI capture facts
+//! through [`FrameInput`]. Named views, table framing, visibility, modal lifecycle
+//! and when an action changes the follow target stay with the consumer.
+//!
+//! The bounds are the ones Arkham's camera had: pitch 0.35 to 1.35 radians,
+//! manual distance 6 to 90 world units, and wheel distance multiplied by 0.95 per
+//! line, with follow interpolation after the distance clamp. Focus and follow
+//! targets are not validated here. These bounds are not a promise to fit
+//! arbitrary tables.
 
 use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
 

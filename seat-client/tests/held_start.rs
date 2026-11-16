@@ -305,6 +305,26 @@ fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
     assert!(record.contains("socket after: removed\n"), "{record}");
 }
 
+fn help_prints_the_usage_and_launches_nothing(scratch: &Path) {
+    let empty = scratch.join("help");
+    std::fs::create_dir(&empty).unwrap();
+    let help = Command::new(env!("CARGO_BIN_EXE_held-start"))
+        .arg("--help")
+        .current_dir(&empty)
+        .output()
+        .unwrap();
+    assert!(help.status.success(), "{help:?}");
+    let text = String::from_utf8(help.stdout).unwrap();
+    assert!(
+        text.starts_with(
+            "usage: held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]\n"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("at most\n107 bytes"), "{text}");
+    assert_eq!(std::fs::read_dir(&empty).unwrap().count(), 0);
+}
+
 /// One test: its name and what it runs.
 type Test = (&'static str, fn(&Path));
 
@@ -316,7 +336,7 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 8] = [
+    let tests: [Test; 9] = [
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
@@ -348,6 +368,10 @@ fn main() -> ExitCode {
         (
             "a_session_that_ends_early_records_the_unanswered_requests",
             a_session_that_ends_early_records_the_unanswered_requests,
+        ),
+        (
+            "help_prints_the_usage_and_launches_nothing",
+            help_prints_the_usage_and_launches_nothing,
         ),
     ];
     if arguments.iter().any(|argument| argument == "--list") {

@@ -29,6 +29,16 @@
 //! later; `mudsong`, a private repository that pins the library for its application,
 //! is the consumer that sends it.
 //!
+//! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
+//! steps unless a request asks otherwise, and for 7,200 at most; admission settling
+//! the admitted table for at most 1,800 steps and then returning, settled or not; and
+//! 30 seconds for a capture. A `scroll` takes each axis finite and between -32 and 32
+//! wheel lines, with at least one nonzero, and its `scrolled` response confirms that
+//! input was delivered, not that a panel moved. `tests/seat.rs` holds the step and the
+//! protocol's main refusals word for word. No test here or in Arkham holds the settling
+//! limits, the capture's 30 seconds, a capture's other refusals or the wording for a
+//! focus that is no control or menu row, so a change to them would pass every check.
+//!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! scrolls and keys act only on the revision they were decided on, a key that can commit
 //! presses only the control it names, and a connection stops pressing after its first

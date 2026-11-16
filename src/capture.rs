@@ -23,6 +23,7 @@ use std::{
 };
 
 /// Write a captured picture as 8-bit RGB, in the format the path's extension names.
+/// Alpha is dropped, and a floating-point picture is converted from linear light.
 pub fn write_image(image: Image, path: &Path) -> Result<(), String> {
     let image = image
         .try_into_dynamic()
@@ -190,7 +191,9 @@ enum Request {
 /// Once the capture has returned, a picture that arrives for it is not written.
 /// So one that ends [`Failure::Incomplete`] leaves no file behind later. Its
 /// request stays in the world until Bevy has handed that picture back, because
-/// Bevy marks the request when it does.
+/// Bevy marks the request when it does. This differs from Arkham on purpose: there a
+/// capture given up as incomplete still wrote its file when the picture came later,
+/// and a picture handed back twice was written twice.
 pub fn image_to_file(
     app: &mut App,
     image: Handle<Image>,

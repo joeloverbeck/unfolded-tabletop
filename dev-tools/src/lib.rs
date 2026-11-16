@@ -1,6 +1,14 @@
 //! Development support extracted from Arkham d0b57009ba037ca8756a4f2756dcb550d8634773.
 //! Consumers own check commands, publication policy and game-specific preparation.
-//! This crate is independent of the tabletop runtime and rendering dependencies.
+//! This crate is independent of the tabletop runtime and rendering dependencies,
+//! and the runtime crate does not depend on it.
+//!
+//! A consumer may embed [`reader`], [`check`], [`process`] and [`digest`], or call
+//! [`run_cli`] for the same reading and recording commands in a process of their
+//! own, which installs its interrupt handler there. Reader arguments keep their
+//! explicit byte limits, paging cursors and source hashes; recording keeps complete
+//! logs, source fingerprints, interruption and child cleanup. What they produce is
+//! mechanical evidence, not authority to accept or publish a result.
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use sha2::{Digest, Sha256};

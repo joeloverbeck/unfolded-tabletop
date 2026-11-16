@@ -6,7 +6,9 @@ use std::io::{self, Read};
 /// Reads a fresh seed from the operating system's `/dev/urandom` device.
 ///
 /// Preserves Arkham's eight-byte, little-endian seed acquisition. Opening or
-/// reading the device can fail; the consumer owns the resulting user message.
+/// reading the device can fail, and the unchanged error is returned: no fallback
+/// seed is supplied. The consumer owns the resulting message and whether its seed
+/// is saved.
 pub fn fresh_seed() -> io::Result<u64> {
     let mut seed = [0; 8];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut seed)?;
@@ -16,7 +18,9 @@ pub fn fresh_seed() -> io::Result<u64> {
 /// A SplitMix64 generator whose whole state is one `u64`, so a consumer can keep
 /// it in saved state and resume the same sequence from it.
 ///
-/// The numbers a state produces are a contract with consumers' saved games.
+/// The numbers a state produces are a contract with consumers' saved games:
+/// `random/tests/random.rs` pins numbers recorded from Arkham, and changing them
+/// breaks every consumer.
 /// It is not `Copy`: a silent copy would hand out the same numbers twice.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeededRandom {

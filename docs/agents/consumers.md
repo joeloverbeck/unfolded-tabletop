@@ -4,7 +4,7 @@ What each game needs from work that changes it: how it renders at the seat, how 
 
 Commit messages and pull requests in a game say `For #N`. Closing an issue is the owner's acceptance, so leave closing keywords out.
 
-**Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (README, "Held-seat client"), so the picture sits beside a record of the game's revision and whether its tree is clean:
+**Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision and whether its tree is clean:
 
 ```sh
 cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \

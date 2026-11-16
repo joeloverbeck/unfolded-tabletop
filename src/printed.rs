@@ -3,6 +3,18 @@
 //! Extracted from Arkham's `gathering_tabletop/printed.rs` at
 //! d0212e5eecf21c358472a62c93c8992607497263. Consumers own text bundles,
 //! typography, placement, names, picking, actions and scene lifetime.
+//!
+//! Keep an [`Atlas`] across scene rebuilds. [`Atlas::render`] lays the caller's
+//! rows into one transparent image, through a `Camera2d` that keeps Bevy's
+//! defaults apart from the supplied order and a transparent clear color. The
+//! image is reused while its pixel dimensions stay the same, and replaced when
+//! the width, row height or row count changes. [`Rendered::spawn`] maps one row
+//! onto an unlit, blended XZ plane at the caller's exact transform. This is not a
+//! typography framework, and it installs no plugin.
+//!
+//! On each rebuild the caller despawns the returned camera, root and planes; the
+//! root owns its descendants. Each consumer keeps its own rendered inspection,
+//! including live text changes.
 use bevy::{
     camera::RenderTarget, mesh::VertexAttributeValues, prelude::*,
     render::render_resource::TextureFormat,

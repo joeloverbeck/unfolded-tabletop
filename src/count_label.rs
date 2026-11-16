@@ -7,6 +7,9 @@
 //! Kept while games move to [`crate::label_anchor`], which tracks these labels
 //! and any other node a caller owns (issue #35). New code spawns its own node
 //! with a [`LabelAnchor`] instead of calling [`spawn`].
+//!
+//! Since issue #35, [`spawn`] adds a [`LabelAnchor`] to the count it makes, and
+//! [`CountLabelPlugin`] installs [`LabelAnchorPlugin`].
 use crate::label_anchor::{LabelAnchor, LabelAnchorPlugin};
 use bevy::prelude::*;
 

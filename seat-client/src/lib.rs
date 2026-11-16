@@ -8,9 +8,10 @@
 //! nothing bounds a write; a final line without a newline is accepted as it arrived.
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
-//! [`requests`], [`connect`], [`exchange`] and [`read_line`] are the earlier calls,
-//! kept while games move: with them the caller sets the socket's read timeout and
-//! compares the count of answers with its requests.
+//! [`requests`] splits arguments or standard-input lines into request lines for
+//! [`Connection::send`]. [`connect`], [`exchange`] and [`read_line`] are the earlier
+//! calls, deprecated and kept while a pin that uses them moves: with them the caller
+//! sets the socket's read timeout and compares the count of answers with its requests.
 #![cfg(unix)]
 
 use anyhow::{Context, Result, bail};
@@ -186,7 +187,7 @@ impl Connection {
         check: impl FnMut() -> Result<()>,
     ) -> Result<Outcome> {
         self.stream.set_read_timeout(Some(WAKE))?;
-        let (answered, failed) = exchange(&self.stream, requests, output, check)?;
+        let (answered, failed) = exchange_lines(&self.stream, requests, output, check)?;
         Ok(if answered < requests.len() {
             Outcome::Short { answered }
         } else if failed {
@@ -271,6 +272,7 @@ pub fn requests(given: &[String], input: &mut impl BufRead) -> Result<Vec<String
 
 /// Connect without replacing the OS error kind; the caller supplies launch help
 /// or distinguishes a missing/refused socket from other failures.
+#[deprecated(note = "use `Connection::open`, which says when no seat listens")]
 pub fn connect(socket: &Path) -> std::io::Result<UnixStream> {
     UnixStream::connect(socket)
 }
@@ -284,7 +286,17 @@ pub fn connect(socket: &Path) -> std::io::Result<UnixStream> {
 /// check consumer-owned interrupts/deadlines. Without one, reads may wait forever.
 /// As in the original client, a write failure only means fewer answers. This
 /// does not impose a write timeout or interrupt a writer blocked on a large send.
+#[deprecated(note = "use `Connection::send`, which sets the wake and says how it went")]
 pub fn exchange(
+    stream: &UnixStream,
+    requests: &[String],
+    output: &mut impl Write,
+    on_timeout: impl FnMut() -> Result<()>,
+) -> Result<(usize, bool)> {
+    exchange_lines(stream, requests, output, on_timeout)
+}
+
+fn exchange_lines(
     stream: &UnixStream,
     requests: &[String],
     output: &mut impl Write,
@@ -305,7 +317,7 @@ pub fn exchange(
         let mut line = Vec::new();
         loop {
             line.clear();
-            if !read_line(&mut reader, &mut line, &mut on_timeout)? {
+            if !read_answer(&mut reader, &mut line, &mut on_timeout)? {
                 return Ok((answered, failed));
             }
             output.write_all(&line)?;
@@ -324,7 +336,16 @@ pub fn exchange(
 /// Read one line, retaining partial bytes across socket timeouts. Invoke the
 /// consumer's callback on each timeout. False means EOF with no bytes remaining.
 /// The caller clears `line` before reading its next response.
+#[deprecated(note = "use `Connection::send` or `Connection::request`, which read the answers")]
 pub fn read_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    on_timeout: impl FnMut() -> Result<()>,
+) -> Result<bool> {
+    read_answer(reader, line, on_timeout)
+}
+
+fn read_answer(
     reader: &mut impl BufRead,
     line: &mut Vec<u8>,
     mut on_timeout: impl FnMut() -> Result<()>,

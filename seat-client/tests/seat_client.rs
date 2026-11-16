@@ -1,3 +1,6 @@
+// Several cases hold the earlier calls, deprecated and kept while a pin that uses them moves.
+#![allow(deprecated)]
+
 use std::{
     io::{BufReader, Read, Write},
     os::unix::net::{UnixListener, UnixStream},

@@ -1,7 +1,9 @@
 //! Opening lifecycle for pointer-driven reading views.
 //!
-//! Extracted from mudsong's pointing/growing interaction. Consumers own target
-//! picking and eligibility, dwell duration, content, geometry and animation.
+//! Extracted from mudsong. Consumers own target picking and eligibility, dwell
+//! duration, content, actions, geometry, timing, dimming and animation
+//! readiness. This is not a general tooltip system. Reset the lifecycle with
+//! [`Hover::default`] when the consumer's view resets.
 
 use std::time::Duration;
 
@@ -29,7 +31,8 @@ impl<T> Default for Hover<T> {
 impl<T: Clone + PartialEq> Hover<T> {
     /// Advances using the consumer's clock and picked target. The frame that
     /// changes the target starts its dwell at zero, regardless of `elapsed`.
-    /// Eligibility may change without changing the target's identity.
+    /// Eligibility may change without changing the target's identity, and the
+    /// target keeps the dwell it has accumulated.
     pub fn update(
         &mut self,
         target: Option<T>,

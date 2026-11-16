@@ -1,5 +1,24 @@
 //! Locked file-replacement lifecycle. Adapters decide record
-//! compatibility and replacement policy; this module owns filesystem sequencing.
+//! compatibility and replacement policy; this module owns filesystem sequencing:
+//! bounded reads, a persistent sidecar lock, staged and synced replacement,
+//! previous-record retention, exclusive creation and restart archiving.
+//!
+//! The consumer supplies its record-size bound, error conversion, replacement
+//! admission and recovery validation. Schemas, checksums, content identities,
+//! freshness and replay policy stay in the consumer. Admission and recovery
+//! validation run under the same lock as installation, and the lock file is never
+//! truncated or removed. An unchanged decision writes no record bytes and does not
+//! validate recovery.
+//!
+//! The lock is released explicitly when [`replace`] returns or unwinds, so a forked
+//! child that has not yet reached exec cannot keep it held through an inherited
+//! file description. Unlock errors, like close errors, are best-effort cleanup:
+//! they do not mask the operation's error, report an installed record as failed,
+//! or panic during unwinding. If the operating system refuses the unlock, an
+//! inherited descriptor can still hold the lock until it closes.
+//!
+//! This is not a multi-file transaction, does not sync parent directories, does not
+//! promise durability through power loss, and does not repair corrupt records.
 
 use std::{
     fs,
