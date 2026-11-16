@@ -11,6 +11,9 @@ pub struct RequiredAssets {
 }
 
 /// FontLoader reads bytes; registration proves the text renderer decoded them.
+///
+/// No test registers a real font: the tests hold only that a font without a
+/// registered family does not count.
 pub fn font_registered(font: &Font, context: &mut bevy::text::FontCx) -> bool {
     !font.alias.is_empty()
         && context

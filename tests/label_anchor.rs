@@ -4,6 +4,7 @@ mod common;
 
 use bevy::prelude::*;
 use common::{assert_hidden, assert_position, camera, measured};
+#[allow(deprecated)]
 use unfolded_tabletop::{
     count_label::{self, CountLabelPlugin},
     label_anchor::{LabelAnchor, LabelAnchorPlugin},
@@ -157,6 +158,7 @@ fn without_one_3d_camera_nothing_changes() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn counts_and_caller_nodes_share_one_tracker_whichever_plugin_comes_first() {
     for count_plugin_first in [true, false] {
         let mut app = App::new();

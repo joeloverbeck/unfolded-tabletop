@@ -11,6 +11,13 @@
 //! writes the node's `left`, `top` and `Visibility`, and removes a node whose
 //! anchor entity has lost its `Transform`. A caller that hides a node itself
 //! uses `Display::None` or despawns it, since `Visibility` is rewritten.
+//!
+//! Install [`LabelAnchorPlugin`]. Its system runs in `PostUpdate` after transform
+//! propagation and the camera's update, so a camera or anchor moved this frame is
+//! projected where it now is. The node is hidden when projection fails. Tracking
+//! needs exactly one `Camera3d`: with none, or several, it changes nothing. It
+//! makes no promise about several views, or about offsets that rotate with a
+//! parent. When a count updates and whether a zero shows stay with the caller.
 use bevy::{
     camera::{CameraUpdateSystems, visibility::VisibilitySystems},
     prelude::*,

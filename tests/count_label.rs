@@ -1,4 +1,6 @@
 #![cfg(feature = "render")]
+// The deprecated `count_label`, kept while a pin that uses it moves.
+#![allow(deprecated)]
 
 mod common;
 

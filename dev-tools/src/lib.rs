@@ -1,6 +1,16 @@
 //! Development support extracted from Arkham d0b57009ba037ca8756a4f2756dcb550d8634773.
 //! Consumers own check commands, publication policy and game-specific preparation.
-//! This crate is independent of the tabletop runtime and rendering dependencies.
+//! This crate is independent of the tabletop runtime and rendering dependencies,
+//! and the runtime crate does not depend on it.
+//!
+//! A consumer may embed [`reader`], [`check`], [`process`] and [`digest`], or call
+//! [`run_cli`] for the same reading and recording commands in a process of their
+//! own, which installs its interrupt handler there. Reader arguments keep their
+//! explicit byte limits, paging cursors and source hashes; recording keeps complete
+//! logs, source fingerprints, interruption and child cleanup. What they produce is
+//! mechanical evidence, not authority to accept or publish a result. The
+//! `compare-captures` binary is not part of [`run_cli`], so the commands a consumer
+//! wraps through it are unchanged.
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use sha2::{Digest, Sha256};
@@ -34,7 +44,7 @@ enum Command {
 
 /// Run the shared commands in a dedicated process. Installs one interrupt handler;
 /// callers embedding individual modules instead own their handler and exit policy.
-/// `args` includes argv[0], following clap's parsing convention.
+/// `args` includes `argv[0]`, following clap's parsing convention.
 pub fn run_cli(args: impl IntoIterator<Item = OsString>) -> u8 {
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,

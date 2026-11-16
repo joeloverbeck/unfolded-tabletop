@@ -1,4 +1,7 @@
-//! Bounded, identity-checked collection reads extracted from Arkham.
+//! Bounded, identity-checked collection reads extracted from Arkham: relative-path
+//! and regular-file checks, bounded and SHA-256-verified reads, bounded PNG crops,
+//! and publication of a prepared directory that never replaces an existing output.
+//! Consumers own which assets they require and what a missing or changed one means.
 use sha2::{Digest, Sha256};
 use std::{
     fmt, fs,

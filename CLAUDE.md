@@ -1,15 +1,17 @@
 # Shared tabletop candidate
 
-Read `README.md`'s opening and its Contents before work, then the sections the work touches. Issues in this repository own current work; the
-original coordinated extraction is recorded in
-https://github.com/joeloverbeck/netrunner-unfolded/issues/1. Preserve consumer
-rules, layout, asset policy and native-operation policy in their repositories.
+Read `README.md` and `GLOSSARY.md` before work. Then read what the work touches:
+the mechanism's rustdoc; `docs/governance.md` before extracting a mechanism or
+adding a consumer; `docs/testing.md` before running or changing tests;
+`docs/agents/consumers.md` before work in a consumer. Issues in this repository own
+current work. Preserve consumer rules, layout, asset policy and native-operation
+policy in their repositories.
 
 This repository adopts `docs/principles/principles-for-repos.md`, revision
 2026-11-15.1, with the modules named in its agent bootstrap below. The accepted
-two-consumer EVID-6 specialization is recorded in `README.md` and issue #1. The
-2026-11-11 waiver that admits `mudsong` as a third consumer is recorded in
-`README.md`.
+two-consumer EVID-6 specialization, the 2026-11-11 waiver that admits `mudsong` as
+a third consumer, and the 2026-11-14 Cuba Libre extension are recorded in
+`docs/governance.md`.
 <!-- BEGIN PRINCIPLES-FOR-REPOS BOOTSTRAP 2026-11-15.1 -->
 ## Repository constitution
 

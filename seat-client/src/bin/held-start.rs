@@ -1,22 +1,6 @@
-//! Record one held start of a game's agent seat as evidence:
-//!
-//! ```text
-//! held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]
-//! ```
-//!
-//! It runs the command with `--socket <out-dir>/<case>.sock` appended, as an agent's
-//! shell would, with `<out-dir>` made absolute, and keeps what a reviewer needs to check
-//! a claim about that start:
-//! `<case>.stdout` and `<case>.stderr`, the seat's log as `<case>.seat.log`, and
-//! `<case>.record`. The record names the command, the working directory and its Git
-//! revision, the launching command's exit status, its stdout line count and first
-//! status, and whether the socket was removed. When the start prints `ready`, the
-//! record also holds what `observe` and `quit` answered, and what each `--request`,
-//! sent in order between them on the same connection, answered; a start that is not
-//! `ready` lists each as not sent. A `capture` request
-//! names a plain file name, which is written as `<out-dir>/<case>.<name>`. A case
-//! already recorded in the directory is refused, as is a capture whose file exists,
-//! so a later run cannot replace an earlier one.
+//! Record one held start of a game's agent seat as evidence for a pull request.
+//! `HELP`, which `held-start --help` prints, describes the command, the files it
+//! writes, the record and its refusals.
 
 use anyhow::{Context, Result, bail};
 use std::{
@@ -36,6 +20,43 @@ const SOCKET_REMOVAL: Duration = Duration::from_secs(10);
 const RESPONSE: Duration = Duration::from_secs(180);
 const USAGE: &str =
     "usage: held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
+/// What `--help` prints after the usage: everything a caller needs to read a record.
+const HELP: &str = "\
+Record one held start of a game's agent seat as evidence for a pull request. Run it
+from the game's checkout, so that the record names that checkout's revision.
+
+It appends `--socket <out-dir>/<case>.sock` to the command, with <out-dir> made
+absolute, and runs the command with no standard input. A socket path holds at most
+107 bytes, so keep <out-dir> short. It writes, beside each other in <out-dir>:
+
+  <case>.stdout, <case>.stderr  the launching command's standard output and error
+  <case>.seat.log               the held seat's log
+  <case>.record                 the record, which is also printed
+
+The record names the command, the working directory, that directory's Git revision
+and whether its tracked files are unchanged; the launching command's exit status, its
+standard-output line count, and the first line's status and any error; when that
+status is `ready`, what `observe` and `quit` answered; each --request as it was sent,
+its status, and for a capture its file and whether it was written; whether the socket
+was removed within ten seconds; and the log's last two lines.
+
+Each --request is one seat request, sent in the given order on the same connection
+after `observe` and before `quit`, and only when the start is `ready`; otherwise the
+record lists it as `not sent`. If the session ends early, a request with no answer is
+`unanswered`, and an `exchange:` line says why. With no --request, `observe` and
+`quit` share one line of the record. A `capture` names a plain file name, which is
+written as <out-dir>/<case>.<name>.
+
+Before anything is launched it refuses: a line that is no seat request, a `quit` (it
+sends its own), a capture path that is not a plain file name, a name it writes itself
+(record, stdout, stderr, seat.log, sock, sock.log), two captures to one file, a capture
+whose file exists, and a case already recorded in <out-dir>, so a later run cannot
+replace an earlier one. Record a \"before\" case before changing the game, and compare
+the captures with `compare-captures`.
+
+Exit status: 0 once the record is written, whatever the start did; 2 when no record
+could be made.
+";
 /// The files `held-start` itself writes for a case, which no capture may name.
 const OWN_FILES: [&str; 6] = ["record", "stdout", "stderr", "seat.log", "sock", "sock.log"];
 
@@ -47,6 +68,12 @@ struct Extra {
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let [only] = &arguments[..]
+        && (only == "--help" || only == "-h")
+    {
+        print!("{USAGE}\n\n{HELP}");
+        return ExitCode::SUCCESS;
+    }
     match run(&arguments) {
         Ok(record) => {
             print!("{record}");

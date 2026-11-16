@@ -173,3 +173,21 @@ fn a_malformed_rectangle_is_an_error() {
     let run = compare(&plain(), &plain(), &["--ignore", "1,2,3"]);
     assert_eq!(run.code, Some(2), "{}", run.stdout);
 }
+
+#[test]
+fn help_names_the_exit_statuses() {
+    let output = Command::new(env!("CARGO_BIN_EXE_compare-captures"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let words = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        words.contains(
+            "Exit status: 0 when the count is within the limit, 1 when it exceeds it, and 2 on an error"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("--threshold <THRESHOLD>"), "{text}");
+}

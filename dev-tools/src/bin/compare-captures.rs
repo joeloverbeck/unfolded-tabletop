@@ -1,24 +1,35 @@
-//! Compare two captures of the same table, pixel by pixel:
-//!
-//! ```text
-//! compare-captures <before.png> <after.png> [--ignore x,y,width,height]
-//!     [--threshold <level>] [--limit <count>]
-//! ```
-//!
-//! A pixel differs when its largest difference in any one of red, green, blue and
-//! transparency exceeds the threshold. Pixels inside the ignored rectangle are left
-//! out. It prints the options, the count of differing pixels, the largest difference
-//! outside the ignored rectangle and the box around the differing pixels. It exits 0
-//! when the count is within the limit, 1 when it exceeds it and 2 on an error,
-//! including pictures of different sizes.
+//! Compare two captures of the same table, pixel by pixel. `ABOUT`, which
+//! `compare-captures --help` prints, describes the comparison and its exit statuses.
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use image::RgbaImage;
 use std::{fmt, path::PathBuf, process::ExitCode, str::FromStr};
 
+/// What `--help` prints above the options.
+const ABOUT: &str = "\
+Compare two captures of the same table, pixel by pixel.
+
+A pixel differs when its largest difference in red, green, blue or transparency
+exceeds the threshold. Pixels inside the ignored rectangle are left out. It prints its
+options, the count of differing pixels, the largest difference outside the ignored
+rectangle and the box around the differing pixels, written as x,y,width,height so it
+can be handed back as --ignore.
+
+Exit status: 0 when the count is within the limit, 1 when it exceeds it, and 2 on an
+error: an unreadable file, one whose contents are not PNG, pictures of different sizes
+or malformed options.
+
+Two held starts of one unchanged table can differ by rendering noise; raise
+--threshold to the noise a table is known to have, or --ignore a region that differs
+on purpose.";
+
 #[derive(Parser)]
-#[command(name = "compare-captures")]
+#[command(
+    name = "compare-captures",
+    about = "Compare two captures of the same table, pixel by pixel.",
+    long_about = ABOUT
+)]
 struct Args {
     before: PathBuf,
     after: PathBuf,
