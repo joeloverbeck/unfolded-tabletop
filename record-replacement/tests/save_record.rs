@@ -327,7 +327,8 @@ fn recovery_lands_the_previous_record_in_a_fresh_destination() {
     let previous = fs::read(previous_path(&source)).unwrap();
 
     let fresh = dir.path().join("recovered.json");
-    let (payload, mut recovered) = save::recover(&NOTES, &source, &fresh).unwrap();
+    let (payload, mut recovered) =
+        save::recover(&NOTES, &source, &fresh, |_| Ok::<_, Error>(())).unwrap();
     assert_eq!(payload, note("first"));
     assert_eq!(fs::read(&fresh).unwrap(), previous);
     assert_eq!(fs::read(&source).unwrap(), active);
@@ -341,11 +342,11 @@ fn recovery_lands_the_previous_record_in_a_fresh_destination() {
         previous_path(&source),
         dir.path().join(".").join("notes.json"),
     ] {
-        let error = save::recover(&NOTES, &source, &same).unwrap_err();
+        let error = save::recover(&NOTES, &source, &same, |_| Ok::<_, Error>(())).unwrap_err();
         assert!(matches!(error, Error::SameRecord), "{same:?}: {error:?}");
     }
     assert_refused(
-        save::recover(&NOTES, &source, &fresh),
+        save::recover(&NOTES, &source, &fresh, |_| Ok::<_, Error>(())),
         |e| matches!(e, Error::Occupied),
         &fresh,
         &fs::read(&fresh).unwrap(),
@@ -472,7 +473,10 @@ fn a_link_is_not_loaded_or_recovered() {
 
     let elsewhere = dir.path().join("elsewhere.json");
     std::os::unix::fs::symlink(previous_path(&path), previous_path(&elsewhere)).unwrap();
-    let error = save::recover(&NOTES, &elsewhere, &dir.path().join("fresh.json")).unwrap_err();
+    let error = save::recover(&NOTES, &elsewhere, &dir.path().join("fresh.json"), |_| {
+        Ok::<_, Error>(())
+    })
+    .unwrap_err();
     assert!(matches!(error, Error::NotRegularFile), "{error:?}");
 }
 
@@ -484,4 +488,20 @@ fn an_absent_record_loads_as_none() {
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+fn a_recovery_the_game_refuses_creates_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("notes.json");
+    let mut baseline = saved(&source, "first");
+    save::write(&NOTES, &source, &mut baseline, &note("second"), Write::Save).unwrap();
+    let fresh = dir.path().join("recovered.json");
+    let refusal = save::recover(&NOTES, &source, &fresh, |recovered: &Note| {
+        assert_eq!(recovered, &note("first"));
+        Err::<(), Box<dyn std::error::Error>>("Not for this launch.".into())
+    });
+    assert_eq!(refusal.unwrap_err().to_string(), "Not for this launch.");
+    assert!(!fresh.exists());
+    assert!(!unfolded_record_replacement::lock_path(&fresh).exists());
 }

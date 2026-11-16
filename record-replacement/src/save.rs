@@ -427,22 +427,27 @@ fn location(path: &Path) -> Result<PathBuf, Error> {
 }
 
 /// Recover the `.previous` record of `source` into a fresh `destination`,
-/// returning its payload and the new record's baseline. `source` and its
-/// `.previous` are left unchanged. A destination that is either of them is
-/// [`Error::SameRecord`]; one already in use is [`Error::Occupied`] or
+/// returning its payload and the new record's baseline. `admit` is the game's
+/// own check of the recovered payload, such as whether it suits this launch; it
+/// runs before anything is created, and its refusal is returned as it is.
+///
+/// `source` and its `.previous` are left unchanged. A destination that is either
+/// of them is [`Error::SameRecord`]; one already in use is [`Error::Occupied`] or
 /// [`Error::Orphaned`], as for [`Write::Create`]. A missing `.previous` is an
 /// [`Error::Io`] whose kind is `NotFound`.
-pub fn recover<F: Format>(
+pub fn recover<F: Format, E: From<Error>>(
     format: &F,
     source: &Path,
     destination: &Path,
-) -> Result<(F::Payload, Baseline), Error> {
+    admit: impl FnOnce(&F::Payload) -> Result<(), E>,
+) -> Result<(F::Payload, Baseline), E> {
     let previous = previous_path(source);
     let fresh = location(destination)?;
     if fresh == location(source)? || fresh == location(&previous)? {
-        return Err(Error::SameRecord);
+        return Err(Error::SameRecord.into());
     }
     let payload = decode(format, &read_record(&previous, F::LIMIT)?)?;
+    admit(&payload)?;
     let mut baseline = Baseline::default();
     write(format, destination, &mut baseline, &payload, Write::Create)?;
     Ok((payload, baseline))
