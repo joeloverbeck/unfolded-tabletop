@@ -1,16 +1,5 @@
-//! Compare two captures of the same table, pixel by pixel:
-//!
-//! ```text
-//! compare-captures <before.png> <after.png> [--ignore x,y,width,height]
-//!     [--threshold <level>] [--limit <count>]
-//! ```
-//!
-//! A pixel differs when its largest difference in any one of red, green, blue and
-//! transparency exceeds the threshold. Pixels inside the ignored rectangle are left
-//! out. It prints the options, the count of differing pixels, the largest difference
-//! outside the ignored rectangle and the box around the differing pixels. It exits 0
-//! when the count is within the limit, 1 when it exceeds it and 2 on an error,
-//! including pictures of different sizes.
+//! Compare two captures of the same table, pixel by pixel. `ABOUT`, which
+//! `compare-captures --help` prints, describes the comparison and its exit statuses.
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;

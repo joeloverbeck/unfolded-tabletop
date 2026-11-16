@@ -23,8 +23,15 @@ terms used here.
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
 | `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |
 | `unfolded-dev-tools` | Bounded context readers, a recorder for checks, and the `compare-captures` tool | never |
-| `unfolded-tabletop`, feature `render` | `camera`, `capture`, `card`, `count_label` (deprecated), `label_anchor`, `loading`, `printed`, `token` | Bevy 0.20.0 |
-| `unfolded-tabletop`, feature `seat` | `seat`: the agent seat, batch or held on a local socket; enables `render` | Bevy 0.20.0 |
+| `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow | Bevy 0.20.0 |
+| `unfolded-tabletop::capture`, feature `render` | Writing a captured picture, and a windowless surface whose image can be captured | Bevy 0.20.0 |
+| `unfolded-tabletop::card`, feature `render` | Rounded physical-card meshes: face, body and outline | Bevy 0.20.0 |
+| `unfolded-tabletop::token`, feature `render` | Solid token bodies with a textured face | Bevy 0.20.0 |
+| `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |
+| `unfolded-tabletop::printed`, feature `render` | Text rows printed as ink on flat planes in the world | Bevy 0.20.0 |
+| `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
+| `unfolded-tabletop::count_label`, feature `render` | Deprecated numeric labels; use `label_anchor` | Bevy 0.20.0 |
+| `unfolded-tabletop::seat`, feature `seat` | The agent seat, in batch form or held on a local socket; enables `render` | Bevy 0.20.0 |
 
 "Never" holds under every feature set, and `scripts/check` fails if Bevy appears
 below any of those packages. `unfolded-random` has no dependencies at all.
@@ -53,7 +60,8 @@ wgpu-hal = { git = "https://github.com/joeloverbeck/unfolded-tabletop", rev = "<
   package here changes revision together; none has a lifecycle of its own.
 - **Keep Bevy out of crates without an interface.** A crate with no interface in it
   depends only on the Bevy-free packages it uses, so Cargo can never link Bevy into
-  it. The crate that holds your interface also depends on `unfolded-tabletop`.
+  it. The crate that holds your interface also depends on `unfolded-tabletop`, which
+  brings none of the other packages except, under `seat`, `unfolded-seat-protocol`.
 - **Name each mechanism by its own package**: `unfolded_random::SeededRandom`, not
   a path through `unfolded_tabletop`.
 - **Moving your pin:** read `CHANGELOG.md` for what changed between the two
@@ -77,9 +85,8 @@ Both tools run from a checkout of this repository, and a game need not pin them.
 Run either with `--help` for its full description.
 
 - **`held-start`** records one held start of a game's agent seat as pull-request
-  evidence: the game's revision and whether its tree is clean, how the start went,
-  the status of each request you give, any captures, and the seat's log. The held
-  seat is Linux only. Run it from the game's checkout:
+  evidence, with the game's revision beside any captures. The held seat is Linux
+  only. Run it from the game's checkout:
 
   ```sh
   cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \
@@ -87,8 +94,7 @@ Run either with `--help` for its full description.
     <out-dir> <case> -- <game executable> <its seat options>
   ```
 
-- **`compare-captures`** compares two captures of the same table and prints the
-  count, the largest difference and the box of the differing pixels:
+- **`compare-captures`** compares two captures of the same table:
 
   ```sh
   cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools --bin compare-captures -- \

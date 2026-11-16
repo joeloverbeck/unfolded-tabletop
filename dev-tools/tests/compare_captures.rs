@@ -182,8 +182,11 @@ fn help_names_the_exit_statuses() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let text = String::from_utf8(output.stdout).unwrap();
+    let words = text.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        text.contains("Exit status: 0 when the count is within the limit, 1 when it exceeds it, and 2 on an\nerror"),
+        words.contains(
+            "Exit status: 0 when the count is within the limit, 1 when it exceeds it, and 2 on an error"
+        ),
         "{text}"
     );
     assert!(text.contains("--threshold <THRESHOLD>"), "{text}");

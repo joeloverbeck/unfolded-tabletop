@@ -305,7 +305,7 @@ fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
     assert!(record.contains("socket after: removed\n"), "{record}");
 }
 
-fn help_prints_the_usage_and_launches_nothing(scratch: &Path) {
+fn help_prints_the_usage_and_writes_nothing(scratch: &Path) {
     let empty = scratch.join("help");
     std::fs::create_dir(&empty).unwrap();
     let help = Command::new(env!("CARGO_BIN_EXE_held-start"))
@@ -321,7 +321,11 @@ fn help_prints_the_usage_and_launches_nothing(scratch: &Path) {
         ),
         "{text}"
     );
-    assert!(text.contains("at most\n107 bytes"), "{text}");
+    let words = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        words.contains("A socket path holds at most 107 bytes"),
+        "{text}"
+    );
     assert_eq!(std::fs::read_dir(&empty).unwrap().count(), 0);
 }
 
@@ -370,8 +374,8 @@ fn main() -> ExitCode {
             a_session_that_ends_early_records_the_unanswered_requests,
         ),
         (
-            "help_prints_the_usage_and_launches_nothing",
-            help_prints_the_usage_and_launches_nothing,
+            "help_prints_the_usage_and_writes_nothing",
+            help_prints_the_usage_and_writes_nothing,
         ),
     ];
     if arguments.iter().any(|argument| argument == "--list") {
