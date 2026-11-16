@@ -4,7 +4,9 @@
 //! "send one request and give me its answer" ([`Connection::request`]). Both wake
 //! regularly while the seat says nothing, to run the caller's check of its own
 //! deadline or interrupt. Consumers own launch diagnostics, signal handling,
-//! deadlines, wording and exit statuses. Response lines have no size limit, and
+//! deadlines, wording and exit statuses: a caller's check returns its own error, which
+//! comes back as it is, and every other failure is a cause to match ([`Unsent`],
+//! [`RequestError`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
 //! nothing bounds a write; a final line without a newline is accepted as it arrived.
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
@@ -14,7 +16,7 @@
 //! sets the socket's read timeout and compares the count of answers with its requests.
 #![cfg(unix)]
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
     error::Error,
@@ -115,11 +117,48 @@ impl fmt::Display for Ended {
     }
 }
 
-/// Why a single request has no reply.
+/// Why a whole exchange ended before every answer was read. `E` is the caller's
+/// check's own error.
 #[derive(Debug)]
-pub enum RequestError {
+#[non_exhaustive]
+pub enum Unsent<E> {
+    /// The caller's check ended the exchange, with its error.
+    Stopped(E),
+    /// Reading an answer failed.
+    Unreadable(io::Error),
+    /// Copying an answer to the caller's output failed.
+    Unwritten(io::Error),
+    /// The connection could not be set to wake for the caller's check.
+    Unwoken(io::Error),
+}
+
+impl<E: fmt::Display> fmt::Display for Unsent<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Stopped(error) => error.fmt(formatter),
+            Self::Unreadable(_) => formatter.write_str("cannot read the seat's response"),
+            Self::Unwritten(error) | Self::Unwoken(error) => error.fmt(formatter),
+        }
+    }
+}
+
+/// The caller's own error is its own: as a source it is not named.
+impl<E: fmt::Debug + fmt::Display> Error for Unsent<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Stopped(_) => None,
+            // Its text does not say the read's error; the others' texts do.
+            Self::Unreadable(error) => Some(error),
+            Self::Unwritten(error) | Self::Unwoken(error) => error.source(),
+        }
+    }
+}
+
+/// Why a single request has no reply. `E` is the caller's check's own error.
+#[derive(Debug)]
+pub enum RequestError<E> {
     /// The caller's check ended the wait, with its error.
-    Stopped(anyhow::Error),
+    Stopped(E),
     /// Reading the answer failed, other than by a reset connection.
     Unreadable(io::Error),
     /// The answer is not JSON: the line, and why it does not parse.
@@ -131,7 +170,7 @@ pub enum RequestError {
     Unrecognised { request: String, line: String },
 }
 
-impl fmt::Display for RequestError {
+impl<E: fmt::Display> fmt::Display for RequestError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Stopped(error) => error.fmt(formatter),
@@ -146,10 +185,11 @@ impl fmt::Display for RequestError {
     }
 }
 
-impl Error for RequestError {
+/// The caller's own error is its own: as a source it is not named.
+impl<E: fmt::Debug + fmt::Display> Error for RequestError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Stopped(error) => error.source(),
+            Self::Stopped(_) => None,
             Self::Unreadable(error) => Some(error),
             Self::NotJson { error, .. } => Some(error),
             Self::Unrecognised { .. } => None,
@@ -180,14 +220,16 @@ impl Connection {
     /// unchanged to `output`, flushing each one; pass [`io::sink`] to keep none. While
     /// the seat says nothing, `check` runs about five times a second, and its error
     /// ends the exchange. A failure to send only means fewer answers.
-    pub fn send(
+    pub fn send<E>(
         self,
         requests: &[String],
         output: &mut impl Write,
-        check: impl FnMut() -> Result<()>,
-    ) -> Result<Outcome> {
-        self.stream.set_read_timeout(Some(WAKE))?;
-        let (answered, failed) = exchange_lines(&self.stream, requests, output, check)?;
+        mut check: impl FnMut() -> Result<(), E>,
+    ) -> Result<Outcome, Unsent<E>> {
+        self.stream
+            .set_read_timeout(Some(WAKE))
+            .map_err(Unsent::Unwoken)?;
+        let (answered, failed) = exchange_lines(&self.stream, requests, output, &mut check)?;
         Ok(if answered < requests.len() {
             Outcome::Short { answered }
         } else if failed {
@@ -200,11 +242,11 @@ impl Connection {
     /// Send one request, end the connection's input and read its answer. While the seat
     /// says nothing, `check` runs about five times a second, and its error ends the
     /// wait.
-    pub fn request(
+    pub fn request<E>(
         self,
         request: &Request,
-        mut check: impl FnMut() -> Result<()>,
-    ) -> Result<Reply, RequestError> {
+        mut check: impl FnMut() -> Result<(), E>,
+    ) -> Result<Reply, RequestError<E>> {
         self.stream
             .set_read_timeout(Some(WAKE))
             .map_err(RequestError::Unreadable)?;
@@ -246,14 +288,42 @@ impl Connection {
     }
 }
 
+/// Why [`requests`] found none to send.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Unrequested {
+    /// Standard input could not be read.
+    Unreadable(io::Error),
+    /// Every line given was blank.
+    Empty,
+}
+
+impl fmt::Display for Unrequested {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Unreadable(_) => "cannot read requests from standard input",
+            Self::Empty => "no requests: give them as arguments or as standard-input lines",
+        })
+    }
+}
+
+impl Error for Unrequested {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Unreadable(error) => Some(error),
+            Self::Empty => None,
+        }
+    }
+}
+
 /// Split argument strings into lines, or read standard-input lines when no
 /// arguments were supplied. Blank lines are not requests; preserve other bytes.
-pub fn requests(given: &[String], input: &mut impl BufRead) -> Result<Vec<String>> {
+pub fn requests(given: &[String], input: &mut impl BufRead) -> Result<Vec<String>, Unrequested> {
     let lines: Vec<String> = if given.is_empty() {
         input
             .lines()
             .collect::<std::io::Result<_>>()
-            .context("cannot read requests from standard input")?
+            .map_err(Unrequested::Unreadable)?
     } else {
         given
             .iter()
@@ -265,7 +335,7 @@ pub fn requests(given: &[String], input: &mut impl BufRead) -> Result<Vec<String
         .filter(|line| !line.trim().is_empty())
         .collect();
     if requests.is_empty() {
-        bail!("no requests: give them as arguments or as standard-input lines");
+        return Err(Unrequested::Empty);
     }
     Ok(requests)
 }
@@ -291,17 +361,23 @@ pub fn exchange(
     stream: &UnixStream,
     requests: &[String],
     output: &mut impl Write,
-    on_timeout: impl FnMut() -> Result<()>,
+    mut on_timeout: impl FnMut() -> Result<()>,
 ) -> Result<(usize, bool)> {
-    exchange_lines(stream, requests, output, on_timeout)
+    exchange_lines(stream, requests, output, &mut on_timeout).map_err(|unsent| match unsent {
+        Unsent::Stopped(error) => error,
+        Unsent::Unreadable(error) => {
+            anyhow::Error::new(error).context("cannot read the seat's response")
+        }
+        Unsent::Unwritten(error) | Unsent::Unwoken(error) => error.into(),
+    })
 }
 
-fn exchange_lines(
+fn exchange_lines<E>(
     stream: &UnixStream,
     requests: &[String],
     output: &mut impl Write,
-    mut on_timeout: impl FnMut() -> Result<()>,
-) -> Result<(usize, bool)> {
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(usize, bool), Unsent<E>> {
     thread::scope(|scope| {
         scope.spawn(|| {
             let mut writer = stream;
@@ -317,11 +393,16 @@ fn exchange_lines(
         let mut line = Vec::new();
         loop {
             line.clear();
-            if !read_answer(&mut reader, &mut line, &mut on_timeout)? {
-                return Ok((answered, failed));
+            match wait_for_line(&mut reader, &mut line, check) {
+                Ok(true) => {}
+                Ok(false) => return Ok((answered, failed)),
+                Err(Waited::Stopped(error)) => return Err(Unsent::Stopped(error)),
+                Err(Waited::Unreadable(error)) => return Err(Unsent::Unreadable(error)),
             }
-            output.write_all(&line)?;
-            output.flush()?;
+            output
+                .write_all(&line)
+                .and_then(|()| output.flush())
+                .map_err(Unsent::Unwritten)?;
             answered += 1;
             // No status, or one that is no string, fails; so does a failed one the
             // protocol names. A string it does not name is no failure.
@@ -340,14 +421,6 @@ fn exchange_lines(
 pub fn read_line(
     reader: &mut impl BufRead,
     line: &mut Vec<u8>,
-    on_timeout: impl FnMut() -> Result<()>,
-) -> Result<bool> {
-    read_answer(reader, line, on_timeout)
-}
-
-fn read_answer(
-    reader: &mut impl BufRead,
-    line: &mut Vec<u8>,
     mut on_timeout: impl FnMut() -> Result<()>,
 ) -> Result<bool> {
     wait_for_line(reader, line, &mut on_timeout).or_else(|waited| match waited {
@@ -357,20 +430,20 @@ fn read_answer(
 }
 
 /// Why a wait for a line ended without one.
-enum Waited {
+enum Waited<E> {
     /// The caller's check ended it.
-    Stopped(anyhow::Error),
+    Stopped(E),
     /// The read failed other than by a timeout.
     Unreadable(io::Error),
 }
 
 /// Read one line into `line`, keeping partial bytes across read timeouts and running
 /// `check` on each. False means the end of the connection with no bytes remaining.
-fn wait_for_line(
+fn wait_for_line<E>(
     reader: &mut impl BufRead,
     line: &mut Vec<u8>,
-    check: &mut impl FnMut() -> Result<()>,
-) -> Result<bool, Waited> {
+    check: &mut impl FnMut() -> Result<(), E>,
+) -> Result<bool, Waited<E>> {
     loop {
         match reader.read_until(b'\n', line) {
             Ok(_) => return Ok(!line.is_empty()),

@@ -2,6 +2,7 @@
 #![allow(deprecated)]
 
 use std::{
+    convert::Infallible,
     io::{BufReader, Read, Write},
     os::unix::net::{UnixListener, UnixStream},
     thread,
@@ -71,7 +72,12 @@ fn refusal_and_unreadable_status_fail_without_changing_or_truncating_output() {
 fn early_eof_reports_too_few_answers_and_stdin_normalizes_blank_lines() {
     let requests = seat_client::requests(&[], &mut "{}\n \r\n{}\n".as_bytes()).unwrap();
     assert_eq!(requests, ["{}", "{}"]);
-    assert!(seat_client::requests(&[], &mut " \n".as_bytes()).is_err());
+    let none = seat_client::requests(&[], &mut " \n".as_bytes()).unwrap_err();
+    assert!(matches!(none, seat_client::Unrequested::Empty), "{none:?}");
+    assert_eq!(
+        none.to_string(),
+        "no requests: give them as arguments or as standard-input lines"
+    );
     let (client, mut server) = UnixStream::pair().unwrap();
     let responder = thread::spawn(move || {
         let mut input = String::new();
@@ -149,7 +155,7 @@ fn a_whole_exchange_says_every_request_was_answered_and_copies_the_answers_uncha
     let mut output = Vec::new();
     let outcome = seat_client::Connection::open(&socket)
         .unwrap()
-        .send(&requests, &mut output, || Ok(()))
+        .send(&requests, &mut output, || Ok::<(), Infallible>(()))
         .unwrap();
     assert_eq!(outcome, Outcome::Answered);
     assert_eq!(
@@ -163,7 +169,9 @@ fn a_whole_exchange_says_every_request_was_answered_and_copies_the_answers_uncha
 
     // A status the protocol does not name is no failure, as in Arkham's client.
     let (connection, seat) = answering("{\"status\":\"waved\"}\n");
-    let outcome = connection.send(&["{}".into()], &mut std::io::sink(), || Ok(()));
+    let outcome = connection.send(&["{}".into()], &mut std::io::sink(), || {
+        Ok::<(), Infallible>(())
+    });
     assert_eq!(outcome.unwrap(), Outcome::Answered);
     seat.join().unwrap();
 }
@@ -181,7 +189,7 @@ fn a_whole_exchange_fails_on_a_refused_missed_skipped_or_malformed_answer() {
     ] {
         let (connection, seat) = answering(answer);
         let mut output = Vec::new();
-        let outcome = connection.send(&["{}".into()], &mut output, || Ok(()));
+        let outcome = connection.send(&["{}".into()], &mut output, || Ok::<(), Infallible>(()));
         assert_eq!(outcome.unwrap(), seat_client::Outcome::Failed, "{answer}");
         assert_eq!(output, answer.as_bytes());
         seat.join().unwrap();
@@ -192,7 +200,9 @@ fn a_whole_exchange_fails_on_a_refused_missed_skipped_or_malformed_answer() {
 fn a_whole_exchange_says_how_many_were_answered_when_the_session_ends_early() {
     for answers in ["{\"status\":\"bye\"}\n", "{\"status\":\"refused\"}\n", ""] {
         let (connection, seat) = answering(answers);
-        let outcome = connection.send(&["{}".into(), "{}".into()], &mut Vec::new(), || Ok(()));
+        let outcome = connection.send(&["{}".into(), "{}".into()], &mut Vec::new(), || {
+            Ok::<(), Infallible>(())
+        });
         let answered = answers.lines().count();
         assert_eq!(
             outcome.unwrap(),
@@ -205,8 +215,11 @@ fn a_whole_exchange_says_how_many_were_answered_when_the_session_ends_early() {
 
 #[test]
 fn both_calls_wake_for_the_callers_check_while_the_seat_says_nothing() {
-    use seat_client::RequestError;
+    use seat_client::{RequestError, Unsent};
     use unfolded_seat_protocol::Request;
+    /// The caller's own error: the client hands it back as it is.
+    #[derive(Debug, PartialEq)]
+    struct Deadline;
     for single in [false, true] {
         let (client, server) = UnixStream::pair().unwrap();
         let connection = seat_client::Connection::from(client);
@@ -214,7 +227,7 @@ fn both_calls_wake_for_the_callers_check_while_the_seat_says_nothing() {
         let check = || {
             checks += 1;
             if checks == 3 {
-                anyhow::bail!("the caller's deadline passed");
+                return Err(Deadline);
             }
             Ok(())
         };
@@ -224,11 +237,12 @@ fn both_calls_wake_for_the_callers_check_while_the_seat_says_nothing() {
                 other => panic!("{other:?}"),
             }
         } else {
-            connection
-                .send(&["{}".into()], &mut Vec::new(), check)
-                .unwrap_err()
+            match connection.send(&["{}".into()], &mut Vec::new(), check) {
+                Err(Unsent::Stopped(error)) => error,
+                other => panic!("{other:?}"),
+            }
         };
-        assert_eq!(error.to_string(), "the caller's deadline passed");
+        assert_eq!(error, Deadline);
         assert_eq!(checks, 3);
         drop(server);
     }
@@ -286,7 +300,10 @@ fn a_single_request_returns_its_parsed_answer() {
     ] {
         let (connection, seat) = answering(line);
         let request = Request::Settle { steps: Some(120) };
-        match connection.request(&request, || Ok(())).unwrap() {
+        match connection
+            .request(&request, || Ok::<(), Infallible>(()))
+            .unwrap()
+        {
             Reply::Answer(answer) => {
                 assert_eq!(answer.status, status);
                 assert_eq!(answer.line, line.trim_end());
@@ -311,7 +328,10 @@ fn a_single_request_says_the_session_ended() {
         ("", "it closed the connection without answering"),
     ] {
         let (connection, seat) = answering(answer);
-        match connection.request(&Request::Quit {}, || Ok(())).unwrap() {
+        match connection
+            .request(&Request::Quit {}, || Ok::<(), Infallible>(()))
+            .unwrap()
+        {
             Reply::Ended(ended) => {
                 assert_eq!(ended.to_string(), said);
                 if !answer.is_empty() {
@@ -332,7 +352,8 @@ fn a_single_request_says_the_session_ended() {
         let mut first = [0];
         server.read_exact(&mut first).unwrap();
     });
-    let reply = seat_client::Connection::from(client).request(&Request::Observe {}, || Ok(()));
+    let reply = seat_client::Connection::from(client)
+        .request(&Request::Observe {}, || Ok::<(), Infallible>(()));
     seat.join().unwrap();
     assert!(matches!(
         reply.unwrap(),
@@ -354,7 +375,7 @@ fn a_single_request_refuses_an_answer_with_no_status_it_knows() {
     ] {
         let (connection, seat) = answering(answer);
         let error = connection
-            .request(&Request::Observe {}, || Ok(()))
+            .request(&Request::Observe {}, || Ok::<(), Infallible>(()))
             .unwrap_err();
         assert!(
             matches!(

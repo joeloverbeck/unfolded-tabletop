@@ -10,8 +10,9 @@
 //! save or not: bounded reads, a persistent sidecar lock ([`lock_path`]), staged
 //! and synced replacement, previous-record retention ([`previous_path`]),
 //! exclusive creation and restart archiving ([`archives`]). Their caller supplies
-//! its record-size bound, error conversion, replacement admission and recovery
-//! validation, and keeps its own schema and freshness. Admission and recovery
+//! its record-size bound, replacement admission and recovery validation, and keeps
+//! its own schema and freshness. Their refusals are causes in [`Error`], which the
+//! caller words. Admission and recovery
 //! validation run under the same lock as installation, and the lock file is never
 //! truncated or removed. An unchanged decision writes no record bytes and does not
 //! validate recovery.
@@ -29,7 +30,7 @@
 pub mod save;
 
 use std::{
-    fs,
+    fmt, fs,
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -108,143 +109,168 @@ pub fn archives(path: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-/// A refusal this module words for [`read`] and [`replace`], and [`save`] passes on.
-pub(crate) enum Fault {
+/// Why [`read`] or [`replace`] refused or failed, as data a caller can match.
+/// `Display` gives the default wording; a game that words a refusal itself
+/// matches the cause instead of editing the text.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Error {
+    /// The record, or the candidate to be written, exceeds the caller's limit.
     TooLarge,
-    Busy(String),
+    /// The lock could not be taken: another writer holds it, of kind `WouldBlock`, or
+    /// the operating system failed. The words are the lock's own.
+    Busy(std::io::Error),
+    /// The destination is a link, directory or other non-regular file.
     NotRegularFile,
+    /// The filesystem failed.
+    Io(std::io::Error),
 }
 
-impl Fault {
-    fn words(self) -> String {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TooLarge => "This file exceeds the bounded experiment's record limit.".into(),
-            Self::Busy(cause) => format!("The save is busy: {cause}"),
-            Self::NotRegularFile => "The record destination is not a regular file.".into(),
+            Self::TooLarge => f.write_str("The record exceeds its size limit."),
+            Self::Busy(cause) => write!(f, "The record is busy: {cause}"),
+            Self::NotRegularFile => f.write_str("The record destination is not a regular file."),
+            Self::Io(cause) => cause.fmt(f),
         }
     }
 }
 
-fn check_size<E>(bytes: &[u8], limit: u64, error: &impl Fn(Fault) -> E) -> Result<(), E> {
+/// Each cause that carries an error already says it, so only that error's own
+/// source is passed on.
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Busy(cause) | Self::Io(cause) => cause.source(),
+            Self::TooLarge | Self::NotRegularFile => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(cause: std::io::Error) -> Self {
+        Self::Io(cause)
+    }
+}
+
+/// A filesystem failure stays itself; every other cause becomes an error of kind
+/// `Other` that carries it, so a caller whose own error is `std::io::Error` can
+/// still recover the cause with `downcast`.
+impl From<Error> for std::io::Error {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Io(cause) => cause,
+            other => Self::other(other),
+        }
+    }
+}
+
+fn check_size(bytes: &[u8], limit: u64) -> Result<(), Error> {
     if bytes.len() as u64 > limit {
-        return Err(error(Fault::TooLarge));
+        return Err(Error::TooLarge);
     }
     Ok(())
 }
 
-/// Read at most one byte beyond the caller's limit, refusing oversized records.
-pub fn read<E: From<std::io::Error>>(
-    path: &Path,
-    limit: u64,
-    error: fn(String) -> E,
-) -> Result<Vec<u8>, E> {
-    read_bounded(path, limit, &|fault: Fault| error(fault.words()))
-}
-
-pub(crate) fn read_bounded<E: From<std::io::Error>>(
-    path: &Path,
-    limit: u64,
-    error: &impl Fn(Fault) -> E,
-) -> Result<Vec<u8>, E> {
+/// Read at most one byte beyond `limit`, refusing an oversized record
+/// ([`Error::TooLarge`]).
+pub fn read(path: &Path, limit: u64) -> Result<Vec<u8>, Error> {
     let mut bytes = Vec::new();
     fs::File::open(path)?
         .take(limit + 1)
         .read_to_end(&mut bytes)?;
-    check_size(&bytes, limit, error)?;
+    check_size(&bytes, limit)?;
     Ok(bytes)
 }
 
 /// Admission and any recovery validation run while the persistent sidecar is
 /// locked. Original bytes, the lock, and every staged file stay owned here.
+/// `admit` and `validate_recovery` return the caller's own error `E`; this
+/// module's refusals and filesystem failures reach the caller through
+/// `E: From<Error>`.
 ///
 /// Returns the retained archive path only for an archived existing record.
 /// Staged files are synced, but parent directories are not. This is not a
 /// multi-file transaction: later failure can leave an archive or rotated recovery.
-pub fn replace<E: From<std::io::Error>>(
+pub fn replace<E: From<Error>>(
     path: &Path,
     bytes: &[u8],
     limit: u64,
-    error: fn(String) -> E,
     admit: impl FnOnce(Option<&[u8]>) -> Result<Replacement, E>,
     validate_recovery: impl FnOnce(&Path) -> Result<(), E>,
 ) -> Result<Option<PathBuf>, E> {
-    replace_bounded(
-        path,
-        bytes,
-        limit,
-        &|fault: Fault| error(fault.words()),
-        admit,
-        validate_recovery,
-    )
-}
-
-pub(crate) fn replace_bounded<E: From<std::io::Error>>(
-    path: &Path,
-    bytes: &[u8],
-    limit: u64,
-    error: &impl Fn(Fault) -> E,
-    admit: impl FnOnce(Option<&[u8]>) -> Result<Replacement, E>,
-    validate_recovery: impl FnOnce(&Path) -> Result<(), E>,
-) -> Result<Option<PathBuf>, E> {
-    check_size(bytes, limit, error)?;
+    check_size(bytes, limit)?;
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    fs::create_dir_all(parent)?;
+    fs::create_dir_all(parent).map_err(Error::Io)?;
     // Never truncate or remove the sidecar: cooperating writers need its inode.
     let lock = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(lock_path(path))?;
-    lock.try_lock()
-        .map_err(|cause| error(Fault::Busy(cause.to_string())))?;
+        .open(lock_path(path))
+        .map_err(Error::Io)?;
+    lock.try_lock().map_err(|cause| {
+        // Keep the lock's own words, with the kind of error underneath them.
+        let words = cause.to_string();
+        let kind = match cause {
+            fs::TryLockError::Error(cause) => cause.kind(),
+            fs::TryLockError::WouldBlock => std::io::ErrorKind::WouldBlock,
+        };
+        Error::Busy(std::io::Error::new(kind, words))
+    })?;
     let _lock = ReplacementLock(lock);
     let existing = match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_file() => Some(read_bounded(path, limit, error)?),
-        Ok(_) => return Err(error(Fault::NotRegularFile)),
+        Ok(metadata) if metadata.is_file() => Some(read(path, limit)?),
+        Ok(_) => return Err(Error::NotRegularFile.into()),
         Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => None,
-        Err(cause) => return Err(cause.into()),
+        Err(cause) => return Err(Error::Io(cause).into()),
     };
     let replacement = admit(existing.as_deref())?;
     if matches!(replacement, Replacement::Unchanged) {
         return Ok(None);
     }
     let previous = previous_path(path);
-    if existing.is_some() && previous.try_exists()? {
+    if existing.is_some() && previous.try_exists().map_err(Error::Io)? {
         validate_recovery(&previous)?;
     }
     // Preserve the existing partial effects: this is not a multi-file
     // transaction. A later failure may leave an archive or rotated recovery.
-    let mut next = tempfile::NamedTempFile::new_in(parent)?;
-    next.write_all(bytes)?;
-    next.as_file().sync_all()?;
+    let mut next = tempfile::NamedTempFile::new_in(parent).map_err(Error::Io)?;
+    next.write_all(bytes).map_err(Error::Io)?;
+    next.as_file().sync_all().map_err(Error::Io)?;
     let mut archived_path = None;
     if let Some(existing) = existing {
-        let mut backup = tempfile::NamedTempFile::new_in(parent)?;
-        backup.write_all(&existing)?;
-        backup.as_file().sync_all()?;
+        let mut backup = tempfile::NamedTempFile::new_in(parent).map_err(Error::Io)?;
+        backup.write_all(&existing).map_err(Error::Io)?;
+        backup.as_file().sync_all().map_err(Error::Io)?;
         if matches!(replacement, Replacement::Archive) {
             let mut archive = tempfile::Builder::new()
                 .prefix(&archive_prefix(path))
                 .suffix(".json")
-                .tempfile_in(parent)?;
-            archive.write_all(&existing)?;
-            archive.as_file().sync_all()?;
-            let (_, path) = archive.keep().map_err(|cause| E::from(cause.error))?;
+                .tempfile_in(parent)
+                .map_err(Error::Io)?;
+            archive.write_all(&existing).map_err(Error::Io)?;
+            archive.as_file().sync_all().map_err(Error::Io)?;
+            let (_, path) = archive
+                .keep()
+                .map_err(|cause| E::from(Error::Io(cause.error)))?;
             archived_path = Some(path);
         }
         backup
             .persist(&previous)
-            .map_err(|cause| E::from(cause.error))?;
+            .map_err(|cause| E::from(Error::Io(cause.error)))?;
     }
     if matches!(replacement, Replacement::Create) {
         next.persist_noclobber(path)
-            .map_err(|cause| E::from(cause.error))?;
+            .map_err(|cause| E::from(Error::Io(cause.error)))?;
     } else {
-        next.persist(path).map_err(|cause| E::from(cause.error))?;
+        next.persist(path)
+            .map_err(|cause| E::from(Error::Io(cause.error)))?;
     }
     Ok(archived_path)
 }

@@ -3,8 +3,8 @@
 //! Arkham's recorded atlas fixture and from hand-computed sizes and digests.
 use std::{fs, path::Path};
 use unfolded_assets::{
-    PngCrop, crop_png, publish_directory, read_bounded, read_verified, regular_file, relative_path,
-    resolve_output, verify_bytes,
+    Cause, PngCrop, crop_png, publish_directory, read_bounded, read_verified, regular_file,
+    relative_path, resolve_output, verify_bytes,
 };
 
 /// SHA-256 of the three bytes `abc` (FIPS 180-2, appendix B.1).
@@ -262,4 +262,63 @@ fn output_resolution_follows_existing_links_and_keeps_new_components() {
         base.join("absent-parent/assets")
     );
     assert!(!base.join("absent-parent").exists());
+}
+
+#[test]
+fn a_refused_read_names_its_cause_and_the_asset_it_concerns() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("collection");
+    fs::create_dir_all(root.join("pictures")).unwrap();
+    fs::write(root.join("pictures/abc.png"), b"abc").unwrap();
+    symlink(root.join("pictures/abc.png"), root.join("linked.png")).unwrap();
+    let asset = root.join("pictures/abc.png");
+
+    let refused = read_verified(&root, "pictures/abc.png", 4, ABC_SHA256).unwrap_err();
+    assert!(matches!(refused.cause(), Cause::SizeDiffers), "{refused}");
+    assert_eq!(refused.path(), Some(asset.as_path()));
+    assert_eq!(
+        refused.to_string(),
+        "File size differs from the selected asset."
+    );
+
+    fs::write(root.join("pictures/abd.png"), b"abd").unwrap();
+    let refused = read_verified(&root, "pictures/abd.png", 3, ABC_SHA256).unwrap_err();
+    assert!(matches!(refused.cause(), Cause::Differs), "{refused}");
+    assert_eq!(
+        refused.path(),
+        Some(root.join("pictures/abd.png").as_path())
+    );
+
+    let refused = read_verified(&root, "linked.png", 3, ABC_SHA256).unwrap_err();
+    assert!(
+        matches!(refused.cause(), Cause::NotRegularFile),
+        "{refused}"
+    );
+    assert_eq!(refused.path(), Some(root.join("linked.png").as_path()));
+    assert_eq!(
+        refused.to_string(),
+        "Assets must be regular files with no symbolic links in their relative paths."
+    );
+
+    let refused = read_verified(&root, "absent.png", 3, ABC_SHA256).unwrap_err();
+    assert!(
+        matches!(refused.cause(), Cause::Io(cause) if cause.kind() == std::io::ErrorKind::NotFound),
+        "{refused}"
+    );
+    assert_eq!(refused.path(), Some(root.join("absent.png").as_path()));
+
+    let refused = read_verified(&root, "../outside.png", 3, ABC_SHA256).unwrap_err();
+    assert!(matches!(refused.cause(), Cause::NotRelative), "{refused}");
+    assert_eq!(refused.path(), Some(Path::new("../outside.png")));
+
+    let refused = read_bounded(&asset, 2).unwrap_err();
+    assert!(matches!(refused.cause(), Cause::TooLarge), "{refused}");
+    assert_eq!(refused.path(), Some(asset.as_path()));
+    assert_eq!(refused.to_string(), "File exceeds its expected size limit.");
+
+    // Bytes in hand concern no path of their own.
+    let refused = verify_bytes(b"abd", 3, ABC_SHA256).unwrap_err();
+    assert!(matches!(refused.cause(), Cause::Differs), "{refused}");
+    assert_eq!(refused.path(), None);
 }

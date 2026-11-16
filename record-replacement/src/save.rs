@@ -77,7 +77,7 @@
 //! Either case can only cause an extra stale refusal or an unchanged write, never
 //! a write over a record its holder has not seen as that value.
 
-use crate::{Fault, Replacement, previous_path, read_bounded, replace_bounded};
+use crate::{Replacement, previous_path};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
@@ -212,8 +212,9 @@ pub enum Error {
     Orphaned,
     /// A recovery destination is the source record or its `.previous`.
     SameRecord,
-    /// Another writer holds the lock. The detail is the operating system's.
-    Busy(String),
+    /// The lock could not be taken, as for the record's
+    /// [`Error::Busy`](crate::Error::Busy).
+    Busy(io::Error),
     /// A record, or the payload to be written, exceeds the format's limit.
     TooLarge,
     /// The record is a link, directory or other non-regular file.
@@ -237,15 +238,22 @@ impl fmt::Display for Error {
             Self::SameRecord => {
                 f.write_str("Recovery needs a destination distinct from both source records.")
             }
-            Self::Busy(cause) => f.write_str(&Fault::Busy(cause.clone()).words()),
-            Self::TooLarge => f.write_str(&Fault::TooLarge.words()),
+            Self::Busy(cause) => write!(f, "The save is busy: {cause}"),
+            Self::TooLarge => f.write_str("The save exceeds its size limit."),
             Self::NotRegularFile => f.write_str("The save is not a regular file."),
             Self::Io(cause) => cause.fmt(f),
         }
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Busy(cause) | Self::Io(cause) => cause.source(),
+            _ => None,
+        }
+    }
+}
 
 impl From<io::Error> for Error {
     fn from(cause: io::Error) -> Self {
@@ -253,11 +261,14 @@ impl From<io::Error> for Error {
     }
 }
 
-fn from_fault(fault: Fault) -> Error {
-    match fault {
-        Fault::TooLarge => Error::TooLarge,
-        Fault::Busy(cause) => Error::Busy(cause),
-        Fault::NotRegularFile => Error::NotRegularFile,
+impl From<crate::Error> for Error {
+    fn from(cause: crate::Error) -> Self {
+        match cause {
+            crate::Error::TooLarge => Self::TooLarge,
+            crate::Error::Busy(cause) => Self::Busy(cause),
+            crate::Error::NotRegularFile => Self::NotRegularFile,
+            crate::Error::Io(cause) => Self::Io(cause),
+        }
     }
 }
 
@@ -343,7 +354,7 @@ fn read_record(path: &Path, limit: u64) -> Result<Vec<u8>, Error> {
     if !fs::symlink_metadata(path)?.is_file() {
         return Err(Error::NotRegularFile);
     }
-    read_bounded(path, limit, &from_fault)
+    Ok(crate::read(path, limit)?)
 }
 
 /// Load the record at `path` and the baseline of its bytes, or `None` when no
@@ -380,11 +391,10 @@ pub fn write<F: Format>(
 ) -> Result<Option<PathBuf>, Error> {
     let bytes = encode(format, payload)?;
     let written = Baseline::of(&bytes);
-    let archived = replace_bounded(
+    let archived = crate::replace(
         path,
         &bytes,
         F::LIMIT,
-        &from_fault,
         |existing| {
             let Some(existing) = existing else {
                 return absent(path, baseline, mode);

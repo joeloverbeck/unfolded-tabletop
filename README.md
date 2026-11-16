@@ -80,6 +80,29 @@ your own, and your checks, not this repository's, show that your game still work
 assets, GPU, native acceptance, a real render through the seat, and saved-game
 continuity.
 
+## Failures
+
+A mechanism's failure names its cause as data, and the words are yours:
+
+- **A typed error.** A call that can fail returns `std::io::Error` when the
+  operating system is its only cause, as `unfolded_random::fresh_seed` does.
+  Otherwise it returns the mechanism's own error, whose variants or `cause()` you
+  match, with the path or detail it concerns.
+- **Its text is a default.** `Display` gives plain English. To say a failure your
+  own way, match its cause. Never edit or parse the text.
+- **No error constructors.** A check of yours that runs inside a call, such as
+  `replace`'s admission or a seat client's `check`, returns your own error, and
+  the mechanism's causes reach it through `From`. Where you supply the words, as
+  in `save::Format::validate` or `Admission::Refused`, they come back unchanged.
+
+Some calls still return text:
+- the seat's start and serving calls (`seat::start`, `Seat::open`, `Seat::serve`
+  and the `socket` launch calls): the `refused` start line's error, or your
+  table's exit reason;
+- `loading::required_assets`, whose failures and pending assets are lines.
+
+`unfolded-dev-tools` reports to the person running a tool.
+
 ## Tools
 
 These tools run from a checkout of this repository, and a game need not pin them.

@@ -29,6 +29,7 @@ use bevy::{
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
+    fs::Permissions,
     io::{BufRead, BufReader, Write},
     os::unix::{
         fs::{FileTypeExt, PermissionsExt},
@@ -41,7 +42,8 @@ use unfolded_tabletop::{
     capture::Pipelines,
     seat::{
         Admission, Focus, Game, Hit, Logical, Name, Observed, STEP, Seat, SeatKey, SeatedAgent,
-        Unadmitted, Unshown, socket::Listener,
+        Unadmitted, Unshown,
+        socket::{Listener, Unclaimable},
     },
 };
 
@@ -1185,25 +1187,68 @@ fn a_held_session_with_no_request_ends_itself_after_its_idle_period() {
 fn a_socket_path_is_claimed_only_where_no_seat_answers() {
     let scratch = Scratch::new("claim");
 
+    // Each refusal names its cause as data and keeps the path it concerns; its
+    // text is the seat's default wording, which a game may replace.
     let long = scratch.join(&"s".repeat(120));
     let refused = Listener::claim(&long).err().unwrap();
-    assert!(refused.contains("at most 107 bytes"), "{refused}");
+    assert!(matches!(refused.cause(), Unclaimable::TooLong), "{refused}");
+    assert_eq!(refused.path(), long);
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "Cannot listen on {}: a local socket path holds at most 107 bytes; choose a shorter one",
+            long.display()
+        )
+    );
 
     let file = scratch.join("not-a-socket");
     std::fs::write(&file, "kept").unwrap();
     let refused = Listener::claim(&file).err().unwrap();
     assert!(
-        refused.contains("the path exists and is not a socket; it was left unchanged"),
+        matches!(refused.cause(), Unclaimable::NotSocket),
         "{refused}"
     );
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "Cannot listen on {}: the path exists and is not a socket; it was left unchanged",
+            file.display()
+        )
+    );
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "kept");
+
+    // A directory its owner may write and search but not read can hold the socket,
+    // but cannot be opened to take turns in it.
+    let unreadable = scratch.join("unreadable");
+    std::fs::create_dir(&unreadable).unwrap();
+    std::fs::set_permissions(&unreadable, Permissions::from_mode(0o300)).unwrap();
+    let refused = Listener::claim(&unreadable.join("s")).err().unwrap();
+    std::fs::set_permissions(&unreadable, Permissions::from_mode(0o700)).unwrap();
+    assert!(
+        matches!(refused.cause(), Unclaimable::Unlocked(cause) if cause.kind() == std::io::ErrorKind::PermissionDenied),
+        "{refused}"
+    );
+    assert!(
+        refused
+            .to_string()
+            .contains(": cannot lock its directory: "),
+        "{refused}"
+    );
+    assert_eq!(std::fs::read_dir(&unreadable).unwrap().count(), 0);
 
     let socket = scratch.join("seat.sock");
     let answering = Listener::claim(&socket).unwrap();
     let refused = Listener::claim(&socket).err().unwrap();
     assert!(
-        refused.contains("an agent seat already answers there and was left untouched"),
+        matches!(refused.cause(), Unclaimable::Answered),
         "{refused}"
+    );
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "Cannot listen on {}: an agent seat already answers there and was left untouched; quit that seat or choose another path",
+            socket.display()
+        )
     );
     drop(answering);
     assert!(!socket.exists(), "a listener that ends removes its socket");
