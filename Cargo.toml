@@ -43,3 +43,11 @@ tempfile = "3"
 # Dependency patches do not propagate; consumers still pin their own root patch.
 [patch.crates-io]
 wgpu-hal = { path = "vendor/wgpu-hal" }
+
+# A game's start of its seat, end to end: the launcher starts this executable again
+# as the seat, so it has no test harness, and each game command it runs is a process
+# of its own.
+[[test]]
+name = "seat_start"
+harness = false
+required-features = ["seat"]
