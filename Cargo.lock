@@ -4193,6 +4193,7 @@ dependencies = [
  "anyhow",
  "clap",
  "ctrlc",
+ "image",
  "libc",
  "serde",
  "serde_json",

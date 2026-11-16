@@ -68,7 +68,9 @@ fn game(arguments: &[String]) -> ExitCode {
     }
 }
 
-/// The stand-in seat: one connection, `observed` for `observe` and `bye` for `quit`.
+/// The stand-in seat: one connection, `observed` for `observe`, `settled` for
+/// `settle`, `captured` for `capture` after writing a small file at its path, and `bye`
+/// for `quit`. A `key` request ends the session unanswered, as a seat that fails would.
 fn serve(socket: &Path) -> ExitCode {
     let listener = UnixListener::bind(socket).unwrap();
     eprintln!("listening");
@@ -77,7 +79,13 @@ fn serve(socket: &Path) -> ExitCode {
         let request: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
         let status = match request["op"].as_str() {
             Some("observe") => "observed",
+            Some("settle") => "settled",
+            Some("capture") => {
+                std::fs::write(request["path"].as_str().unwrap(), b"stand-in picture").unwrap();
+                "captured"
+            }
             Some("quit") => "bye",
+            Some("key") => break,
             _ => "refused",
         };
         writeln!(stream, r#"{{"ok":true,"mode":"seat","status":"{status}"}}"#).unwrap();
@@ -101,12 +109,29 @@ impl Drop for Scratch {
 
 /// `held-start <out> <case> -- <this executable> game <game case>`, run in `out`.
 fn record(out: &Path, case: &str, game_case: &str) -> std::process::Output {
-    record_from(out, out, case, game_case)
+    record_from(out, out, case, game_case, &[])
+}
+
+/// The same, with a `--request` for each of `requests`.
+fn record_requests(
+    out: &Path,
+    case: &str,
+    game_case: &str,
+    requests: &[&str],
+) -> std::process::Output {
+    record_from(out, out, case, game_case, requests)
 }
 
 /// The same, run in `directory` and naming `out` as given, which may be relative to it.
-fn record_from(directory: &Path, out: &Path, case: &str, game_case: &str) -> std::process::Output {
+fn record_from(
+    directory: &Path,
+    out: &Path,
+    case: &str,
+    game_case: &str,
+    requests: &[&str],
+) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_held-start"))
+        .args(requests.iter().flat_map(|request| ["--request", request]))
         .args([out.to_str().unwrap(), case, "--"])
         .arg(std::env::current_exe().unwrap())
         .args(["game", game_case])
@@ -163,7 +188,7 @@ fn a_case_already_recorded_is_refused_and_kept(scratch: &Path) {
 }
 
 fn a_relative_out_directory_still_hands_the_game_an_absolute_socket(scratch: &Path) {
-    let recorded = record_from(scratch, Path::new("relative"), "up", "ready");
+    let recorded = record_from(scratch, Path::new("relative"), "up", "ready", &[]);
     assert!(recorded.status.success(), "{recorded:?}");
     let record = read(scratch.join("relative/up.record"));
     let socket = scratch.join("relative/up.sock");
@@ -178,6 +203,108 @@ fn a_relative_out_directory_still_hands_the_game_an_absolute_socket(scratch: &Pa
     );
 }
 
+fn a_ready_start_sends_extra_requests_in_order_and_records_the_capture(scratch: &Path) {
+    let recorded = record_requests(
+        scratch,
+        "shot",
+        "ready",
+        &[
+            r#"{"op":"settle"}"#,
+            r#"{"op":"capture","path":"after.png"}"#,
+        ],
+    );
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("shot.record"));
+    let picture = scratch.join("shot.after.png");
+    let expected = format!(
+        "first status: ready\nobserve: observed\nrequest 1: {{\"op\":\"settle\"}}\n  status: settled\nrequest 2: {{\"op\":\"capture\",\"path\":\"{picture}\"}}\n  status: captured\n  capture: {picture} (written)\nquit: bye\nsocket after: removed\n",
+        picture = picture.display()
+    );
+    assert!(record.contains(&expected), "{record}");
+    assert!(
+        record.contains("revision: none: not a Git working tree\n"),
+        "{record}"
+    );
+    assert_eq!(std::fs::read(&picture).unwrap(), b"stand-in picture");
+}
+
+fn requests_that_cannot_be_sent_as_given_are_refused_before_launch(scratch: &Path) {
+    std::fs::write(scratch.join("no.taken.png"), b"earlier").unwrap();
+    let refusals: [(&[&str], &str); 6] = [
+        (&[r#"{"op":"wave"}"#], "is not a seat request"),
+        (&[r#"{"op":"quit"}"#], "held-start sends quit itself"),
+        (
+            &[r#"{"op":"capture","path":"pictures/after.png"}"#],
+            "must be a plain file name",
+        ),
+        (
+            &[r#"{"op":"capture","path":"record"}"#],
+            "held-start writes no.record itself",
+        ),
+        (
+            &[
+                r#"{"op":"capture","path":"same.png"}"#,
+                r#"{"op":"capture","path":"same.png"}"#,
+            ],
+            "captures to the same file",
+        ),
+        (
+            &[r#"{"op":"capture","path":"taken.png"}"#],
+            "no.taken.png already exists",
+        ),
+    ];
+    for (requests, reason) in refusals {
+        let refused = record_requests(scratch, "no", "ready", requests);
+        assert_eq!(refused.status.code(), Some(2), "{requests:?}: {refused:?}");
+        let error = String::from_utf8_lossy(&refused.stderr);
+        assert!(error.contains(reason), "{requests:?}: {error}");
+        for written in ["no.record", "no.stdout", "no.sock", "no.same.png"] {
+            assert!(
+                !scratch.join(written).exists(),
+                "{requests:?} launched or wrote {written}"
+            );
+        }
+    }
+    assert_eq!(
+        std::fs::read(scratch.join("no.taken.png")).unwrap(),
+        b"earlier"
+    );
+}
+
+fn a_refused_start_records_its_extra_requests_as_not_sent(scratch: &Path) {
+    let recorded = record_requests(
+        scratch,
+        "off",
+        "refused",
+        &[r#"{"op":"capture","path":"after.png"}"#],
+    );
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("off.record"));
+    let picture = scratch.join("off.after.png");
+    let expected = format!(
+        "first error: The stand-in table refuses.\nrequest 1: {{\"op\":\"capture\",\"path\":\"{picture}\"}}\n  status: not sent\n  capture: {picture} (absent)\nsocket after: removed\n",
+        picture = picture.display()
+    );
+    assert!(record.contains(&expected), "{record}");
+}
+
+fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
+    let recorded = record_requests(
+        scratch,
+        "cut",
+        "ready",
+        &[
+            r#"{"op":"key","key":"Enter","revision":0}"#,
+            r#"{"op":"settle"}"#,
+        ],
+    );
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("cut.record"));
+    let expected = "first status: ready\nobserve: observed\nrequest 1: {\"op\":\"key\",\"key\":\"Enter\",\"revision\":0}\n  status: unanswered\nrequest 2: {\"op\":\"settle\"}\n  status: unanswered\nquit: unanswered\nexchange: ";
+    assert!(record.contains(expected), "{record}");
+    assert!(record.contains("socket after: removed\n"), "{record}");
+}
+
 /// One test: its name and what it runs.
 type Test = (&'static str, fn(&Path));
 
@@ -189,7 +316,7 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 4] = [
+    let tests: [Test; 8] = [
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
@@ -205,6 +332,22 @@ fn main() -> ExitCode {
         (
             "a_relative_out_directory_still_hands_the_game_an_absolute_socket",
             a_relative_out_directory_still_hands_the_game_an_absolute_socket,
+        ),
+        (
+            "a_ready_start_sends_extra_requests_in_order_and_records_the_capture",
+            a_ready_start_sends_extra_requests_in_order_and_records_the_capture,
+        ),
+        (
+            "requests_that_cannot_be_sent_as_given_are_refused_before_launch",
+            requests_that_cannot_be_sent_as_given_are_refused_before_launch,
+        ),
+        (
+            "a_refused_start_records_its_extra_requests_as_not_sent",
+            a_refused_start_records_its_extra_requests_as_not_sent,
+        ),
+        (
+            "a_session_that_ends_early_records_the_unanswered_requests",
+            a_session_that_ends_early_records_the_unanswered_requests,
         ),
     ];
     if arguments.iter().any(|argument| argument == "--list") {

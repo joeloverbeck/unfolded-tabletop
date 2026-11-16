@@ -1,7 +1,7 @@
 //! Record one held start of a game's agent seat as evidence:
 //!
 //! ```text
-//! held-start <out-dir> <case> -- <command> [<argument>...]
+//! held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]
 //! ```
 //!
 //! It runs the command with `--socket <out-dir>/<case>.sock` appended, as an agent's
@@ -11,11 +11,16 @@
 //! `<case>.record`. The record names the command, the working directory and its Git
 //! revision, the launching command's exit status, its stdout line count and first
 //! status, and whether the socket was removed. When the start prints `ready`, the
-//! record also holds what `observe` and `quit` answered. A case already recorded in
-//! the directory is refused, so a later run cannot replace an earlier one.
+//! record also holds what `observe` and `quit` answered, and what each `--request`,
+//! sent in order between them on the same connection, answered; a start that is not
+//! `ready` lists each as not sent. A `capture` request
+//! names a plain file name, which is written as `<out-dir>/<case>.<name>`. A case
+//! already recorded in the directory is refused, as is a capture whose file exists,
+//! so a later run cannot replace an earlier one.
 
 use anyhow::{Context, Result, bail};
 use std::{
+    ffi::OsString,
     fmt::Write as _,
     fs,
     path::{Path, PathBuf},
@@ -29,6 +34,16 @@ use unfolded_seat_protocol::{Request, Status};
 const SOCKET_REMOVAL: Duration = Duration::from_secs(10);
 /// How long one response may take once the seat has been admitted.
 const RESPONSE: Duration = Duration::from_secs(180);
+const USAGE: &str =
+    "usage: held-start [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
+/// The files `held-start` itself writes for a case, which no capture may name.
+const OWN_FILES: [&str; 6] = ["record", "stdout", "stderr", "seat.log", "sock", "sock.log"];
+
+/// One `--request` as it is sent, and the file a `capture` writes.
+struct Extra {
+    request: Request,
+    capture: Option<PathBuf>,
+}
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -44,12 +59,19 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(arguments: &[String]) -> Result<String> {
+fn run(mut arguments: &[String]) -> Result<String> {
+    let mut lines = Vec::new();
+    while let [flag, line, rest @ ..] = arguments
+        && flag == "--request"
+    {
+        lines.push(line);
+        arguments = rest;
+    }
     let [out, case, separator, program, rest @ ..] = arguments else {
-        bail!("usage: held-start <out-dir> <case> -- <command> [<argument>...]");
+        bail!(USAGE);
     };
     if separator != "--" {
-        bail!("usage: held-start <out-dir> <case> -- <command> [<argument>...]");
+        bail!(USAGE);
     }
     if case.is_empty() || case.contains('/') {
         bail!("the case {case:?} must be a plain file name");
@@ -66,6 +88,7 @@ fn run(arguments: &[String]) -> Result<String> {
             record_path.display()
         );
     }
+    let extras = extras(&lines, case, &out)?;
     let socket = file(".sock");
     let mut record = String::new();
     let line = |record: &mut String, key: &str, value: &dyn std::fmt::Display| {
@@ -122,9 +145,8 @@ fn run(arguments: &[String]) -> Result<String> {
     if let Some(error) = first.as_ref().and_then(|first| first["error"].as_str()) {
         line(&mut record, "first error", &error);
     }
-    if first_status == Status::Ready.name() {
-        line(&mut record, "observe, quit", &converse(&socket));
-    }
+    let ready = first_status == Status::Ready.name();
+    record.push_str(&converse(&socket, &extras, ready));
     let deadline = Instant::now() + SOCKET_REMOVAL;
     while socket.exists() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(50));
@@ -172,26 +194,133 @@ fn revision(directory: &Path) -> String {
     }
 }
 
-/// Send `observe` and `quit` on one connection: the statuses that came back, or why
-/// none did.
-fn converse(socket: &Path) -> String {
-    let requests = [
-        Request::Observe {}.to_string(),
-        Request::Quit {}.to_string(),
-    ];
+/// Read each `--request` line before anything is launched: a seat request other than
+/// `quit`, whose capture names a plain file name that is none of `held-start`'s own
+/// files, no earlier capture's and not yet written. Its capture path becomes
+/// `<out>/<case>.<name>`.
+fn extras(lines: &[&String], case: &str, out: &Path) -> Result<Vec<Extra>> {
+    let mut extras: Vec<Extra> = Vec::with_capacity(lines.len());
+    for line in lines {
+        let request: Request = serde_json::from_str(line)
+            .with_context(|| format!("--request {line} is not a seat request"))?;
+        let (request, capture) = match request {
+            Request::Quit {} => bail!("--request {line}: held-start sends quit itself"),
+            Request::Capture { path } => {
+                let name = path.to_string_lossy();
+                if path.file_name() != Some(path.as_os_str()) {
+                    bail!(
+                        "--request {line}: a capture's path must be a plain file name, \
+                         written as <out-dir>/<case>.<name>"
+                    );
+                }
+                if OWN_FILES.contains(&name.as_ref()) {
+                    bail!("--request {line}: held-start writes {case}.{name} itself");
+                }
+                let mut file = OsString::from(format!("{case}."));
+                file.push(&path);
+                let target = out.join(file);
+                if target.exists() {
+                    bail!(
+                        "{} already exists: capture under another name, case or directory",
+                        target.display()
+                    );
+                }
+                if extras
+                    .iter()
+                    .any(|extra| extra.capture.as_ref() == Some(&target))
+                {
+                    bail!("--request {line}: an earlier request captures to the same file");
+                }
+                (
+                    Request::Capture {
+                        path: target.clone(),
+                    },
+                    Some(target),
+                )
+            }
+            request => (request, None),
+        };
+        extras.push(Extra { request, capture });
+    }
+    Ok(extras)
+}
+
+/// When the start was `ready`, send `observe`, each extra request and `quit` on one
+/// connection, and say what each answered, or why none did. Otherwise say that the
+/// extra requests were not sent. With no extra request, one line holds both statuses.
+fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
+    let answered = ready.then(|| {
+        let requests: Vec<String> = std::iter::once(Request::Observe {})
+            .chain(extras.iter().map(|extra| extra.request.clone()))
+            .chain([Request::Quit {}])
+            .map(|request| request.to_string())
+            .collect();
+        exchange(socket, &requests)
+    });
+    let mut text = String::new();
+    if extras.is_empty() {
+        if let Some((statuses, error)) = answered {
+            let _ = write!(text, "observe, quit: {}", statuses.join(", "));
+            match error {
+                Some(error) if statuses.is_empty() => text = format!("observe, quit: {error}"),
+                Some(error) => {
+                    let _ = write!(text, " (then {error})");
+                }
+                None => {}
+            }
+            text.push('\n');
+        }
+        return text;
+    }
+    let (statuses, error) = answered.unwrap_or_default();
+    let status = |index: usize| {
+        if !ready {
+            "not sent"
+        } else {
+            statuses.get(index).map_or("unanswered", String::as_str)
+        }
+    };
+    if ready {
+        let _ = writeln!(text, "observe: {}", status(0));
+    }
+    for (index, extra) in extras.iter().enumerate() {
+        let _ = writeln!(text, "request {}: {}", index + 1, extra.request);
+        let _ = writeln!(text, "  status: {}", status(index + 1));
+        if let Some(capture) = &extra.capture {
+            let written = if capture.exists() {
+                "written"
+            } else {
+                "absent"
+            };
+            let _ = writeln!(text, "  capture: {} ({written})", capture.display());
+        }
+    }
+    if ready {
+        let _ = writeln!(text, "quit: {}", status(extras.len() + 1));
+    }
+    if let Some(error) = error {
+        let _ = writeln!(text, "exchange: {error}");
+    }
+    text
+}
+
+/// Send `requests` on one connection: the status each answer carried, in order, and
+/// why the exchange ended early, if it did: an error, or a session that ended with
+/// requests unanswered.
+fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>) {
     let connection = match seat_client::Connection::open(socket) {
         Ok(connection) => connection,
-        Err(error) => return format!("cannot connect: {error}"),
+        Err(error) => return (Vec::new(), Some(format!("cannot connect: {error}"))),
     };
     let deadline = Instant::now() + RESPONSE;
     let mut answers = Vec::new();
-    let exchanged = connection.send(&requests, &mut answers, || {
+    let exchanged = connection.send(requests, &mut answers, || {
         if Instant::now() >= deadline {
             bail!("no response within {} seconds", RESPONSE.as_secs());
         }
         Ok(())
     });
-    let statuses: Vec<String> = String::from_utf8_lossy(&answers)
+    let statuses = String::from_utf8_lossy(&answers)
         .lines()
         .map(|answer| {
             serde_json::from_str::<serde_json::Value>(answer)
@@ -200,10 +329,15 @@ fn converse(socket: &Path) -> String {
                 .unwrap_or_else(|| "malformed".to_owned())
         })
         .collect();
-    match exchanged {
-        Ok(_) => statuses.join(", "),
-        Err(error) => format!("{} (then {error:#})", statuses.join(", ")),
-    }
+    let ended = match exchanged {
+        Ok(seat_client::Outcome::Short { answered }) => Some(format!(
+            "the seat answered {answered} of {} requests before its session ended",
+            requests.len()
+        )),
+        Ok(_) => None,
+        Err(error) => Some(format!("{error:#}")),
+    };
+    (statuses, ended)
 }
 
 /// Copy the seat's log, which the launcher writes at the socket's path with `.log`
