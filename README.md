@@ -25,7 +25,7 @@ Read this index, then the sections your work touches:
 - [Agent seat](#agent-seat) and [Held-seat client](#held-seat-client): the seat's protocol, its client, and `held-start`, which records a game's held start as pull-request evidence.
 - [Development checks](#development-checks): what `scripts/check` holds, and the vendored `wgpu-hal` patch.
 - [Third-consumer waiver](#third-consumer-waiver): the accepted `EVID-6` boundary for extractions that `mudsong` uses.
-- [Development readers and recorded checks](#development-readers-and-recorded-checks): `unfolded-dev-tools`.
+- [Development readers and recorded checks](#development-readers-and-recorded-checks): `unfolded-dev-tools`, and `compare-captures` for two captures.
 
 ## Packages
 
@@ -40,7 +40,7 @@ None has a lifecycle of its own.
 | `unfolded-assets` | verified reads, PNG crops, prepared-directory publication | never | `image` (PNG), `rustix`, `serde_json`, `sha2` |
 | `unfolded-seat-protocol` | the agent seat's wire vocabulary: requests, statuses, the `refused` start line | never | `serde`, `serde_json` |
 | `unfolded-seat-client` | held-seat client and its `held-start` recorder, on Unix | never | `anyhow`, `serde_json`, `unfolded-seat-protocol` |
-| `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
+| `unfolded-dev-tools` | development readers, recorded checks and capture comparison | never | see its manifest |
 | `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `label_anchor`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde_json`, `tempfile`, `rustix` and `unfolded-seat-protocol` with `seat` |
 
 "Never" holds under every feature set: `scripts/check` fails if `cargo tree`
@@ -462,7 +462,7 @@ that checkout's revision:
 
 ```sh
 cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \
-  <out-dir> <case> -- <game executable> <its seat options>
+  [--request '<json>']... <out-dir> <case> -- <game executable> <its seat options>
 ```
 
 It appends `--socket <out-dir>/<case>.sock`, with `<out-dir>` made absolute since a
@@ -476,14 +476,34 @@ names:
 - the launching command's exit status, its standard-output line count, and the
   first line's status and any error;
 - when that status is `ready`, the statuses that `observe` and `quit` answered;
+- each `--request` as it was sent, its status, and for a capture its file and
+  whether it was written;
 - whether the socket was removed within ten seconds, and the log's last two lines.
+
+Each `--request` line is a seat request, sent in the given order on the same
+connection after `observe` and before `quit`, and only when the start is `ready`;
+otherwise the record lists it as `not sent`. With no `--request`, `observe` and `quit`
+share one line, as before; with any, each request gets lines of its own. If the
+session ends early, a request with no answer is `unanswered`, and the record ends
+the exchange with its error. A `capture` names a plain file name, which `held-start`
+rewrites to the absolute `<out-dir>/<case>.<name>`, so the picture sits beside the
+record and its revision line. Before anything is launched, `held-start` refuses a
+line that is no seat request, a `quit` (it sends its own), a capture path that is
+not a plain file name, a name `held-start` writes itself (`record`, `stdout`,
+`stderr`, `seat.log`, `sock`, `sock.log`), two captures to one file and a capture
+whose file exists. A socket path holds at most 107 bytes, so keep `<out-dir>` short.
 
 The record is also printed. A case already recorded in the directory is refused,
 so a later run cannot replace an earlier one. Record a "before" run under its own
-case before changing the game. `seat-client/tests/held_start.rs` holds a ready
-start, a refused one, the refusal of a recorded case and a relative `<out-dir>`
-handed to a game that refuses a relative socket. Its stand-in game is the
-test executable itself, so it has no test harness of its own. It starts child
+case before changing the game, and compare the captures with `compare-captures`
+([Development readers and recorded checks](#development-readers-and-recorded-checks)).
+`seat-client/tests/held_start.rs` holds a ready
+start, a refused one, the refusal of a recorded case, a relative `<out-dir>`
+handed to a game that refuses a relative socket, a ready start sending a `settle`
+and a `capture` between `observe` and `quit`, each refusal above before launch, and
+a refused start's requests recorded as not sent. Its stand-in game is the
+test executable itself, so it has no test harness of its own; its seat writes a
+small file for a capture and renders nothing. It starts child
 processes, listens on a Unix-domain socket under the system's temporary directory,
 and runs `git` when it is installed, which finds no repository there.
 
@@ -663,3 +683,30 @@ and `scripts/check` record.
 Revert consumer adapters/pins before removing the shared crate; the baseline
 above retains the original implementation. Game behavior, saves and assets are
 outside this extraction.
+
+Since [issue #52](https://github.com/joeloverbeck/unfolded-tabletop/issues/52) the
+crate also has a `compare-captures` binary, which compares two captures of the same
+table:
+
+```sh
+cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools --bin compare-captures -- \
+  <before.png> <after.png> [--ignore x,y,width,height] [--threshold <level>] [--limit <count>]
+```
+
+A pixel differs when its largest difference in red, green, blue or transparency
+exceeds the threshold (default 0). Pixels inside the ignored rectangle are left out.
+It prints its options, the count of differing pixels, the largest difference outside
+the ignored rectangle and the box around the differing pixels, then exits 0 when the
+count is within the limit (default 0), 1 when it exceeds it and 2 on an error: an
+unreadable file, one that is not PNG, pictures of different sizes or malformed
+options. Two held starts of one unchanged table can differ by rendering noise; on
+this repository's development machine, Arkham's differed by at most 3 levels.
+`dev-tools/tests/compare_captures.rs` holds identical pictures, a known change's
+count, largest difference and box, the ignored rectangle, the threshold, the limit,
+a change in transparency alone, and each error, on pictures the tests make.
+
+It is not part of `run_cli`, so the commands Arkham and Netrunner wrap are
+unchanged. Cuba Libre and `mudsong` run it from this checkout as an agent tool, as
+they run `held-start`, and neither pins nor depends on it; it does not widen this
+crate's two-consumer specialization. It needs `image` with PNG only, at the version
+the table package pins.
