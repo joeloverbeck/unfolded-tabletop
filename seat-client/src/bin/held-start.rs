@@ -32,8 +32,9 @@ absolute, and runs the command with no standard input. A socket path holds at mo
   <case>.seat.log               the held seat's log
   <case>.record                 the record, which is also printed
 
-The record names the command, the working directory, that directory's Git revision
-and whether its tracked files are unchanged; the launching command's exit status, its
+The record names the command; the executable it ran, by its path and SHA-256, so a
+capture is tied to the build that made it; the working directory, that directory's
+Git revision and whether its tracked files are unchanged; the launching command's exit status, its
 standard-output line count, and the first line's status and any error; when that
 status is `ready`, what `observe` and `quit` answered; each --request as it was sent,
 its status, and for a capture its file and whether it was written; whether the socket
@@ -149,6 +150,7 @@ fn run(mut arguments: &[String]) -> Result<String> {
             shown(&socket.display().to_string())
         ),
     );
+    line(&mut record, "executable", &executable(program, &directory));
     line(&mut record, "working directory", &directory.display());
     line(&mut record, "revision", &revision);
 
@@ -202,6 +204,37 @@ fn run(mut arguments: &[String]) -> Result<String> {
     fs::write(&record_path, &record)
         .with_context(|| format!("cannot write {}", record_path.display()))?;
     Ok(record)
+}
+
+/// The executable `program` names, as the launch finds it, and its SHA-256: a path
+/// with a slash is taken from `directory`, a bare name from `PATH`. Or why it cannot
+/// be read.
+fn executable(program: &str, directory: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let path = if program.contains('/') {
+        Some(directory.join(program))
+    } else {
+        std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|entry| entry.join(program))
+                .find(|candidate| candidate.is_file())
+        })
+    };
+    let Some(path) = path else {
+        return format!("{program}: not found on PATH");
+    };
+    let mut hasher = Sha256::new();
+    match fs::File::open(&path).and_then(|mut file| std::io::copy(&mut file, &mut hasher)) {
+        Ok(_) => {
+            let digest = hasher.finalize();
+            let mut hex = String::with_capacity(64);
+            for byte in digest {
+                let _ = write!(hex, "{byte:02x}");
+            }
+            format!("{} sha256 {hex}", path.display())
+        }
+        Err(error) => format!("{}: {error}", path.display()),
+    }
 }
 
 /// Whether a working tree's tracked files match its revision.

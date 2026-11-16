@@ -14,7 +14,12 @@ struct Run {
 }
 
 fn run(checkout: &Path, revision: &str) -> Run {
+    run_with(checkout, revision, &[])
+}
+
+fn run_with(checkout: &Path, revision: &str, options: &[&str]) -> Run {
     let output = Command::new(env!("CARGO_BIN_EXE_move-pin"))
+        .args(options)
         .arg(checkout)
         .arg(revision)
         .output()
@@ -123,10 +128,36 @@ fn pins_that_disagree_are_named_and_nothing_moves() {
         run.stderr,
         format!(
             "move-pin: the pins disagree, so nothing moved:\n  \
-             Cargo.toml:2: {OLD}\n  Cargo.toml:6: {OLD}\n  tools/Cargo.toml:2: {NEW}\n"
+             Cargo.toml:2: {OLD}\n  Cargo.toml:6: {OLD}\n  tools/Cargo.toml:2: {NEW}\n\
+             To move every one of them to {NEW} anyway, run again with --align.\n"
         )
     );
     assert_eq!(read(&directory, "Cargo.toml"), root(OLD));
+    assert_eq!(read(&directory, "tools/Cargo.toml"), tools(NEW));
+}
+
+#[test]
+fn pins_that_disagree_move_together_with_align() {
+    // A tools manifest left behind when the root pin last moved.
+    let behind = "3121c60b39744f8cd92e46ce3d634d7674897ebb";
+    let directory = checkout(
+        &[
+            ("Cargo.toml", &root(OLD)),
+            ("tools/Cargo.toml", &tools(behind)),
+        ],
+        &[],
+    );
+
+    let run = run_with(directory.path(), NEW, &["--align"]);
+
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+    assert_eq!(
+        run.stdout,
+        format!(
+            "Cargo.toml: 2 pin(s) {OLD} -> {NEW}\ntools/Cargo.toml: 1 pin(s) {behind} -> {NEW}\n"
+        )
+    );
+    assert_eq!(read(&directory, "Cargo.toml"), root(NEW));
     assert_eq!(read(&directory, "tools/Cargo.toml"), tools(NEW));
 }
 

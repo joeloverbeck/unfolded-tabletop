@@ -24,8 +24,9 @@ changed.
 It refuses, and changes nothing, when the checkout is not a Git working tree, when the
 revision is not a full 40-character commit hash, when no manifest pins this repository,
 when a line names it without a rev on the same line, or when the pins disagree: every
-manifest must move together. A checkout already at the revision only has its
-lockfiles refreshed.
+manifest must move together. With --align, pins that disagree, such as a manifest left
+behind when the others last moved, all move to the revision. A checkout already at the
+revision only has its lockfiles refreshed.
 
 Exit status: 0 when the pins and lockfiles are at the revision, 1 otherwise.";
 
@@ -42,11 +43,14 @@ struct Args {
     checkout: PathBuf,
     /// The full commit hash to pin.
     revision: String,
+    /// Move pins that disagree to the revision as well, instead of refusing.
+    #[arg(long)]
+    align: bool,
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    match move_pin(&args.checkout, &args.revision) {
+    match move_pin(&args.checkout, &args.revision, args.align) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("move-pin: {error:#}");
@@ -63,7 +67,7 @@ struct Manifest {
     pins: Vec<(std::ops::Range<usize>, usize)>,
 }
 
-fn move_pin(checkout: &Path, revision: &str) -> Result<()> {
+fn move_pin(checkout: &Path, revision: &str, align: bool) -> Result<()> {
     if revision.len() != 40 || !revision.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         bail!("{revision:?} is not a full 40-character commit hash");
     }
@@ -91,30 +95,37 @@ fn move_pin(checkout: &Path, revision: &str) -> Result<()> {
             checkout.display()
         );
     };
-    if current.iter().any(|(_, rev)| rev != old) {
+    if !align && current.iter().any(|(_, rev)| rev != old) {
         let listed: Vec<String> = current
             .iter()
             .map(|(place, rev)| format!("  {place}: {rev}"))
             .collect();
         bail!(
-            "the pins disagree, so nothing moved:\n{}",
+            "the pins disagree, so nothing moved:\n{}\n\
+             To move every one of them to {revision} anyway, run again with --align.",
             listed.join("\n")
         );
     }
-    if old == revision {
+    if current.iter().all(|(_, rev)| rev == revision) {
         println!("already pinned at {revision}");
     } else {
         for manifest in &manifests {
             let mut text = manifest.text.clone();
+            let mut was: Vec<&str> = Vec::new();
             for (range, _) in manifest.pins.iter().rev() {
+                let rev = &manifest.text[range.clone()];
+                if !was.contains(&rev) {
+                    was.insert(0, rev);
+                }
                 text.replace_range(range.clone(), revision);
             }
             std::fs::write(checkout.join(&manifest.path), text)
                 .with_context(|| format!("cannot write {}", manifest.path.display()))?;
             println!(
-                "{}: {} pin(s) {old} -> {revision}",
+                "{}: {} pin(s) {} -> {revision}",
                 manifest.path.display(),
-                manifest.pins.len()
+                manifest.pins.len(),
+                was.join(", ")
             );
         }
     }

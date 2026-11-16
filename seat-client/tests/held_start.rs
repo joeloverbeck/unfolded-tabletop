@@ -181,6 +181,26 @@ fn a_ready_start_records_its_exchange_and_the_removed_socket(scratch: &Path) {
     assert_eq!(String::from_utf8_lossy(&recorded.stdout), record);
 }
 
+/// The record names the executable it ran by its SHA-256, so that a capture is tied
+/// to the build that made it and not only to the working directory's revision.
+fn a_record_names_the_executable_by_its_sha256(scratch: &Path) {
+    let recorded = record(scratch, "named", "ready");
+    assert!(recorded.status.success(), "{recorded:?}");
+    let record = read(scratch.join("named.record"));
+    let executable = std::env::current_exe().unwrap();
+    // Coreutils' digest, independent of the recorder's.
+    let sum = Command::new("sha256sum").arg(&executable).output().unwrap();
+    let sum = String::from_utf8(sum.stdout).unwrap();
+    let digest = sum.split_whitespace().next().unwrap();
+    assert!(
+        record.contains(&format!(
+            "executable: {} sha256 {digest}\n",
+            executable.display()
+        )),
+        "{record}"
+    );
+}
+
 fn a_refused_start_records_its_error_and_sends_nothing(scratch: &Path) {
     let recorded = record(scratch, "down", "refused");
     assert!(recorded.status.success(), "{recorded:?}");
@@ -408,7 +428,11 @@ fn main() -> ExitCode {
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 10] = [
+    let tests: [Test; 11] = [
+        (
+            "a_record_names_the_executable_by_its_sha256",
+            a_record_names_the_executable_by_its_sha256,
+        ),
         (
             "a_ready_start_records_its_exchange_and_the_removed_socket",
             a_ready_start_records_its_exchange_and_the_removed_socket,
