@@ -185,9 +185,7 @@ impl Connection {
         output: &mut impl Write,
         check: impl FnMut() -> Result<()>,
     ) -> Result<Outcome> {
-        self.stream
-            .set_read_timeout(Some(WAKE))
-            .context("cannot wait on the seat's socket")?;
+        self.stream.set_read_timeout(Some(WAKE))?;
         let (answered, failed) = exchange(&self.stream, requests, output, check)?;
         Ok(if answered < requests.len() {
             Outcome::Short { answered }
@@ -217,24 +215,15 @@ impl Connection {
             return Ok(Reply::Ended(Ended::Closed));
         }
         let _ = self.stream.shutdown(Shutdown::Write);
-        let mut reader = BufReader::new(&self.stream);
         let mut line = Vec::new();
-        loop {
-            match reader.read_until(b'\n', &mut line) {
-                Ok(_) => break,
-                Err(error)
-                    if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
-                {
-                    check().map_err(RequestError::Stopped)?;
-                }
-                Err(error) if error.kind() == ErrorKind::ConnectionReset => {
-                    return Ok(Reply::Ended(Ended::Reset(error)));
-                }
-                Err(error) => return Err(RequestError::Unreadable(error)),
+        match wait_for_line(&mut BufReader::new(&self.stream), &mut line, &mut check) {
+            Ok(true) => {}
+            Ok(false) => return Ok(Reply::Ended(Ended::Unanswered)),
+            Err(Waited::Stopped(error)) => return Err(RequestError::Stopped(error)),
+            Err(Waited::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
+                return Ok(Reply::Ended(Ended::Reset(error)));
             }
-        }
-        if line.is_empty() {
-            return Ok(Reply::Ended(Ended::Unanswered));
+            Err(Waited::Unreadable(error)) => return Err(RequestError::Unreadable(error)),
         }
         let text = String::from_utf8_lossy(&line).trim_end().to_owned();
         let response = match serde_json::from_slice::<Value>(&line) {
@@ -340,13 +329,34 @@ pub fn read_line(
     line: &mut Vec<u8>,
     mut on_timeout: impl FnMut() -> Result<()>,
 ) -> Result<bool> {
+    wait_for_line(reader, line, &mut on_timeout).or_else(|waited| match waited {
+        Waited::Stopped(error) => Err(error),
+        Waited::Unreadable(error) => Err(error).context("cannot read the seat's response"),
+    })
+}
+
+/// Why a wait for a line ended without one.
+enum Waited {
+    /// The caller's check ended it.
+    Stopped(anyhow::Error),
+    /// The read failed other than by a timeout.
+    Unreadable(io::Error),
+}
+
+/// Read one line into `line`, keeping partial bytes across read timeouts and running
+/// `check` on each. False means the end of the connection with no bytes remaining.
+fn wait_for_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<bool, Waited> {
     loop {
         match reader.read_until(b'\n', line) {
             Ok(_) => return Ok(!line.is_empty()),
             Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                on_timeout()?;
+                check().map_err(Waited::Stopped)?;
             }
-            Err(error) => return Err(error).context("cannot read the seat's response"),
+            Err(error) => return Err(Waited::Unreadable(error)),
         }
     }
 }

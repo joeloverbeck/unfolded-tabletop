@@ -247,33 +247,38 @@ fn connecting_tells_no_seat_listening_from_any_other_failure() {
     }
     let file = directory.path().join("file");
     std::fs::write(&file, "").unwrap();
-    for socket in [
-        file.join("seat.sock"),
-        directory.path().join("s".repeat(120)),
+    // A path through a file, and one longer than a socket path can be.
+    for (socket, kind) in [
+        (file.join("seat.sock"), std::io::ErrorKind::NotADirectory),
+        (
+            directory.path().join("s".repeat(120)),
+            std::io::ErrorKind::InvalidInput,
+        ),
     ] {
         match seat_client::Connection::open(&socket) {
-            // Said as the operating system says it, which a game's message quotes.
-            Err(Unreached::Failed(error)) => {
-                let said = error.to_string();
-                assert_eq!(Unreached::Failed(error).to_string(), said);
-            }
+            Err(Unreached::Failed(error)) => assert_eq!(error.kind(), kind),
             other => panic!("{}: {:?}", socket.display(), other.err()),
         }
     }
+    // Either is said in the operating system's words, which a game's message quotes.
+    let unreached = Unreached::NotListening(std::io::Error::other("nothing answers"));
+    assert_eq!(unreached.to_string(), "nothing answers");
 }
 
 #[test]
 fn a_single_request_returns_its_parsed_answer() {
     use seat_client::Reply;
     use unfolded_seat_protocol::{Request, Status};
-    for (line, status) in [
+    for (line, status, response) in [
         (
             "{\"ok\":true,  \"status\":\"observed\",\"mode\":\"seat\"}\n",
             Status::Observed,
+            serde_json::json!({"ok": true, "status": "observed", "mode": "seat"}),
         ),
         (
             "{\"status\":\"refused\",\"error\":\"Outdated\"}",
             Status::Refused,
+            serde_json::json!({"status": "refused", "error": "Outdated"}),
         ),
     ] {
         let (connection, seat) = answering(line);
@@ -282,10 +287,7 @@ fn a_single_request_returns_its_parsed_answer() {
             Reply::Answer(answer) => {
                 assert_eq!(answer.status, status);
                 assert_eq!(answer.line, line.trim_end());
-                assert_eq!(
-                    answer.response,
-                    serde_json::from_str::<serde_json::Value>(line).unwrap()
-                );
+                assert_eq!(answer.response, response);
             }
             other => panic!("{other:?}"),
         }

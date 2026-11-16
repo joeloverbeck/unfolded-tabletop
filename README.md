@@ -407,7 +407,7 @@ the read timeout and compares the answer count with its requests.
 
 The protocol's statuses, its request shapes, the `refused` start line and the
 launcher's reading of a start's first line are `unfolded-seat-protocol`'s, which
-the seat, this client, `held-start` and each game's tools share. Its
+the seat, this client and `held-start` share, and which a game's tools can name. Its
 `seat-protocol/tests/protocol.rs` holds every status's and request's wire spelling.
 
 [Issue #17](https://github.com/joeloverbeck/unfolded-tabletop/issues/17) and

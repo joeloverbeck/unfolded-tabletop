@@ -119,7 +119,7 @@ fn run(arguments: &[String]) -> Result<String> {
     if let Some(error) = first.as_ref().and_then(|first| first["error"].as_str()) {
         line(&mut record, "first error", &error);
     }
-    if first.as_ref().and_then(Status::of) == Some(Status::Ready) {
+    if first_status == Status::Ready.name() {
         line(&mut record, "observe, quit", &converse(&socket));
     }
     let deadline = Instant::now() + SOCKET_REMOVAL;

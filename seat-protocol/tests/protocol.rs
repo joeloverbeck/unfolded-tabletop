@@ -23,12 +23,16 @@ fn every_status_has_its_wire_name_and_is_read_back_from_it() {
         "exited",
     ];
     assert_eq!(Status::ALL.map(Status::name), names);
-    for status in Status::ALL {
-        assert_eq!(serde_json::to_value(status).unwrap(), json!(status.name()));
-        assert_eq!(Status::named(status.name()), Some(status));
-        assert_eq!(status.to_string(), status.name());
+    for (status, name) in Status::ALL.into_iter().zip(names) {
+        assert_eq!(serde_json::to_value(status).unwrap(), json!(name));
         assert_eq!(
-            Status::of(&json!({"ok": true, "status": status.name()})),
+            serde_json::from_value::<Status>(json!(name)).unwrap(),
+            status
+        );
+        assert_eq!(Status::named(name), Some(status));
+        assert_eq!(status.to_string(), name);
+        assert_eq!(
+            Status::of(&json!({"ok": true, "status": name})),
             Some(status)
         );
     }
@@ -44,7 +48,7 @@ fn every_status_has_its_wire_name_and_is_read_back_from_it() {
 }
 
 #[test]
-fn a_status_says_whether_its_request_failed_stops_the_connection_or_ends_the_session() {
+fn a_status_says_whether_its_request_failed_or_ended_the_session() {
     let named = |test: fn(Status) -> bool| -> Vec<&str> {
         Status::ALL
             .into_iter()
@@ -53,7 +57,6 @@ fn a_status_says_whether_its_request_failed_stops_the_connection_or_ends_the_ses
             .collect()
     };
     assert_eq!(named(Status::failed), ["refused", "missed", "skipped"]);
-    assert_eq!(named(Status::stops_connection), ["refused", "missed"]);
     assert_eq!(named(Status::ends_session), ["bye", "exited"]);
 }
 

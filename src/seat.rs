@@ -319,6 +319,13 @@ impl Game for Unshown {
     }
 }
 
+/// The table was not as the request assumed and the request clicked nothing, so the
+/// rest of the connection stops acting: its later activations, keys and scrolls are
+/// skipped.
+fn stops_connection(status: Status) -> bool {
+    matches!(status, Status::Refused | Status::Missed)
+}
+
 /// One response line and its status.
 struct Response {
     status: Status,
@@ -380,7 +387,7 @@ impl Connection {
     }
 
     fn answered(&mut self, line: &str, response: &Response) {
-        if self.stopped.is_none() && response.status.stops_connection() {
+        if self.stopped.is_none() && stops_connection(response.status) {
             self.stopped = Some(Stop {
                 line: line.trim().to_owned(),
                 status: response.status,

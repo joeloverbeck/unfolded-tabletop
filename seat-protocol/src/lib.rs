@@ -1,8 +1,8 @@
 //! The agent seat's wire vocabulary: the requests an agent sends, the statuses its
 //! responses carry and the one line of a start refused before a table is seated. The
-//! seat (`unfolded-tabletop`'s `seat` feature), the held-seat client
-//! (`unfolded-seat-client`) and each game's tools read and write the protocol through
-//! these types, so a status or a request field is spelled once. Nothing here needs
+//! seat (`unfolded-tabletop`'s `seat` feature), its launcher and the held-seat client
+//! (`unfolded-seat-client`) read and write the protocol through these types, and a
+//! game's tools can name them too, so a status or a request field is spelled once. Nothing here needs
 //! Bevy, a socket or a game.
 //!
 //! The vocabulary is Arkham's, as the seat had it when it moved; see `seat` in the
@@ -84,7 +84,7 @@ impl fmt::Display for Request {
 
 /// A response's status: what the seat did with the request, which decides what follows
 /// it on its connection and in the session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     /// The seat is seated and admitted, and serves requests.
@@ -160,13 +160,6 @@ impl Status {
     /// was skipped. A client counts such an exchange as failed.
     pub const fn failed(self) -> bool {
         matches!(self, Self::Refused | Self::Missed | Self::Skipped)
-    }
-
-    /// The table was not as the request assumed and the request clicked nothing, so the
-    /// rest of the connection stops acting: its later activations, keys and scrolls
-    /// are skipped.
-    pub const fn stops_connection(self) -> bool {
-        matches!(self, Self::Refused | Self::Missed)
     }
 
     /// No request follows this one in the session: `quit` or the table's own exit.
