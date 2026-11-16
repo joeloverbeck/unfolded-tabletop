@@ -8,6 +8,8 @@ Implement the work described by the user in the spec or tickets.
 
 If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, ask.
 
+When the work spans repositories, read each repository's merge rule and any work-item limit before changing it. Record each real held start with `held-start` (README, "Held-seat client"): the "before" run under its own case, before the change.
+
 Call the Skill tool with "tdd" where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
