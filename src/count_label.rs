@@ -3,13 +3,22 @@
 //! Extracted from Arkham's `tabletop_counters` at
 //! d7a6f2ea46fbf97719cc352ee8b94270857b9bcd. Consumers own token construction,
 //! zero-count policy, offsets, fonts, colors and accessibility names.
+//!
+//! Kept while games move to [`crate::label_anchor`], which tracks these labels
+//! and any other node a caller owns (issue #35). New code spawns its own node
+//! with a [`LabelAnchor`] instead of calling [`spawn`].
+use crate::label_anchor::{LabelAnchor, LabelAnchorPlugin};
 use bevy::prelude::*;
 
+/// Installs [`LabelAnchorPlugin`] unless it already is. A game that installs
+/// both installs `LabelAnchorPlugin` first.
 pub struct CountLabelPlugin;
 
 impl Plugin for CountLabelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, position_labels);
+        if !app.is_plugin_added::<LabelAnchorPlugin>() {
+            app.add_plugins(LabelAnchorPlugin);
+        }
     }
 }
 
@@ -31,36 +40,8 @@ pub fn spawn(commands: &mut Commands, token: Entity, amount: u32, offset: Vec3) 
                 ..default()
             },
             Label { token, offset },
+            LabelAnchor::entity(token, offset),
             Pickable::IGNORE,
         ))
         .id()
-}
-
-// As in the original consumer, tokens are roots: the offset is scaled but not
-// rotated. A single 3D camera is required. No camera leaves labels unchanged.
-fn position_labels(
-    mut commands: Commands,
-    camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    transforms: Query<&Transform>,
-    mut labels: Query<(Entity, &Label, &ComputedNode, &mut Node, &mut Visibility)>,
-) {
-    let Ok((camera, camera_at)) = camera.single() else {
-        return;
-    };
-    for (entity, label, computed, mut node, mut visibility) in &mut labels {
-        let Ok(at) = transforms.get(label.token) else {
-            commands.entity(entity).despawn();
-            continue;
-        };
-        if let Ok(point) =
-            camera.world_to_viewport(camera_at, at.translation + label.offset * at.scale)
-        {
-            let width = computed.size().x * computed.inverse_scale_factor;
-            node.left = px(point.x - width / 2.0);
-            node.top = px(point.y);
-            *visibility = Visibility::Visible;
-        } else {
-            *visibility = Visibility::Hidden;
-        }
-    }
 }

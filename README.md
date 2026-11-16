@@ -30,7 +30,7 @@ None has a lifecycle of its own.
 | `unfolded-seat-protocol` | the agent seat's wire vocabulary: requests, statuses, the `refused` start line | never | `serde`, `serde_json` |
 | `unfolded-seat-client` | held-seat client and its `held-start` recorder, on Unix | never | `anyhow`, `serde_json`, `unfolded-seat-protocol` |
 | `unfolded-dev-tools` | development readers and recorded checks | never | see its manifest |
-| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde_json`, `tempfile`, `rustix` and `unfolded-seat-protocol` with `seat` |
+| `unfolded-tabletop` | `camera`, `capture`, `card`, `count_label`, `label_anchor`, `loading`, `printed`, `token` behind `render`; `seat` behind `seat` | Bevy 0.20.0 under `render` | none without features; Bevy and `image` with `render`; `serde_json`, `tempfile`, `rustix` and `unfolded-seat-protocol` with `seat` |
 
 "Never" holds under every feature set: `scripts/check` fails if `cargo tree`
 finds a `bevy` package below any of them, and fails if `unfolded-random` brings
@@ -100,26 +100,49 @@ view reset. It changes no persisted records. Revert consumer adapters and pins
 together before removing this producer module; each consumer still needs its
 own actual interaction and image checks.
 
+## World-anchored labels
+
+`label_anchor`, behind `render`, keeps a UI node a caller owns over a world
+anchor. [Issue #35](https://github.com/joeloverbeck/unfolded-tabletop/issues/35)
+generalized it from the token count labels below and Netrunner's board labels at
+`df604944d3c7ad96b786df5edf6c0959e79733f2`, `src/tabletop/turns.rs`.
+
+Install `LabelAnchorPlugin`, spawn the node with `PositionType::Absolute`, and add
+a `LabelAnchor`: `LabelAnchor::entity(token, offset)` or `LabelAnchor::point(at)`.
+Each frame, in `PostUpdate` after transform propagation and the camera's update and
+before UI layout, it writes the node's `left`, `top` and `Visibility`, and nothing
+else:
+
+- An entity anchor reads the entity's own `Transform`, as for a root token: the
+  offset is scaled by its scale but not rotated, and a parent is not followed. The
+  node is removed once the entity has no `Transform`.
+- A point anchor is a fixed world point and is never removed.
+- The node's top edge is centred on the projected point by its measured width, or,
+  with `left_edge()`, starts there. A margin the caller sets still shifts it.
+- The node is hidden when projection fails and, with `within_viewport()`, while
+  the point falls outside the camera's logical viewport rectangle.
+
+Tracking requires one `Camera3d`; with none, or several, it changes nothing. It
+makes no promise about several views or offsets that rotate with a parent. The
+node's text, font, colour, padding, accessibility name, pickability, stacking and
+lifetime are the caller's, as are when a count updates and whether a zero shows.
+
 ## Token count labels
 
-`count_label`, behind `render`, holds numeric label creation and camera tracking
-from Arkham `d7a6f2ea46fbf97719cc352ee8b94270857b9bcd`,
+`count_label`, behind `render`, holds numeric label creation from Arkham
+`d7a6f2ea46fbf97719cc352ee8b94270857b9bcd`,
 `src/tabletop_counters.rs`. [Issue #11](https://github.com/joeloverbeck/unfolded-tabletop/issues/11)
-coordinates Arkham's existing counter migration with Netrunner's compact credit
+coordinated Arkham's counter migration with Netrunner's compact credit
 and click totals under [Netrunner #12](https://github.com/joeloverbeck/netrunner-unfolded/issues/12).
-Consumers create the token and supply its count, offset and label presentation.
-Resource meanings, zero-count visibility, token geometry, fonts, colors,
-accessibility names and count updates stay with each game.
-
-Install `CountLabelPlugin` and call `spawn` for each label. Tracking requires one
-`Camera3d` and a root token `Transform`; it scales the offset without rotating it,
-centers by the measured label width, hides failed projections and removes labels
-whose token no longer has a transform. With no unique camera it changes nothing.
-This preserves Arkham's behavior; it does not support arbitrary hierarchies or
-multiple views. Mudsong has no corresponding counter-label consumer to migrate.
+Since issue #35 its `spawn` adds a `LabelAnchor` to the non-pickable, centred
+digit string it makes, and `CountLabelPlugin` installs `LabelAnchorPlugin` unless
+a game has already installed it; a game that installs both installs
+`LabelAnchorPlugin` first. They remain so that a game can return to them by
+reverting its adapter and pin together; new code spawns its own node with a
+`LabelAnchor`. Mudsong has no corresponding counter-label consumer to migrate.
 
 Each consumer retains its own checks and rendered inspection. Revert consumer
-adapters and dependency pins before withdrawing this producer addition; Arkham's
+adapters and dependency pins before withdrawing either producer addition; Arkham's
 prior revision contains the original implementation. No saved state changes.
 
 ## Recoverable file replacement

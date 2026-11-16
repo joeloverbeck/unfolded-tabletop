@@ -5,7 +5,10 @@ use bevy::{
     ecs::world::CommandQueue,
     prelude::*,
 };
-use unfolded_tabletop::count_label::{self, CountLabelPlugin};
+use unfolded_tabletop::{
+    count_label::{self, CountLabelPlugin},
+    label_anchor::LabelAnchorPlugin,
+};
 
 #[test]
 fn counts_follow_scaled_roots_and_camera_then_hide_and_clean_up() {
@@ -87,6 +90,13 @@ fn counts_follow_scaled_roots_and_camera_then_hide_and_clean_up() {
     app.world_mut().despawn(token);
     app.update();
     assert!(app.world().get_entity(label).is_err());
+}
+
+#[test]
+fn a_game_moving_to_label_anchor_can_install_both_plugins() {
+    let mut app = App::new();
+    app.add_plugins((LabelAnchorPlugin, CountLabelPlugin));
+    assert!(app.is_plugin_added::<LabelAnchorPlugin>());
 }
 
 fn assert_position(app: &App, label: Entity, x: f32, y: f32) {

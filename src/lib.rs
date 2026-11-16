@@ -14,6 +14,8 @@ pub mod card;
 #[cfg(feature = "render")]
 pub mod count_label;
 #[cfg(feature = "render")]
+pub mod label_anchor;
+#[cfg(feature = "render")]
 pub mod loading;
 #[cfg(feature = "render")]
 pub mod printed;
