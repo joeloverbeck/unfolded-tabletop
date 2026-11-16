@@ -2,6 +2,8 @@
 
 What each game needs from work that changes it: how it renders at the seat, how to verify it, how its pull requests merge, and its limits. Read a game's row before opening an issue or a branch in its repository. Checked against each game's main on 2026-11-16; each repository's own instructions win where they differ.
 
+To find a consumer's use of an API here, search its main checkout with `--exclude-dir=target --exclude-dir=local --exclude-dir=.claude`; those hold build output, evidence snapshots and stale worktrees.
+
 Commit messages and pull requests in a game say `For #N`. Closing an issue is the owner's acceptance, so leave closing keywords out.
 
 **Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision and whether its tree is clean:
