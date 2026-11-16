@@ -331,7 +331,10 @@ fn clean_refuses_an_absent_or_changed_tree_before_launch(scratch: &Path) {
     let refused = record_clean(scratch, &out, "nogit");
     assert_eq!(refused.status.code(), Some(2), "{refused:?}");
     let error = String::from_utf8_lossy(&refused.stderr);
-    assert!(error.contains("--clean: none: not a Git working tree"), "{error}");
+    assert!(
+        error.contains("--clean: none: not a Git working tree"),
+        "{error}"
+    );
     unlaunched("nogit");
 
     let repository = scratch.join("repository");
@@ -359,10 +362,7 @@ fn clean_refuses_an_absent_or_changed_tree_before_launch(scratch: &Path) {
     let refused = record_clean(&repository, &out, "dirty");
     assert_eq!(refused.status.code(), Some(2), "{refused:?}");
     let error = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        error.contains("(1 changed tracked files)"),
-        "{error}"
-    );
+    assert!(error.contains("(1 changed tracked files)"), "{error}");
     unlaunched("dirty");
 
     std::fs::write(repository.join("tracked"), b"committed").unwrap();
