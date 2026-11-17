@@ -8,6 +8,10 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **Changing shared text.** For each sentence a change rewords, search every game's main checkout for its first three words and its last three words (`grep -rnF --include=*.rs`), since a test may read either end. A changed error type changes text too where a game prints its `Debug`: search for `fn main() -> ` returning a `Result`, whose error Rust prints as `Debug`. Name each match in the pull request.
 
+**Changing a game's test.** Search that game's Markdown for the test's name (`grep -rn --include=*.md`): its README and art notes describe what some tests check, numbers included. Update each match with the test.
+
+**Adding a protocol request or status.** A new `unfolded_seat_protocol::Request` or `Status` variant breaks a game that matches either type exhaustively. In each game's main checkout, list the files that name the crate, `git grep -l unfolded_seat_protocol origin/main -- '*.rs'`, and read each `match` on `Request` or `Status` in them for a `_` arm. Record the search in the CHANGELOG entry.
+
 **Rewriting an adapter.** List the old file's user-facing strings (`git show main:<file> | grep -oE '"[A-Z][^"]+ [^"]+"'`) and account for each one in the pull request: kept, moved, or changed and why.
 
 **Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted. When a manifest was left behind at an earlier move, it refuses and names each pin; `--align` moves them all.

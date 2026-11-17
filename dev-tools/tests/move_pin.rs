@@ -1,6 +1,6 @@
-//! The `move-pin` binary on checkouts each test builds with `git`. None tracks a
-//! `Cargo.lock`, so no test refreshes one; every expected manifest and line of output
-//! is written out by hand.
+//! The `move-pin` binary on checkouts each test builds with `git`. Only one tracks a
+//! `Cargo.lock`, beside a manifest Cargo cannot read, so no test refreshes one; every
+//! expected manifest and line of output is written out by hand.
 
 use std::{path::Path, process::Command};
 
@@ -218,4 +218,35 @@ fn a_directory_outside_git_is_refused() {
 
 fn read_plain(directory: &Path) -> String {
     std::fs::read_to_string(directory.join("Cargo.toml")).unwrap()
+}
+
+#[test]
+fn a_lockfile_that_cannot_be_refreshed_puts_every_pin_back() {
+    // Cargo reads no package from either manifest, so its refresh fails offline,
+    // as it does for a revision that is not on GitHub yet.
+    let lock = "# a lockfile\n";
+    let directory = checkout(
+        &[
+            ("Cargo.toml", &root(OLD)),
+            ("tools/Cargo.toml", &tools(OLD)),
+            ("Cargo.lock", lock),
+        ],
+        &[],
+    );
+
+    let run = run(directory.path(), NEW);
+
+    assert_eq!(run.code, Some(1));
+    assert_eq!(run.stdout, "");
+    // Cargo's own reason comes first, then the tool's.
+    assert!(
+        run.stderr.ends_with(&format!(
+            "move-pin: cargo metadata could not refresh Cargo.lock, so every manifest and lockfile was put back and nothing moved. Cargo fetches {NEW} from GitHub: is it pushed?\n"
+        )),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(read(&directory, "Cargo.toml"), root(OLD));
+    assert_eq!(read(&directory, "tools/Cargo.toml"), tools(OLD));
+    assert_eq!(read(&directory, "Cargo.lock"), lock);
 }

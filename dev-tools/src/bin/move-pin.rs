@@ -1,8 +1,9 @@
 //! Move a consumer's pin of this repository to another revision. `ABOUT`, which
 //! `move-pin --help` prints, describes what it changes and refuses.
 //!
-//! What no test holds: the lockfile refresh, which needs the network to fetch the new
-//! revision. The tests hold every manifest edit and every refusal.
+//! What no test holds: a lockfile refresh that succeeds, which needs the network to
+//! fetch the new revision. The tests hold every manifest edit, every refusal, and the
+//! files put back when a refresh fails.
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
@@ -26,7 +27,8 @@ revision is not a full 40-character commit hash, when no manifest pins this repo
 when a line names it without a rev on the same line, or when the pins disagree: every
 manifest must move together. With --align, pins that disagree, such as a manifest left
 behind when the others last moved, all move to the revision. A checkout already at the
-revision only has its lockfiles refreshed.
+revision only has its lockfiles refreshed. When a lockfile cannot be refreshed, as for
+a revision not yet pushed to GitHub, every manifest and lockfile is put back as it was.
 
 Exit status: 0 when the pins and lockfiles are at the revision, 1 otherwise.";
 
@@ -106,8 +108,10 @@ fn move_pin(checkout: &Path, revision: &str, align: bool) -> Result<()> {
             listed.join("\n")
         );
     }
+    // What the run prints once every file is at the revision; a failure prints none of it.
+    let mut report = Vec::new();
     if current.iter().all(|(_, rev)| rev == revision) {
-        println!("already pinned at {revision}");
+        report.push(format!("already pinned at {revision}"));
     } else {
         for manifest in &manifests {
             let mut text = manifest.text.clone();
@@ -121,26 +125,54 @@ fn move_pin(checkout: &Path, revision: &str, align: bool) -> Result<()> {
             }
             std::fs::write(checkout.join(&manifest.path), text)
                 .with_context(|| format!("cannot write {}", manifest.path.display()))?;
-            println!(
+            report.push(format!(
                 "{}: {} pin(s) {} -> {revision}",
                 manifest.path.display(),
                 manifest.pins.len(),
                 was.join(", ")
-            );
+            ));
         }
     }
-    for lock in tracked(checkout, "Cargo.lock")? {
-        let manifest = checkout.join(&lock).with_file_name("Cargo.toml");
-        let status = Command::new("cargo")
-            .args(["metadata", "--format-version", "1", "--manifest-path"])
-            .arg(&manifest)
-            .stdout(Stdio::null())
-            .status()
-            .context("cannot run cargo")?;
-        if !status.success() {
-            bail!("cargo metadata could not refresh {}", lock.display());
+    let mut originals: Vec<(PathBuf, String)> = manifests
+        .iter()
+        .map(|manifest| (manifest.path.clone(), manifest.text.clone()))
+        .collect();
+    let locks = tracked(checkout, "Cargo.lock")?;
+    for lock in &locks {
+        let text = std::fs::read_to_string(checkout.join(lock))
+            .with_context(|| format!("cannot read {}", lock.display()))?;
+        originals.push((lock.clone(), text));
+    }
+    for lock in &locks {
+        if let Err(error) = refresh(checkout, lock) {
+            for (path, text) in &originals {
+                std::fs::write(checkout.join(path), text)
+                    .with_context(|| format!("cannot put back {}", path.display()))?;
+            }
+            bail!(
+                "{error:#}, so every manifest and lockfile was put back and nothing moved. \
+                 Cargo fetches {revision} from GitHub: is it pushed?"
+            );
         }
-        println!("refreshed {}", lock.display());
+        report.push(format!("refreshed {}", lock.display()));
+    }
+    for line in report {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// Refresh one tracked lockfile against the manifest beside it.
+fn refresh(checkout: &Path, lock: &Path) -> Result<()> {
+    let manifest = checkout.join(lock).with_file_name("Cargo.toml");
+    let status = Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .arg(&manifest)
+        .stdout(Stdio::null())
+        .status()
+        .context("cannot run cargo")?;
+    if !status.success() {
+        bail!("cargo metadata could not refresh {}", lock.display());
     }
     Ok(())
 }
