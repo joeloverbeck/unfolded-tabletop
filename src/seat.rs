@@ -30,10 +30,15 @@
 //! later; `mudsong`, a private repository that pins the library for its application,
 //! is the consumer that sends it. `drag`, which presses a named mouse button on a
 //! named target, moves the pointer while it is held and releases it, was added for
-//! the table camera's right-drag orbit (#63).
+//! the table camera's right-drag orbit (#63). `advance`, which steps the table's
+//! clock a chosen number of steps, settled or not, and sends no input, was added so a
+//! test can cross an animation's loop without counting the steps other requests take
+//! (#62).
 //!
 //! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
-//! steps unless a request asks otherwise, and for 7,200 at most; admission settling
+//! steps unless a request asks otherwise, and for 7,200 at most; an `advance` of 1 to
+//! 7,200 steps, each taken unless the table exits first, and any other count refused
+//! unstepped; admission settling
 //! the admitted table for at most 1,800 steps and then returning, settled or not; and
 //! 30 seconds for a capture. A `scroll` takes each axis finite and between -32 and 32
 //! wheel lines, with at least one nonzero, and its `scrolled` response confirms that
@@ -42,10 +47,12 @@
 //! the window, short of its far edges, where a window reports no cursor. The button goes down on one step, the pointer moves an equal part of the
 //! offset on each of the next four, and the button comes up on the step after: no
 //! button stays down between requests. Its `dragged` response, like `scrolled`, says
-//! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and the
-//! protocol's main refusals word for word. No test here or in Arkham holds the settling
-//! limits, the capture's 30 seconds, a capture's other refusals or the wording for a
-//! focus that is no control or menu row, so a change to them would pass every check.
+//! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and
+//! the protocol's main refusals word for word, and an `advance`'s range, whose 7,200 is
+//! also the most a `settle` takes. No test here or in Arkham holds a `settle`'s default
+//! of 1,800, that it lowers a larger count to 7,200, admission's 1,800, the capture's
+//! 30 seconds, a capture's other refusals or the wording for a focus that is no
+//! control or menu row, so a change to them would pass every check.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! drags, scrolls and keys act only on the revision they were decided on, a key that can
@@ -137,7 +144,8 @@ pub fn ui_target(world: &World, entity: Entity, viewport: Option<Vec2>) -> Optio
 pub const STEP: Duration = Duration::from_nanos(16_666_667);
 /// Thirty seconds of table time.
 const DEFAULT_SETTLE_STEPS: u32 = 1_800;
-const MAX_SETTLE_STEPS: u32 = 7_200;
+/// Two minutes of table time: the most steps a `settle` or an `advance` takes.
+const MAX_STEPS: u32 = 7_200;
 const CAPTURE_LIMIT: Duration = Duration::from_secs(30);
 /// The steps over which a drag moves the pointer, one move each, between the step
 /// that presses and the step that releases.
@@ -380,8 +388,8 @@ enum ConnectionEnd {
 /// One connection's requests: standard input in batch form, or one connection to the
 /// seat. After its first refused or missed response the connection stops pressing:
 /// every later activation, drag, key and scroll is skipped, so one wrong assumption cannot cascade
-/// into several commits. Observing, pointing, settling, capturing and quitting are
-/// still served; a point presses nothing.
+/// into several commits. Observing, pointing, settling, advancing, capturing and
+/// quitting are still served; a point and an advance press nothing.
 #[derive(Default)]
 struct Connection {
     stopped: Option<Stop>,
@@ -643,6 +651,7 @@ impl<G: Game> Seat<G> {
                 Err(error) => self.refused(app, error),
             },
             Request::Settle { steps } => self.settle(app, steps),
+            Request::Advance { steps } => self.advance(app, steps),
             Request::Capture { path } => self.capture(app, &path),
             Request::Quit {} => return self.response(app, Status::Bye, None),
         };
@@ -1123,7 +1132,7 @@ impl<G: Game> Seat<G> {
     }
 
     fn settle(&mut self, app: &mut App, steps: Option<u32>) -> Response {
-        let limit = steps.unwrap_or(DEFAULT_SETTLE_STEPS).min(MAX_SETTLE_STEPS);
+        let limit = steps.unwrap_or(DEFAULT_SETTLE_STEPS).min(MAX_STEPS);
         let mut used = 0;
         loop {
             let pending = self.game.unsettled(app.world_mut());
@@ -1147,6 +1156,27 @@ impl<G: Game> Seat<G> {
             self.step(app, STEP);
             used += 1;
         }
+    }
+
+    /// Step the clock `steps` times, whether or not the table is settled, and send no
+    /// input; a table that exits first ends the stepping, and its session. Out of range,
+    /// the table is not stepped at all.
+    fn advance(&mut self, app: &mut App, steps: u32) -> Response {
+        if !(1..=MAX_STEPS).contains(&steps) {
+            return self.refused(
+                app,
+                format!(
+                    "advance needs between 1 and {MAX_STEPS} steps, not {steps}. The table was not stepped."
+                ),
+            );
+        }
+        let mut used = 0;
+        while used < steps && self.step(app, STEP) {
+            used += 1;
+        }
+        let mut response = self.response(app, Status::Advanced, None);
+        response.json["steps"] = json!(used);
+        response
     }
 
     /// Write a picture of the seat's image. The clock is frozen while the capture is

@@ -16,6 +16,7 @@ fn every_status_has_its_wire_name_and_is_read_back_from_it() {
         "dragged",
         "settled",
         "unsettled",
+        "advanced",
         "captured",
         "refused",
         "missed",
@@ -118,6 +119,10 @@ fn a_request_is_read_from_the_line_an_agent_writes_and_written_as_one() {
             Request::Settle { steps: Some(120) },
         ),
         (
+            r#"{"op":"advance","steps":216}"#,
+            Request::Advance { steps: 216 },
+        ),
+        (
             r#"{"op":"capture","path":"/tmp/table.png"}"#,
             Request::Capture {
                 path: PathBuf::from("/tmp/table.png"),
@@ -161,7 +166,12 @@ fn a_request_is_read_from_the_line_an_agent_writes_and_written_as_one() {
             y: 5.0,
         }
     );
+    // An advance always says how many steps, and takes no revision.
     for refused in [
+        r#"{"op":"advance"}"#,
+        r#"{"op":"advance","steps":-1}"#,
+        r#"{"op":"advance","steps":1.5}"#,
+        r#"{"op":"advance","steps":3,"revision":0}"#,
         r#"{"op":"drag","revision":0,"component":"table","x":5}"#,
         r#"{"op":"drag","revision":0,"component":"table","button":"right","x":5,"steps":3}"#,
         r#"{"op":"observe","revision":0}"#,
