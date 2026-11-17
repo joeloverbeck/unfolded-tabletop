@@ -609,6 +609,94 @@ fn a_busy_table_refuses_input_and_settles_in_fixed_steps() {
 }
 
 #[test]
+fn an_advance_steps_a_settled_tables_clock_exactly_as_asked() {
+    let mut seat = sit();
+    // Settling a settled table takes no step, so it cannot move the clock.
+    assert_eq!(seat.ask(json!({"op": "settle"}))["steps"], 0);
+
+    let advanced = seat.ask(json!({"op": "advance", "steps": 216}));
+
+    assert_eq!(advanced["status"], "advanced", "{advanced}");
+    assert_eq!(advanced["ok"], true);
+    assert_eq!(advanced["steps"], 216);
+    assert_eq!(advanced["settled"], true);
+    // 216 × 16,666,667 ns: 3.6 s and 72 ns.
+    assert_eq!(advanced["table"]["clock_nanos"], 3_600_000_072_u64);
+    assert_eq!(advanced["observation"]["keys"], json!([]));
+    assert_eq!(advanced["observation"]["clicked"], json!([]));
+}
+
+#[test]
+fn an_advance_steps_a_busy_table_as_asked_and_does_not_wait_for_it_to_settle() {
+    let mut seat = sit();
+    seat.table().presenting = 5;
+
+    let short = seat.ask(json!({"op": "advance", "steps": 2}));
+    assert_eq!(short["status"], "advanced", "{short}");
+    assert_eq!(short["ok"], true);
+    assert_eq!(short["steps"], 2);
+    assert_eq!(short["settled"], false);
+    assert_eq!(short["pending"], json!(["presentation"]));
+    assert_eq!(short["table"]["clock_nanos"], clock_after(2));
+
+    // It settles after three more steps, and the advance goes on past that.
+    let past = seat.ask(json!({"op": "advance", "steps": 10}));
+    assert_eq!(past["steps"], 10);
+    assert_eq!(past["settled"], true);
+    assert_eq!(past["table"]["clock_nanos"], clock_after(12));
+}
+
+#[test]
+fn an_advance_of_no_steps_too_many_or_none_said_is_refused_and_steps_nothing() {
+    let mut seat = sit();
+    for steps in [0, 7_201] {
+        let refused = seat.ask(json!({"op": "advance", "steps": steps}));
+        assert_eq!(refused["status"], "refused", "{refused}");
+        assert_eq!(
+            refused["error"],
+            format!(
+                "advance needs between 1 and 7200 steps, not {steps}. The table was not stepped."
+            )
+        );
+    }
+    let unsaid = seat.ask(json!({"op": "advance"}));
+    assert_eq!(unsaid["status"], "refused");
+    assert!(
+        unsaid["error"].as_str().unwrap().contains("steps"),
+        "{unsaid}"
+    );
+    // The most an advance takes is one settle's most.
+    let most = seat.ask(json!({"op": "advance", "steps": 7_200}));
+    assert_eq!(most["steps"], 7_200);
+    assert_eq!(most["table"]["clock_nanos"], clock_after(7_200));
+}
+
+#[test]
+fn an_advance_sends_no_input_so_a_refusal_before_it_does_not_skip_it() {
+    let mut seat = sit();
+    let input = concat!(
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}\n",
+        "{\"op\":\"advance\",\"steps\":3}\n",
+        "{\"op\":\"quit\"}\n",
+    );
+    let mut output = Vec::new();
+
+    let ended = seat
+        .seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output);
+
+    assert_eq!(ended, Ok(()));
+    let responses = lines(&output);
+    let statuses: Vec<&str> = responses
+        .iter()
+        .map(|response| response["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses, ["ready", "refused", "advanced", "bye"]);
+    assert_eq!(responses[2]["steps"], 3);
+    assert_eq!(responses[2]["table"]["clock_nanos"], clock_after(3));
+}
+
+#[test]
 fn batch_form_is_ready_first_and_stops_acting_after_its_first_refusal() {
     let mut seat = sit();
     let input = concat!(

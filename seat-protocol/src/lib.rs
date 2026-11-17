@@ -76,6 +76,10 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         steps: Option<u32>,
     },
+    /// Step the table's clock exactly this many steps, settled or not, sending no input.
+    Advance {
+        steps: u32,
+    },
     /// Write the table's image to this path.
     Capture {
         #[serde(serialize_with = "lossy")]
@@ -115,6 +119,8 @@ pub enum Status {
     Dragged,
     Settled,
     Unsettled,
+    /// The table's clock moved by the response's `steps`, and no input was sent.
+    Advanced,
     Captured,
     /// The request was not acted on, for the reason in its error.
     Refused,
@@ -131,7 +137,7 @@ pub enum Status {
 
 impl Status {
     /// Every status, in the order above.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Ready,
         Self::Observed,
         Self::Activated,
@@ -141,6 +147,7 @@ impl Status {
         Self::Dragged,
         Self::Settled,
         Self::Unsettled,
+        Self::Advanced,
         Self::Captured,
         Self::Refused,
         Self::Missed,
@@ -161,6 +168,7 @@ impl Status {
             Self::Dragged => "dragged",
             Self::Settled => "settled",
             Self::Unsettled => "unsettled",
+            Self::Advanced => "advanced",
             Self::Captured => "captured",
             Self::Refused => "refused",
             Self::Missed => "missed",
