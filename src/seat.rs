@@ -33,11 +33,12 @@
 //! the table camera's right-drag orbit (#63). `advance`, which steps the table's
 //! clock a chosen number of steps, settled or not, and sends no input, was added so a
 //! test can cross an animation's loop without counting the steps other requests take
-//! (#62); Cuba Libre is the consumer that sends it.
+//! (#62).
 //!
 //! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
 //! steps unless a request asks otherwise, and for 7,200 at most; an `advance` of 1 to
-//! 7,200 steps, exactly, and any other count refused unstepped; admission settling
+//! 7,200 steps, each taken unless the table exits first, and any other count refused
+//! unstepped; admission settling
 //! the admitted table for at most 1,800 steps and then returning, settled or not; and
 //! 30 seconds for a capture. A `scroll` takes each axis finite and between -32 and 32
 //! wheel lines, with at least one nonzero, and its `scrolled` response confirms that
@@ -46,10 +47,12 @@
 //! the window, short of its far edges, where a window reports no cursor. The button goes down on one step, the pointer moves an equal part of the
 //! offset on each of the next four, and the button comes up on the step after: no
 //! button stays down between requests. Its `dragged` response, like `scrolled`, says
-//! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and the
-//! protocol's main refusals word for word, and an `advance`'s range. No test here or in
-//! Arkham holds the settling limits, the capture's 30 seconds, a capture's other refusals or the wording for a
-//! focus that is no control or menu row, so a change to them would pass every check.
+//! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and
+//! the protocol's main refusals word for word, and an `advance`'s range, whose 7,200 is
+//! also the most a `settle` takes. No test here or in Arkham holds a `settle`'s default
+//! of 1,800, that it lowers a larger count to 7,200, admission's 1,800, the capture's
+//! 30 seconds, a capture's other refusals or the wording for a focus that is no
+//! control or menu row, so a change to them would pass every check.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! drags, scrolls and keys act only on the revision they were decided on, a key that can
@@ -1155,8 +1158,9 @@ impl<G: Game> Seat<G> {
         }
     }
 
-    /// Step the clock exactly `steps` times, whether or not the table is settled, and
-    /// send no input. Out of range, the table is not stepped at all.
+    /// Step the clock `steps` times, whether or not the table is settled, and send no
+    /// input; a table that exits first ends the stepping, and its session. Out of range,
+    /// the table is not stepped at all.
     fn advance(&mut self, app: &mut App, steps: u32) -> Response {
         if !(1..=MAX_STEPS).contains(&steps) {
             return self.refused(

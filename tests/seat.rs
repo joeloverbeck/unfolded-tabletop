@@ -658,14 +658,19 @@ fn an_advance_of_no_steps_too_many_or_none_said_is_refused_and_steps_nothing() {
                 "advance needs between 1 and 7200 steps, not {steps}. The table was not stepped."
             )
         );
+        assert_eq!(refused["table"]["clock_nanos"], 0);
     }
+    // A count left out is refused as the line is read, naming the missing field.
     let unsaid = seat.ask(json!({"op": "advance"}));
     assert_eq!(unsaid["status"], "refused");
     assert!(
-        unsaid["error"].as_str().unwrap().contains("steps"),
+        unsaid["error"]
+            .as_str()
+            .unwrap()
+            .contains("missing field `steps`"),
         "{unsaid}"
     );
-    // The most an advance takes is one settle's most.
+    assert_eq!(unsaid["table"]["clock_nanos"], 0);
     let most = seat.ask(json!({"op": "advance", "steps": 7_200}));
     assert_eq!(most["steps"], 7_200);
     assert_eq!(most["table"]["clock_nanos"], clock_after(7_200));

@@ -76,7 +76,7 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         steps: Option<u32>,
     },
-    /// Step the table's clock exactly this many steps, settled or not, sending no input.
+    /// Step the table's clock this many steps, settled or not, sending no input.
     Advance {
         steps: u32,
     },
