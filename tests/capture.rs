@@ -424,28 +424,34 @@ fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
     assert_eq!(requests(&mut app).len(), 2);
     assert!(!path.exists());
 
-    // A picture that arrives on the last step the host permits is still written.
-    let last = scratch.join("last.png");
-    let mut steps = 0;
-    let result = capture::when_ready(
-        &mut app,
-        image,
-        &last,
-        soon(),
-        |_| true,
-        |app| {
-            steps += 1;
-            if steps < 3 {
-                app.update();
-                true
-            } else {
+    // A picture that arrives on the last step the host permits, or on a step after
+    // which the deadline has passed, is still written.
+    for (name, host_stops) in [("stopped.png", true), ("late.png", false)] {
+        let path = scratch.join(name);
+        let deadline = Instant::now() + Duration::from_millis(200);
+        let mut steps = 0;
+        let result = capture::when_ready(
+            &mut app,
+            image.clone(),
+            &path,
+            if host_stops { soon() } else { deadline },
+            |_| true,
+            |app| {
+                steps += 1;
+                if steps < 3 {
+                    app.update();
+                    return true;
+                }
+                if !host_stops {
+                    std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
+                }
                 renderer_hands_back(app);
-                false
-            }
-        },
-    );
-    assert_eq!((result, steps), (Ok(()), 3));
-    assert!(last.exists());
+                !host_stops
+            },
+        );
+        assert_eq!((result, steps), (Ok(()), 3), "{name}");
+        assert!(path.exists(), "{name}");
+    }
 }
 
 #[test]
