@@ -911,6 +911,11 @@ fn a_drag_refuses_unknown_buttons_empty_or_outside_offsets_names_stale_and_busy_
             json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":-30}),
             "The drag would end at (-10, 20), outside the 1280 by 720 window. Nothing was pressed.",
         ),
+        // A window reports no cursor on its far edge.
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":1260}),
+            "The drag would end at (1280, 20), outside the 1280 by 720 window. Nothing was pressed.",
+        ),
         (
             json!({"op":"drag", "revision":1, "component":"felt", "button":"right", "x":5}),
             "Outdated: the request names revision 1, but the attempt is at revision 0. Observe again.",
@@ -932,6 +937,10 @@ fn a_drag_refuses_unknown_buttons_empty_or_outside_offsets_names_stale_and_busy_
         seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":5}));
     assert_eq!(missed["status"], "missed", "{missed}");
     assert_eq!(missed["pressed"], false);
+    assert_eq!(
+        missed["error"],
+        "The pointer at (20, 20) is over \"modal\", not component felt. Nothing was pressed."
+    );
     assert!(seat.table().buttons.is_empty());
     assert!(seat.table().gestures.is_empty());
 }
@@ -979,6 +988,13 @@ fn a_drag_is_skipped_after_a_refusal_and_its_miss_stops_later_presses() {
         .unwrap();
     let responses = lines(&output);
     assert_eq!(responses[2]["status"], "skipped", "{}", responses[2]);
+    assert_eq!(
+        responses[2]["error"],
+        format!(
+            "Skipped: an earlier request on this connection was refused, so its activations, drags, keys and scrolls are no longer acted on. No input was sent. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
+            responses[1]["error"].as_str().unwrap()
+        )
+    );
     assert!(seat.table().buttons.is_empty());
 
     let mut seat = sit();

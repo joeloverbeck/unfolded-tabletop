@@ -39,7 +39,7 @@
 //! wheel lines, with at least one nonzero, and its `scrolled` response confirms that
 //! input was delivered, not that a panel moved. A `drag` names `left`, `right` or
 //! `middle`; its offset is finite, nonzero and in logical pixels, and must end inside
-//! the window. The button goes down on one step, the pointer moves an equal part of the
+//! the window, short of its far edges, where a window reports no cursor. The button goes down on one step, the pointer moves an equal part of the
 //! offset on each of the next four, and the button comes up on the step after: no
 //! button stays down between requests. Its `dragged` response, like `scrolled`, says
 //! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and the
@@ -51,8 +51,9 @@
 //! drags, scrolls and keys act only on the revision they were decided on, a key that can
 //! commit presses only the control it names, and a connection stops pressing after its
 //! first refusal or miss: its later activations, drags, keys and scrolls are skipped. A
-//! drag whose press lands on something else lets go where it is, without moving, and
-//! misses. A point presses nothing, so it is served after a refusal or a miss, and a
+//! drag whose press lands on something else misses without moving: picking's press is
+//! cancelled before the button comes up where it went down, but Bevy's mouse input has
+//! seen the button go down and up. A point presses nothing, so it is served after a refusal or a miss, and a
 //! missed point stops the connection's later activations and keys as a missed
 //! activation does.
 //!
@@ -603,22 +604,17 @@ impl<G: Game> Seat<G> {
                 revision,
                 component,
                 choice,
-            } => match (component, choice) {
-                (Some(name), None) => self.activate(app, Name::Component(name), revision),
-                (None, Some(id)) => self.activate(app, Name::Choice(id), revision),
-                _ => self.refused(
-                    app,
-                    "activate needs exactly one of component or choice".into(),
-                ),
+            } => match target("activate", component, choice) {
+                Ok(name) => self.activate(app, name, revision),
+                Err(error) => self.refused(app, error),
             },
             Request::Point {
                 revision,
                 component,
                 choice,
-            } => match (component, choice) {
-                (Some(name), None) => self.point(app, Name::Component(name), revision),
-                (None, Some(id)) => self.point(app, Name::Choice(id), revision),
-                _ => self.refused(app, "point needs exactly one of component or choice".into()),
+            } => match target("point", component, choice) {
+                Ok(name) => self.point(app, name, revision),
+                Err(error) => self.refused(app, error),
             },
             Request::Key {
                 key,
@@ -631,13 +627,9 @@ impl<G: Game> Seat<G> {
                 choice,
                 x,
                 y,
-            } => match (component, choice) {
-                (Some(name), None) => self.scroll(app, Name::Component(name), revision, x, y),
-                (None, Some(id)) => self.scroll(app, Name::Choice(id), revision, x, y),
-                _ => self.refused(
-                    app,
-                    "scroll needs exactly one of component or choice".into(),
-                ),
+            } => match target("scroll", component, choice) {
+                Ok(name) => self.scroll(app, name, revision, x, y),
+                Err(error) => self.refused(app, error),
             },
             Request::Drag {
                 revision,
@@ -646,18 +638,9 @@ impl<G: Game> Seat<G> {
                 button,
                 x,
                 y,
-            } => match (component, choice) {
-                (Some(name), None) => self.drag(
-                    app,
-                    Name::Component(name),
-                    revision,
-                    &button,
-                    Vec2::new(x, y),
-                ),
-                (None, Some(id)) => {
-                    self.drag(app, Name::Choice(id), revision, &button, Vec2::new(x, y))
-                }
-                _ => self.refused(app, "drag needs exactly one of component or choice".into()),
+            } => match target("drag", component, choice) {
+                Ok(name) => self.drag(app, name, revision, &button, Vec2::new(x, y)),
+                Err(error) => self.refused(app, error),
             },
             Request::Settle { steps } => self.settle(app, steps),
             Request::Capture { path } => self.capture(app, &path),
@@ -874,7 +857,8 @@ impl<G: Game> Seat<G> {
             .single(world)
             .map(|(entity, window)| (entity, window.size()))
             .unwrap();
-        if !(end.cmpge(Vec2::ZERO).all() && end.cmple(size).all()) {
+        // A window reports no cursor on its far edges, as Bevy's own `cursor_position`.
+        if !(end.cmpge(Vec2::ZERO).all() && end.cmplt(size).all()) {
             return self.refused(
                 app,
                 format!(
@@ -883,39 +867,30 @@ impl<G: Game> Seat<G> {
                 ),
             );
         }
-        if let Err(error) = self.button(app, window, mouse, position, PointerAction::Press(pointer))
-        {
+        let button_at = |seat: &Self, app: &mut App, at: Vec2, state: ButtonState| {
+            seat.mouse_button(app, window, (mouse, pointer), at, state)
+        };
+        if let Err(error) = button_at(self, app, position, ButtonState::Pressed) {
             return self.refused(app, error);
         }
         self.step(app, STEP);
         let pressed = self.under_pointer(app);
         if !pressed.iter().any(|hit| hit.name.as_ref() == Some(&name)) {
-            // Something moved under the pointer after hover: let go where it is, so
-            // nothing is dragged and the button is not left down.
+            // Something moved under the pointer after hover. Bevy's mouse input has
+            // seen the button go down, which nothing can undo: cancel picking's press
+            // and let go where it is, so nothing is dragged or clicked.
             let _ = self.pointer(app, position, PointerAction::Cancel);
-            let _ = self.button(
-                app,
-                window,
-                mouse,
-                position,
-                PointerAction::Release(pointer),
-            );
+            let _ = button_at(self, app, position, ButtonState::Released);
             self.step(app, STEP);
             return self.missed(app, &name, position, pressed, true);
         }
-        let mut at = position;
-        for _ in 0..DRAG_MOVES {
-            let next = at + offset / f32::from(DRAG_MOVES);
-            if let Err(error) = self.pointer(app, next, PointerAction::Move { delta: next - at }) {
-                return self.refused(app, error);
-            }
-            at = next;
-            self.step(app, STEP);
-        }
-        if let Err(error) = self.button(app, window, mouse, end, PointerAction::Release(pointer)) {
+        let moved = self.move_held(app, position, offset);
+        // Let go even if a move failed, so no button stays down after the request.
+        let released = button_at(self, app, end, ButtonState::Released);
+        self.step(app, STEP);
+        if let Err(error) = moved.and(released) {
             return self.refused(app, error);
         }
-        self.step(app, STEP);
         let mut response = self.response(app, Status::Dragged, None);
         response.json["button"] = json!(button);
         response.json["from"] = json!([position.x, position.y]);
@@ -926,25 +901,38 @@ impl<G: Game> Seat<G> {
         response
     }
 
+    /// Move the pointer from `from` by `offset` in [`DRAG_MOVES`] equal steps, one
+    /// update each, as a held button drags it.
+    fn move_held(&mut self, app: &mut App, from: Vec2, offset: Vec2) -> Result<(), String> {
+        let mut at = from;
+        for _ in 0..DRAG_MOVES {
+            let next = at + offset / f32::from(DRAG_MOVES);
+            self.pointer(app, next, PointerAction::Move { delta: next - at })?;
+            at = next;
+            self.step(app, STEP);
+        }
+        Ok(())
+    }
+
     /// A mouse button going down or up as a window delivers it: Bevy's mouse input
-    /// for the button, and picking's press or release.
-    fn button(
+    /// for the button, and picking's press or release of the same button.
+    fn mouse_button(
         &self,
         app: &mut App,
         window: Entity,
-        button: MouseButton,
+        (mouse, pointer): (MouseButton, PointerButton),
         position: Vec2,
-        action: PointerAction,
+        state: ButtonState,
     ) -> Result<(), String> {
-        let state = match action {
-            PointerAction::Press(_) => ButtonState::Pressed,
-            _ => ButtonState::Released,
-        };
         app.world_mut().write_message(MouseButtonInput {
-            button,
+            button: mouse,
             state,
             window,
         });
+        let action = match state {
+            ButtonState::Pressed => PointerAction::Press(pointer),
+            ButtonState::Released => PointerAction::Release(pointer),
+        };
         self.pointer(app, position, action)
     }
 
@@ -1241,6 +1229,15 @@ fn covered_at((tried, hits): (Vec2, Vec<Hit>)) -> Value {
         "position": [tried.x, tried.y],
         "hit": hits.into_iter().map(|hit| hit.description).collect::<Vec<_>>(),
     })
+}
+
+/// The one target a request names, or why it names none or both.
+fn target(op: &str, component: Option<String>, choice: Option<String>) -> Result<Name, String> {
+    match (component, choice) {
+        (Some(name), None) => Ok(Name::Component(name)),
+        (None, Some(id)) => Ok(Name::Choice(id)),
+        _ => Err(format!("{op} needs exactly one of component or choice")),
+    }
 }
 
 /// "a, b or c".

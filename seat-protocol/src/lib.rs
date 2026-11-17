@@ -118,8 +118,8 @@ pub enum Status {
     Captured,
     /// The request was not acted on, for the reason in its error.
     Refused,
-    /// Something else was over the target of an activation or a point: nothing was
-    /// pressed, or the press was cancelled before release.
+    /// Something else was over the target of an activation, a point or a drag: nothing
+    /// was pressed, or the press was cancelled before release.
     Missed,
     /// An earlier refusal or miss stopped its activations, drags, keys and scrolls.
     Skipped,
