@@ -13,6 +13,18 @@ if grep -rnP --include='*.rs' "(?<![\[\w])\"($statuses)\"(?!\s*:)" src seat-clie
   echo "error: a seat status is spelled as a string literal; use unfolded_seat_protocol::Status" >&2
   exit 1
 fi
+# A deprecated item waits only for its removal issue (#68), so its note names it.
+# The vendored patch keeps upstream's own deprecations.
+undated=$(git ls-files -z -- '*.rs' ':!:vendor' | xargs -0 perl -0777 -ne '
+  while (/#\[deprecated\b(?:\s*\((.*?)\))?\s*\]/sg) {
+    next if ($1 // "") =~ /removed in #\d+/;
+    print "$ARGV:", 1 + (substr($_, 0, $-[0]) =~ tr/\n//), "\n";
+  }')
+if [[ -n "$undated" ]]; then
+  printf '%s\n' "$undated" >&2
+  echo "error: a #[deprecated] note must say \"removed in #N\", naming its removal issue" >&2
+  exit 1
+fi
 cargo clippy --locked --workspace --all-targets -- -D warnings
 # Only the table package has features.
 cargo clippy --locked -p unfolded-tabletop --all-targets --features render -- -D warnings

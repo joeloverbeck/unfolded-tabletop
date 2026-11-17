@@ -1,6 +1,6 @@
 # Coding standards
 
-These are the review rules for this repository. They are judgement calls that no automated check holds; `scripts/check` enforces formatting, strict Clippy and the tests.
+These are the review rules for this repository. They are judgement calls that no automated check holds; `scripts/check` enforces formatting, strict Clippy, the tests and the searches `docs/testing.md` lists.
 
 ## Tests
 
@@ -13,6 +13,7 @@ These are the review rules for this repository. They are judgement calls that no
 
 - **README is a consumer's front door.** It changes only when what a consumer does to adopt, pin or run something changes. A new mechanism adds one row to its Mechanisms table. Everything else has one home: a mechanism's contract, what it leaves to the consumer and what no test holds go in its rustdoc; what a consumer must do when moving its pin goes in `CHANGELOG.md`; a mechanism's origin and coordinating issues go in `docs/provenance.md`; its evidence boundary goes in `docs/governance.md`; a test's host requirements go in `docs/testing.md`; a tool's full behaviour goes in its `--help`. Flag a README passage that explains how a mechanism works, records history, or lists what tests hold.
 - **Changelog entries.** A change a consumer can see (a new or changed public item, a deprecation, a changed wire, number or wording) adds one entry under `CHANGELOG.md`'s "Unreleased", naming its issue, and marks it **Breaking** when it can stop a consumer building or change what its game does.
+- **Deprecations.** A deprecation is a removal scheduled by an issue. `scripts/check` refuses a `#[deprecated]` whose note does not say `removed in #N`; flag one whose `#N` is not an open issue for removing that item, or whose issue lacks the condition for removing it.
 
 ## Consumers
 
