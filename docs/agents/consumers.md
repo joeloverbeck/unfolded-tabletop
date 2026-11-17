@@ -14,7 +14,7 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **A change no game uses.** When a change here, such as removing a deprecated item, needs nothing of any game, check each game without a pull request there: move the pins of a throwaway worktree of its `origin/main` to the pushed branch's head, run its Verify command, and record each game's main revision, command and result in this repository's pull request. Each game adopts the change at its next pin move (#68).
 
-**Native inspection.** The seat presses keys (`key`), drags a mouse button (`drag`) and turns the wheel (`scroll`) through Bevy's own input messages, so a seat test can drive a game's table camera through its real table: pan and Home by keys, orbit by a right drag and zoom by the wheel (#63). The seat cannot show that a real window delivers that input. That stays a person's inspection at a window: name it the owner's in a game's issue, and record in its pull request whether it was done.
+**Native inspection.** The seat presses keys (`key`), drags a mouse button (`drag`) and turns the wheel (`scroll`) through Bevy's own input messages, so a seat test can drive a game's table camera through its real table: pan and Home by keys, orbit by a right drag and zoom by the wheel (#63). Cuba Libre's `native_right_drag_orbits_and_the_wheel_zooms_the_table_camera` drives a right drag, the wheel and Home through its real table. The seat cannot show that a real window delivers that input. That stays a person's inspection at a window: name it the owner's in a game's issue, and record in its pull request whether it was done.
 
 **Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision, whether its tree is clean, and the SHA-256 of the executable that ran. `compare-captures` reads both records and says when the two captures came from one executable, which cannot show a change:
 
@@ -51,6 +51,7 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **Seat host:** pipelined rendering disabled at the seat. Its own admission waits on its render-world pipeline flag.
 - **Verify:** `scripts/check`. CI runs it on every pull request, and `main` requires it.
 - **Held capture:** run from its checkout, since its art resolves against the working directory: requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/cuba-libre --cards <cards> --save <fresh path> --agent-seat`. Two starts of the unchanged table were identical.
+- **Hover dwell:** resting on a map space starts its status dwell, and the seat refuses input as busy until it settles. `point` and `settle` before a `drag`, `scroll` or `activate` there.
 - **Native capture:** the ignored native regression, `CUBA_TEST_CARDS=<cards> cargo test --locked --features tabletop --test native -- --ignored --test-threads=1`, captures through the seat. Set `CUBA_NATIVE_EVIDENCE` to a new directory.
 - **Merge:** `gh pr merge --merge --match-head-commit <sha>`, after CI passes. `main` requires the branch to be up to date: when `main` moves, merge it in, run `scripts/check` again and wait for CI.
 - **Work-item limit:** none of its own.
