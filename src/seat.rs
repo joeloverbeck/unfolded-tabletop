@@ -5,11 +5,13 @@
 //! the game only through [`Game`]: produce an observation and its revision, resolve a
 //! name to a screen position (and a hit back to a name), report what is still
 //! unsettled, and say whether the table is admitted to play. A game may also say what
-//! has keyboard focus, advance a clock of its own and name the keys the seat may press;
-//! otherwise nothing has focus, the seat's steps move Bevy's manual time and no key may
-//! be pressed. The seat decides itself whether the render pipelines are ready before a
-//! capture ([`capture::Pipelines`]), and every response of a seated table states the
-//! revision, whether it is settled and what is pending. The table's surface, and the
+//! has keyboard focus, advance a clock of its own, name the keys the seat may press and
+//! let an activation or a key interrupt an unsettled table ([`Game::interrupts`]);
+//! otherwise nothing has focus, the seat's steps move Bevy's manual time, no key may be
+//! pressed and an unsettled table takes no input. The seat decides itself whether the
+//! render pipelines are ready before a capture ([`capture::Pipelines`]), and every
+//! response of a seated table states the revision, whether it is settled and what is
+//! pending. The table's surface, and the
 //! loop that waits for it to be ready and captures its image ([`capture::when_ready`]),
 //! come from [`crate::capture`].
 //!
@@ -34,6 +36,9 @@
 //! clock a chosen number of steps, settled or not, and sends no input, was added so a
 //! test can cross an animation's loop without counting the steps other requests take
 //! (#62); Cuba Libre is the consumer that sends it, in its native loop tests.
+//! [`Game::interrupts`], which lets a game's own control for skipping a presentation
+//! be pressed while that presentation keeps the table unsettled, was added for Cuba
+//! Libre's Kidnap die (#77).
 //!
 //! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
 //! steps unless a request asks otherwise, and for 7,200 at most; an `advance` of 1 to
@@ -55,8 +60,9 @@
 //! control or menu row, so a change to them would pass every check.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
-//! drags, scrolls and keys act only on the revision they were decided on, a key that can
-//! commit presses only the control it names, and a connection stops pressing after its
+//! drags, scrolls and keys act only on a settled table, unless the game lets that
+//! activation or key interrupt it, and only on the revision they were decided on; a
+//! key that can commit presses only the control it names; and a connection stops pressing after its
 //! first refusal or miss: its later activations, drags, keys and scrolls are skipped. A
 //! drag whose press lands on something else misses without moving: picking's press is
 //! cancelled before the button comes up where it went down, but Bevy's mouse input has
@@ -270,6 +276,15 @@ pub struct SeatKey {
     pub commits: bool,
 }
 
+/// An input that a game may let through while its table is unsettled.
+#[derive(Clone, Copy, Debug)]
+pub enum Interrupt<'a> {
+    /// An `activate` of this name.
+    Activate(&'a Name),
+    /// A `key` press of the seat key with this name.
+    Key(&'a str),
+}
+
 /// The logical key a keyboard sends with a physical one.
 #[derive(Clone, Debug)]
 pub enum Logical {
@@ -313,6 +328,17 @@ pub trait Game {
     /// Any other key is refused as unknown. Unless the game names some, there are none.
     fn keys(&self) -> &[SeatKey] {
         &[]
+    }
+    /// Whether `input` may reach the table now although it is unsettled, because it
+    /// ends or hurries what the table is presenting rather than acting on the game,
+    /// as a game's own control for skipping a presentation does. Which inputs, and
+    /// when, is the game's policy: the seat reads no pending item and knows nothing
+    /// of presentations. It asks only while something is pending, and only for an
+    /// `activate` or a `key`, and still refuses the request for everything else it
+    /// would refuse on a settled table, such as a revision the attempt has moved past.
+    /// Unless the game says otherwise, nothing may.
+    fn interrupts(&self, _world: &mut World, _input: Interrupt<'_>) -> bool {
+        false
     }
 }
 
@@ -686,10 +712,18 @@ impl<G: Game> Seat<G> {
     }
 
     /// Why a request decided on `revision` must not act now, if it must not: the table
-    /// is presenting and would drop the input, or the attempt has moved on.
-    fn unready(&self, app: &mut App, revision: u64) -> Option<Response> {
+    /// is presenting and would drop the input, unless the game lets `input` interrupt
+    /// it, or the attempt has moved on.
+    fn unready(
+        &self,
+        app: &mut App,
+        revision: u64,
+        input: Option<Interrupt<'_>>,
+    ) -> Option<Response> {
         let pending = self.game.unsettled(app.world_mut());
-        if !pending.is_empty() {
+        if !pending.is_empty()
+            && !input.is_some_and(|input| self.game.interrupts(app.world_mut(), input))
+        {
             return Some(self.busy(app, &pending));
         }
         let current = self.game.revision(app.world_mut());
@@ -706,8 +740,14 @@ impl<G: Game> Seat<G> {
     /// Rest the pointer on the named target as a player would: on a part of it that
     /// nothing covers. One update per point establishes real hover. The response is
     /// the refusal or the miss when the pointer cannot rest on it.
-    fn rest_on(&mut self, app: &mut App, name: &Name, revision: u64) -> Result<Rest, Response> {
-        if let Some(refusal) = self.unready(app, revision) {
+    fn rest_on(
+        &mut self,
+        app: &mut App,
+        name: &Name,
+        revision: u64,
+        input: Option<Interrupt<'_>>,
+    ) -> Result<Rest, Response> {
+        if let Some(refusal) = self.unready(app, revision, input) {
             return Err(refusal);
         }
         let candidates = match self.game.resolve(app.world_mut(), name) {
@@ -746,7 +786,7 @@ impl<G: Game> Seat<G> {
             position,
             hovered,
             covered,
-        } = match self.rest_on(app, &name, revision) {
+        } = match self.rest_on(app, &name, revision, None) {
             Ok(rest) => rest,
             Err(response) => return response,
         };
@@ -781,12 +821,12 @@ impl<G: Game> Seat<G> {
         }
         let Rest {
             position, covered, ..
-        } = match self.rest_on(app, &name, revision) {
+        } = match self.rest_on(app, &name, revision, None) {
             Ok(rest) => rest,
             Err(response) => return response,
         };
         // Hover can itself change the table. Recheck before sending wheel input.
-        if let Some(refusal) = self.unready(app, revision) {
+        if let Some(refusal) = self.unready(app, revision, None) {
             return refusal;
         }
         let action = PointerAction::Scroll {
@@ -850,12 +890,12 @@ impl<G: Game> Seat<G> {
         }
         let Rest {
             position, covered, ..
-        } = match self.rest_on(app, &name, revision) {
+        } = match self.rest_on(app, &name, revision, None) {
             Ok(rest) => rest,
             Err(response) => return response,
         };
         // Hover can itself change the table. Recheck before pressing.
-        if let Some(refusal) = self.unready(app, revision) {
+        if let Some(refusal) = self.unready(app, revision, None) {
             return refusal;
         }
         let end = position + offset;
@@ -948,7 +988,7 @@ impl<G: Game> Seat<G> {
     fn activate(&mut self, app: &mut App, name: Name, revision: u64) -> Response {
         let Rest {
             position, covered, ..
-        } = match self.rest_on(app, &name, revision) {
+        } = match self.rest_on(app, &name, revision, Some(Interrupt::Activate(&name))) {
             Ok(rest) => rest,
             Err(response) => return response,
         };
@@ -1090,7 +1130,7 @@ impl<G: Game> Seat<G> {
                 format!("Unknown key {name:?}. Known keys: {}.", known.join(", ")),
             );
         };
-        if let Some(refusal) = self.unready(app, revision) {
+        if let Some(refusal) = self.unready(app, revision, Some(Interrupt::Key(name))) {
             return refusal;
         }
         if commits || focused.is_some() {

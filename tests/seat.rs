@@ -44,8 +44,8 @@ use unfolded_tabletop::{
     },
     capture::Pipelines,
     seat::{
-        Admission, Focus, Game, Hit, Logical, Name, Observed, STEP, Seat, SeatKey, SeatedAgent,
-        Unadmitted, Unshown,
+        Admission, Focus, Game, Hit, Interrupt, Logical, Name, Observed, STEP, Seat, SeatKey,
+        SeatedAgent, Unadmitted, Unshown,
         socket::{Listener, Unclaimable},
     },
 };
@@ -65,6 +65,9 @@ struct Table {
     clock: Duration,
     /// The focused control: its choice identity and its label.
     focus: Option<(Option<String>, String)>,
+    /// The pieces and keys that may reach the table while it presents. Clicking or
+    /// pressing one ends the presentation and leaves the revision where it was.
+    interrupts: Vec<&'static str>,
     /// The keys the table read through Bevy's keyboard input, in order.
     keys: Vec<String>,
     /// The pieces clicked: pressed and released while under the pointer.
@@ -94,6 +97,7 @@ impl Default for Table {
             presenting: 0,
             clock: Duration::ZERO,
             focus: None,
+            interrupts: Vec::new(),
             keys: Vec::new(),
             clicked: Vec::new(),
             wheels: Vec::new(),
@@ -207,6 +211,56 @@ impl Game for Plain {
     fn keys(&self) -> &[SeatKey] {
         &KEYS
     }
+
+    fn interrupts(&self, world: &mut World, input: Interrupt<'_>) -> bool {
+        let named = match input {
+            Interrupt::Activate(Name::Component(name)) => name.as_str(),
+            Interrupt::Activate(Name::Choice(_)) => return false,
+            Interrupt::Key(name) => name,
+        };
+        world.resource::<Table>().interrupts.contains(&named)
+    }
+}
+
+/// [`Plain`] in all but [`Game::interrupts`], which it leaves to the seat's default.
+struct Uninterrupted;
+
+impl Game for Uninterrupted {
+    fn observe(&self, world: &mut World) -> Observed {
+        Plain.observe(world)
+    }
+
+    fn revision(&self, world: &mut World) -> u64 {
+        Plain.revision(world)
+    }
+
+    fn resolve(&self, world: &mut World, name: &Name) -> Result<Vec<Vec2>, String> {
+        Plain.resolve(world, name)
+    }
+
+    fn identify(&self, world: &mut World, entity: Entity) -> Hit {
+        Plain.identify(world, entity)
+    }
+
+    fn unsettled(&self, world: &mut World) -> Vec<String> {
+        Plain.unsettled(world)
+    }
+
+    fn advance(&self, world: &mut World, by: Duration) {
+        Plain.advance(world, by);
+    }
+
+    fn admission(&self, world: &World) -> Admission {
+        Plain.admission(world)
+    }
+
+    fn focus(&self, world: &mut World) -> Focus {
+        Plain.focus(world)
+    }
+
+    fn keys(&self) -> &[SeatKey] {
+        Plain.keys()
+    }
 }
 
 /// The keys this table reads, which are the keys the seat may press at it. Enter,
@@ -238,7 +292,11 @@ fn read_keys(
     mut exit: MessageWriter<AppExit>,
 ) {
     for key in keys.get_just_pressed() {
-        table.keys.push(format!("{key:?}"));
+        let name = format!("{key:?}");
+        if table.interrupts.contains(&name.as_str()) {
+            table.presenting = 0;
+        }
+        table.keys.push(name);
         match key {
             KeyCode::Enter | KeyCode::Space | KeyCode::KeyY => table.revision += 1,
             KeyCode::End => {
@@ -306,9 +364,13 @@ fn pick(
         match input.action {
             PointerAction::Press(PointerButton::Primary) => *held = nearest,
             PointerAction::Release(PointerButton::Primary) => {
-                if held.take().is_some_and(|name| Some(name) == nearest) {
-                    table.clicked.extend(nearest.map(String::from));
-                    table.revision += 1;
+                if let Some(name) = held.take().filter(|name| Some(*name) == nearest) {
+                    table.clicked.push(name.into());
+                    if table.interrupts.contains(&name) {
+                        table.presenting = 0;
+                    } else {
+                        table.revision += 1;
+                    }
                 }
             }
             PointerAction::Cancel => *held = None,
@@ -376,12 +438,12 @@ fn renderer_hands_back(
     }
 }
 
-struct Sitting {
+struct Sitting<G = Plain> {
     app: App,
-    seat: Seat<Plain>,
+    seat: Seat<G>,
 }
 
-impl Sitting {
+impl<G: Game> Sitting<G> {
     fn ask(&mut self, request: Value) -> Value {
         self.seat.respond(&mut self.app, &request.to_string()).0
     }
@@ -398,6 +460,11 @@ impl Sitting {
 /// The table with no renderer, and an agent seated at it. With `image`, the seat has
 /// an image to capture and the stand-in renderer hands pictures back.
 fn sit_with(image: Option<Handle<Image>>) -> Sitting {
+    sit_at(Plain, image)
+}
+
+/// [`sit_with`], with `game` as the game's side of the seat.
+fn sit_at<G: Game>(game: G, image: Option<Handle<Image>>) -> Sitting<G> {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, InputPlugin))
         .add_message::<PointerInput>()
@@ -409,7 +476,7 @@ fn sit_with(image: Option<Handle<Image>>) -> Sitting {
     }
     app.world_mut().spawn((Window::default(), PrimaryWindow));
     let camera = app.world_mut().spawn(RenderTarget::default()).id();
-    let seat = Seat::new(Plain, &mut app, camera, image);
+    let seat = Seat::new(game, &mut app, camera, image);
     Sitting { app, seat }
 }
 
@@ -761,6 +828,107 @@ fn a_line_that_is_no_request_is_refused() {
         both["error"],
         "activate needs exactly one of component or choice"
     );
+}
+
+#[test]
+fn a_presenting_table_takes_the_activation_and_key_it_lets_interrupt_it() {
+    let mut seat = sit();
+    seat.show(piece("tray", Rect::new(0., 0., 20., 20.), 1.));
+    seat.table().interrupts = vec!["tray", "Tab"];
+
+    seat.table().presenting = 100;
+    let clicked = seat.ask(json!({"op": "activate", "revision": 0, "component": "tray"}));
+    assert_eq!(clicked["status"], "activated", "{clicked}");
+    assert_eq!(clicked["observation"]["clicked"], json!(["tray"]));
+    // The click ended the presentation and acted on nothing, so the reply reads a
+    // settled table at the same revision.
+    assert_eq!(clicked["revision"], 0);
+    assert_eq!(clicked["settled"], true, "{clicked}");
+    assert_eq!(clicked["pending"], json!([]));
+
+    seat.table().presenting = 100;
+    let pressed = seat.ask(json!({"op": "key", "revision": 0, "key": "Tab"}));
+    assert_eq!(pressed["status"], "pressed", "{pressed}");
+    assert_eq!(pressed["observation"]["keys"], json!(["Tab"]));
+    assert_eq!(pressed["settled"], true, "{pressed}");
+}
+
+#[test]
+fn a_presenting_table_refuses_what_it_does_not_let_interrupt_it_and_any_stale_or_unnamed_press() {
+    let mut seat = sit();
+    seat.show(piece("tray", Rect::new(0., 0., 20., 20.), 1.));
+    seat.show(piece("card", Rect::new(40., 0., 60., 20.), 1.));
+    seat.table().interrupts = vec!["tray", "Tab", "Enter"];
+    seat.table().presenting = 100;
+    let busy = "The table is busy (presentation); settle first.";
+
+    for request in [
+        json!({"op": "activate", "revision": 0, "component": "card"}),
+        json!({"op": "key", "revision": 0, "key": "Home"}),
+        // Only an activation or a key interrupts, even on the tray.
+        json!({"op": "point", "revision": 0, "component": "tray"}),
+        json!({"op": "scroll", "revision": 0, "component": "tray", "x": 0.0, "y": 1.0}),
+        json!({"op": "drag", "revision": 0, "component": "tray", "button": "left", "x": 30.0, "y": 0.0}),
+    ] {
+        let refused = seat.ask(request.clone());
+        assert_eq!(refused["status"], "refused", "{request}: {refused}");
+        assert_eq!(refused["error"], busy, "{request}");
+    }
+
+    let stale = seat.ask(json!({"op": "activate", "revision": 3, "component": "tray"}));
+    assert_eq!(stale["status"], "refused");
+    assert_eq!(
+        stale["error"],
+        "Outdated: the request names revision 3, but the attempt is at revision 0. Observe again."
+    );
+    let stale = seat.ask(json!({"op": "key", "revision": 3, "key": "Tab"}));
+    assert_eq!(stale["status"], "refused");
+    assert!(
+        stale["error"].as_str().unwrap().starts_with("Outdated:"),
+        "{stale}"
+    );
+
+    // Enter commits at this table, so it still names the control it expects to press.
+    let unnamed = seat.ask(json!({"op": "key", "revision": 0, "key": "Enter"}));
+    assert_eq!(unnamed["status"], "refused");
+    assert!(
+        unnamed["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("Enter can commit a choice"),
+        "{unnamed}"
+    );
+
+    let seen = seat.ask(json!({"op": "observe"}));
+    assert_eq!(seen["observation"]["clicked"], json!([]), "{seen}");
+    assert_eq!(seen["observation"]["keys"], json!([]));
+    assert_eq!(seen["table"]["clock_nanos"], 0, "nothing stepped");
+    assert_eq!(seen["settled"], false);
+}
+
+#[test]
+fn with_no_interrupts_of_its_own_a_presenting_table_refuses_every_activation_and_key_as_busy() {
+    let mut seat = sit_at(Uninterrupted, None);
+    seat.show(piece("tray", Rect::new(0., 0., 20., 20.), 1.));
+    // What the table itself would take; only the game can let it through.
+    seat.table().interrupts = vec!["tray", "Tab"];
+    seat.table().presenting = 100;
+
+    for request in [
+        json!({"op": "activate", "revision": 0, "component": "tray"}),
+        json!({"op": "key", "revision": 0, "key": "Tab"}),
+    ] {
+        let refused = seat.ask(request.clone());
+        assert_eq!(refused["status"], "refused", "{request}: {refused}");
+        assert_eq!(
+            refused["error"], "The table is busy (presentation); settle first.",
+            "{request}"
+        );
+    }
+    let seen = seat.ask(json!({"op": "observe"}));
+    assert_eq!(seen["observation"]["clicked"], json!([]), "{seen}");
+    assert_eq!(seen["observation"]["keys"], json!([]));
+    assert_eq!(seen["settled"], false);
 }
 
 #[test]
