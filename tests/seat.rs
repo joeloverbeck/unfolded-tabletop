@@ -451,8 +451,8 @@ impl<G: Game> Sitting<G> {
             .unwrap_or_else(|exited| panic!("{request}: {exited}"))
     }
 
-    /// The exit that answers `request`.
-    fn exit(&mut self, request: Value) -> Exited {
+    /// The exit that answers `request`, which the table must have made.
+    fn expect_exit(&mut self, request: Value) -> Exited {
         self.seat
             .respond(&mut self.app, &request.to_string())
             .expect_err("the table should have exited")
@@ -1581,32 +1581,38 @@ fn a_table_that_ends_itself_ends_the_session_with_its_reason() {
     assert_eq!(ended.response()["ok"], true);
     assert_eq!(ended.to_string(), "The table exited (Some(Success)).");
 
-    // An error exit says why, in the response and in the error itself, and every
-    // later request, whatever it is, is answered with the exit and acts on nothing.
+    // An error exit says why, in the response and in the error itself: Bevy's
+    // `AppExit::error()` is code 1. Every later request, whatever it is, is answered
+    // with the exit and acts on nothing.
     let mut seat = sit();
-    let failed = seat.exit(json!({"op": "key", "revision": 0, "key": "End"}));
+    let failed = seat.expect_exit(json!({"op": "key", "revision": 0, "key": "End"}));
+    let reason = "The table exited (Some(Error(1))).";
     assert!(failed.is_error());
     assert_eq!(failed.response()["ok"], false);
-    let reason = failed.to_string();
-    assert!(
-        reason.starts_with("The table exited (Some(Error("),
-        "{reason}"
-    );
+    assert_eq!(failed.to_string(), reason);
     assert_eq!(failed.response()["error"], reason);
     for later in [
         json!({"op": "observe"}),
         json!({"op": "quit"}),
         json!({"op": "advance", "steps": 5}),
+        json!({"op": "settle", "steps": 5}),
+        json!({"op": "key", "revision": 0, "key": "Enter"}),
     ]
     .iter()
     .map(Value::to_string)
     .chain(["nonsense".to_owned()])
     {
-        let clock = seat.table().clock;
+        let (clock, keys, revision) = {
+            let table = seat.table();
+            (table.clock, table.keys.clone(), table.revision)
+        };
         let again = seat.seat.respond(&mut seat.app, &later).unwrap_err();
         assert_eq!(again.to_string(), reason, "{later}");
         assert_eq!(again.response()["status"], "exited", "{later}");
-        assert_eq!(seat.table().clock, clock, "{later}");
+        let table = seat.table();
+        assert_eq!(table.clock, clock, "{later}");
+        assert_eq!(table.keys, keys, "{later}");
+        assert_eq!(table.revision, revision, "{later}");
     }
 
     let mut seat = sit();
@@ -1620,27 +1626,26 @@ fn a_table_that_ends_itself_ends_the_session_with_its_reason() {
     assert_eq!(responses.len(), 2, "nothing follows the table's exit");
     assert_eq!(responses[1]["status"], "exited");
     assert_eq!(responses[1]["ok"], false);
-    let reason = responses[1]["error"].as_str().unwrap();
-    assert!(
-        reason.starts_with("The table exited (Some(Error("),
-        "{reason}"
-    );
+    assert_eq!(responses[1]["error"], reason);
     assert_eq!(failed, Err(reason.to_owned()));
 
     // A game that refused play gives its own reason for the exit.
     let mut seat = sit();
     seat.table().admission = Admission::Refused("The artwork went away.".into());
-    let refused = seat.exit(json!({"op": "key", "revision": 0, "key": "End"}));
+    let refused = seat.expect_exit(json!({"op": "key", "revision": 0, "key": "End"}));
     assert_eq!(refused.response()["status"], "exited");
     assert_eq!(refused.response()["error"], "The artwork went away.");
     assert_eq!(refused.to_string(), "The artwork went away.");
 }
 
-/// Bevy's default render-error handler quits by writing `AppExit::error()` into the
-/// main world during the render world's extract, an update the seat may never see
-/// itself: here a test's own `app.update()` follows the write, as a resize might.
+/// Bevy's default render-error handler quits by writing `AppExit::error()` on every
+/// update after the renderer fails, from the render world's extract: an update the
+/// seat may never run itself, as when a test resizes the table and updates it. Here a
+/// system writes it as that handler does, in an update the test runs.
 fn exit_outside_the_seat(app: &mut App) {
-    app.world_mut().write_message(AppExit::error());
+    app.add_systems(Update, |mut exit: MessageWriter<AppExit>| {
+        exit.write(AppExit::error());
+    });
     app.update();
 }
 
@@ -1650,7 +1655,7 @@ fn a_table_that_exited_outside_the_seats_steps_answers_even_an_observe_with_its_
     exit_outside_the_seat(&mut seat.app);
     let clock = seat.table().clock;
 
-    let exited = seat.exit(json!({"op": "observe"}));
+    let exited = seat.expect_exit(json!({"op": "observe"}));
 
     assert!(exited.is_error());
     assert_eq!(exited.response()["status"], "exited");
@@ -1779,7 +1784,7 @@ fn a_table_that_exits_during_a_capture_answers_that_it_exited_and_writes_nothing
     let path = scratch.join("table.png");
     seat.table().exits_when_asked = true;
 
-    let exited = seat.exit(json!({"op": "capture", "path": path}));
+    let exited = seat.expect_exit(json!({"op": "capture", "path": path}));
 
     // The picture was asked for, then the table exited before it came back.
     assert!(seat.table().findings_left_when_asked.is_some());

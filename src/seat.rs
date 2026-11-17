@@ -295,8 +295,8 @@ impl Exited {
         self.exit.is_error()
     }
 
-    /// The `exited` response line the seat would send: `ok` is false and `error`
-    /// holds the reason only for an error exit.
+    /// The `exited` response line the seat would send. Only for an error exit is
+    /// `ok` false and the reason in `error`.
     pub fn response(&self) -> &Value {
         &self.response
     }
@@ -676,9 +676,10 @@ impl<G: Game> Seat<G> {
 
     /// One request on a connection of its own, one response, for a consumer's tests,
     /// which send requests one at a time. Every response but `exited` is `Ok`, `bye`
-    /// included. Once the table has exited, this request and every later one is
-    /// [`Exited`] and acts on nothing, so a test that unwraps each response stops
-    /// where the table did.
+    /// included. The request that finds the table's exit is [`Exited`], whether its
+    /// own steps made the table exit or the exit came before it, and so is every later
+    /// request, which acts on nothing. A test that unwraps each response stops where
+    /// the table did.
     pub fn respond(&mut self, app: &mut App, line: &str) -> Result<Value, Exited> {
         let response = self.respond_on(app, &mut Connection::default(), line);
         match &self.exit {
