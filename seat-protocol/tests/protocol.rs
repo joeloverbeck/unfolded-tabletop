@@ -13,6 +13,7 @@ fn every_status_has_its_wire_name_and_is_read_back_from_it() {
         "pointed",
         "scrolled",
         "pressed",
+        "dragged",
         "settled",
         "unsettled",
         "captured",
@@ -93,6 +94,17 @@ fn a_request_is_read_from_the_line_an_agent_writes_and_written_as_one() {
             },
         ),
         (
+            r#"{"op":"drag","revision":7,"component":"table","button":"right","x":120.0,"y":-40.0}"#,
+            Request::Drag {
+                revision: 7,
+                component: Some("table".into()),
+                choice: None,
+                button: "right".into(),
+                x: 120.0,
+                y: -40.0,
+            },
+        ),
+        (
             r#"{"op":"key","key":"Enter","revision":1,"focused":"Continue"}"#,
             Request::Key {
                 key: "Enter".into(),
@@ -134,7 +146,24 @@ fn a_request_is_read_from_the_line_an_agent_writes_and_written_as_one() {
             y: -4.0,
         }
     );
+    // A drag may leave out either axis, but never its button.
+    assert_eq!(
+        serde_json::from_str::<Request>(
+            r#"{"op":"drag","revision":0,"choice":"deck","button":"left","y":5}"#
+        )
+        .unwrap(),
+        Request::Drag {
+            revision: 0,
+            component: None,
+            choice: Some("deck".into()),
+            button: "left".into(),
+            x: 0.0,
+            y: 5.0,
+        }
+    );
     for refused in [
+        r#"{"op":"drag","revision":0,"component":"table","x":5}"#,
+        r#"{"op":"drag","revision":0,"component":"table","button":"right","x":5,"steps":3}"#,
         r#"{"op":"observe","revision":0}"#,
         r#"{"op":"wave"}"#,
         r#"{"op":"activate","component":"card"}"#,

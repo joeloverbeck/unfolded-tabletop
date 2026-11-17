@@ -25,8 +25,12 @@
 //! [`Orbit::step`] with [`FrameInput`] and [`Capture`] is the motion alone, without
 //! gathering. It is kept while games move to [`TableCameraPlugin`].
 //!
-//! What no test holds: that the gathered input reaches the camera in a real window.
-//! Each game's own native inspection of orbit, pan, wheel, drag and Home does.
+//! `tests/seat.rs` drives a seated table's camera through Bevy's own input messages: a
+//! right `drag` from the scene orbits it, and a `scroll` on the scene zooms it, while
+//! the same input from a UI node, or a wheel the table takes, does not. A game's seat
+//! test can do the same on its real table. What no test holds is that a real window
+//! delivers that input: each game's own native inspection of orbit, pan, wheel, drag
+//! and Home does.
 
 use std::{marker::PhantomData, ops::RangeInclusive};
 

@@ -49,6 +49,21 @@ pub enum Request {
         x: f32,
         y: f32,
     },
+    /// Press a mouse button on the named component or choice, move the pointer by `x`
+    /// and `y` logical pixels while it is held, and release it there, at this revision.
+    /// The button is `left`, `right` or `middle`.
+    Drag {
+        revision: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        component: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        choice: Option<String>,
+        button: String,
+        #[serde(default)]
+        x: f32,
+        #[serde(default)]
+        y: f32,
+    },
     /// Press a key, at this revision, on the named focused control if it can commit.
     Key {
         key: String,
@@ -95,6 +110,9 @@ pub enum Status {
     Pointed,
     Scrolled,
     Pressed,
+    /// The button went down on the named target, moved and came up: the input was
+    /// delivered, which says nothing of what moved.
+    Dragged,
     Settled,
     Unsettled,
     Captured,
@@ -103,7 +121,7 @@ pub enum Status {
     /// Something else was over the target of an activation or a point: nothing was
     /// pressed, or the press was cancelled before release.
     Missed,
-    /// An earlier refusal or miss stopped its activations, keys and scrolls.
+    /// An earlier refusal or miss stopped its activations, drags, keys and scrolls.
     Skipped,
     /// `quit` ended the session.
     Bye,
@@ -113,13 +131,14 @@ pub enum Status {
 
 impl Status {
     /// Every status, in the order above.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Ready,
         Self::Observed,
         Self::Activated,
         Self::Pointed,
         Self::Scrolled,
         Self::Pressed,
+        Self::Dragged,
         Self::Settled,
         Self::Unsettled,
         Self::Captured,
@@ -139,6 +158,7 @@ impl Status {
             Self::Pointed => "pointed",
             Self::Scrolled => "scrolled",
             Self::Pressed => "pressed",
+            Self::Dragged => "dragged",
             Self::Settled => "settled",
             Self::Unsettled => "unsettled",
             Self::Captured => "captured",

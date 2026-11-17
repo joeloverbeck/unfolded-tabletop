@@ -28,29 +28,40 @@
 //! capture may take. No second use has shaped them yet. `point`, which rests the
 //! pointer on a named target as an activation does and presses nothing, was added
 //! later; `mudsong`, a private repository that pins the library for its application,
-//! is the consumer that sends it.
+//! is the consumer that sends it. `drag`, which presses a named mouse button on a
+//! named target, moves the pointer while it is held and releases it, was added for
+//! the table camera's right-drag orbit (#63).
 //!
 //! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
 //! steps unless a request asks otherwise, and for 7,200 at most; admission settling
 //! the admitted table for at most 1,800 steps and then returning, settled or not; and
 //! 30 seconds for a capture. A `scroll` takes each axis finite and between -32 and 32
 //! wheel lines, with at least one nonzero, and its `scrolled` response confirms that
-//! input was delivered, not that a panel moved. `tests/seat.rs` holds the step and the
+//! input was delivered, not that a panel moved. A `drag` names `left`, `right` or
+//! `middle`; its offset is finite, nonzero and in logical pixels, and must end inside
+//! the window. The button goes down on one step, the pointer moves an equal part of the
+//! offset on each of the next four, and the button comes up on the step after: no
+//! button stays down between requests. Its `dragged` response, like `scrolled`, says
+//! the input was delivered, not that anything moved. `tests/seat.rs` holds the step and the
 //! protocol's main refusals word for word. No test here or in Arkham holds the settling
 //! limits, the capture's 30 seconds, a capture's other refusals or the wording for a
 //! focus that is no control or menu row, so a change to them would pass every check.
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
-//! scrolls and keys act only on the revision they were decided on, a key that can commit
-//! presses only the control it names, and a connection stops pressing after its first
-//! refusal or miss: its later activations, keys and scrolls are skipped. A point presses
-//! nothing, so it is served after a refusal or a miss, and a missed point stops the
-//! connection's later activations and keys as a missed activation does.
+//! drags, scrolls and keys act only on the revision they were decided on, a key that can
+//! commit presses only the control it names, and a connection stops pressing after its
+//! first refusal or miss: its later activations, drags, keys and scrolls are skipped. A
+//! drag whose press lands on something else lets go where it is, without moving, and
+//! misses. A point presses nothing, so it is served after a refusal or a miss, and a
+//! missed point stops the connection's later activations and keys as a missed
+//! activation does.
 //!
-//! Input enters where Bevy's own window-event conversion writes it: `PointerInput` and
-//! `MouseWheel` and `KeyboardInput` messages plus the logical window's cursor position. Everything after
-//! that is the game's production code. The seat never triggers observers, queues table
-//! actions or calls handlers.
+//! Input enters where Bevy's own window-event conversion writes it: `PointerInput`,
+//! `MouseButtonInput`, `MouseWheel` and `KeyboardInput` messages plus the logical
+//! window's cursor position. Everything after that is the game's production code. The
+//! seat never writes a `WindowEvent`: picking makes its own `PointerInput` from those,
+//! so a press would arrive twice. Nor does it trigger observers, queue table actions or
+//! call handlers.
 
 use crate::capture::{self, Missed, Pipelines, Surface};
 use bevy::{
@@ -59,7 +70,7 @@ use bevy::{
     input::{
         ButtonState,
         keyboard::{Key, KeyboardInput},
-        mouse::{MouseScrollUnit, MouseWheel},
+        mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel},
         touch::TouchPhase,
     },
     picking::{
@@ -127,6 +138,15 @@ pub const STEP: Duration = Duration::from_nanos(16_666_667);
 const DEFAULT_SETTLE_STEPS: u32 = 1_800;
 const MAX_SETTLE_STEPS: u32 = 7_200;
 const CAPTURE_LIMIT: Duration = Duration::from_secs(30);
+/// The steps over which a drag moves the pointer, one move each, between the step
+/// that presses and the step that releases.
+const DRAG_MOVES: u16 = 4;
+/// The buttons a drag names, in the order a refusal lists them.
+const DRAG_BUTTONS: [(&str, MouseButton, PointerButton); 3] = [
+    ("left", MouseButton::Left, PointerButton::Primary),
+    ("right", MouseButton::Right, PointerButton::Secondary),
+    ("middle", MouseButton::Middle, PointerButton::Middle),
+];
 
 /// What an agent names. Lookup is exact; a nearest match is never used.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -326,8 +346,8 @@ impl Game for Unshown {
 }
 
 /// The table was not as the request assumed and the request clicked nothing, so the
-/// rest of the connection stops acting: its later activations, keys and scrolls are
-/// skipped.
+/// rest of the connection stops acting: its later activations, drags, keys and scrolls
+/// are skipped.
 fn stops_connection(status: Status) -> bool {
     matches!(status, Status::Refused | Status::Missed)
 }
@@ -358,7 +378,7 @@ enum ConnectionEnd {
 
 /// One connection's requests: standard input in batch form, or one connection to the
 /// seat. After its first refused or missed response the connection stops pressing:
-/// every later activation, key and scroll is skipped, so one wrong assumption cannot cascade
+/// every later activation, drag, key and scroll is skipped, so one wrong assumption cannot cascade
 /// into several commits. Observing, pointing, settling, capturing and quitting are
 /// still served; a point presses nothing.
 #[derive(Default)]
@@ -385,9 +405,16 @@ impl Connection {
             Status::Missed => ("missed its target", "Missed"),
             _ => ("was refused", "Refused"),
         };
-        matches!(request, Request::Activate { .. } | Request::Key { .. } | Request::Scroll { .. }).then(|| {
+        matches!(
+            request,
+            Request::Activate { .. }
+                | Request::Drag { .. }
+                | Request::Key { .. }
+                | Request::Scroll { .. }
+        )
+        .then(|| {
             format!(
-                "Skipped: an earlier request on this connection {stopped}, so its activations, keys and scrolls are no longer acted on. No input was sent. {request_was} request: {line}. Reason: {reason}"
+                "Skipped: an earlier request on this connection {stopped}, so its activations, drags, keys and scrolls are no longer acted on. No input was sent. {request_was} request: {line}. Reason: {reason}"
             )
         })
     }
@@ -612,6 +639,26 @@ impl<G: Game> Seat<G> {
                     "scroll needs exactly one of component or choice".into(),
                 ),
             },
+            Request::Drag {
+                revision,
+                component,
+                choice,
+                button,
+                x,
+                y,
+            } => match (component, choice) {
+                (Some(name), None) => self.drag(
+                    app,
+                    Name::Component(name),
+                    revision,
+                    &button,
+                    Vec2::new(x, y),
+                ),
+                (None, Some(id)) => {
+                    self.drag(app, Name::Choice(id), revision, &button, Vec2::new(x, y))
+                }
+                _ => self.refused(app, "drag needs exactly one of component or choice".into()),
+            },
             Request::Settle { steps } => self.settle(app, steps),
             Request::Capture { path } => self.capture(app, &path),
             Request::Quit {} => return self.response(app, Status::Bye, None),
@@ -780,6 +827,125 @@ impl<G: Game> Seat<G> {
             response.json["covered"] = covered_at(covered);
         }
         response
+    }
+
+    /// Press `button` on the named target, move the pointer by `offset` over
+    /// [`DRAG_MOVES`] steps while it is held, and release it there. Mouse input and
+    /// picking each get what a window would give them; the game owns what moves.
+    fn drag(
+        &mut self,
+        app: &mut App,
+        name: Name,
+        revision: u64,
+        button: &str,
+        offset: Vec2,
+    ) -> Response {
+        let Some(&(_, mouse, pointer)) = DRAG_BUTTONS.iter().find(|known| known.0 == button) else {
+            let known: Vec<&str> = DRAG_BUTTONS.iter().map(|known| known.0).collect();
+            return self.refused(
+                app,
+                format!(
+                    "drag needs a button of {}, not {button:?}. Nothing was pressed.",
+                    or_list(&known)
+                ),
+            );
+        };
+        if !offset.is_finite() || offset == Vec2::ZERO {
+            return self.refused(
+                app,
+                "drag needs a nonzero finite offset in logical pixels. Nothing was pressed.".into(),
+            );
+        }
+        let Rest {
+            position, covered, ..
+        } = match self.rest_on(app, &name, revision) {
+            Ok(rest) => rest,
+            Err(response) => return response,
+        };
+        // Hover can itself change the table. Recheck before pressing.
+        if let Some(refusal) = self.unready(app, revision) {
+            return refusal;
+        }
+        let end = position + offset;
+        let world = app.world_mut();
+        // `rest_on` just pointed through this primary window.
+        let (window, size) = world
+            .query_filtered::<(Entity, &Window), With<PrimaryWindow>>()
+            .single(world)
+            .map(|(entity, window)| (entity, window.size()))
+            .unwrap();
+        if !(end.cmpge(Vec2::ZERO).all() && end.cmple(size).all()) {
+            return self.refused(
+                app,
+                format!(
+                    "The drag would end at ({:.0}, {:.0}), outside the {:.0} by {:.0} window. Nothing was pressed.",
+                    end.x, end.y, size.x, size.y
+                ),
+            );
+        }
+        if let Err(error) = self.button(app, window, mouse, position, PointerAction::Press(pointer))
+        {
+            return self.refused(app, error);
+        }
+        self.step(app, STEP);
+        let pressed = self.under_pointer(app);
+        if !pressed.iter().any(|hit| hit.name.as_ref() == Some(&name)) {
+            // Something moved under the pointer after hover: let go where it is, so
+            // nothing is dragged and the button is not left down.
+            let _ = self.pointer(app, position, PointerAction::Cancel);
+            let _ = self.button(
+                app,
+                window,
+                mouse,
+                position,
+                PointerAction::Release(pointer),
+            );
+            self.step(app, STEP);
+            return self.missed(app, &name, position, pressed, true);
+        }
+        let mut at = position;
+        for _ in 0..DRAG_MOVES {
+            let next = at + offset / f32::from(DRAG_MOVES);
+            if let Err(error) = self.pointer(app, next, PointerAction::Move { delta: next - at }) {
+                return self.refused(app, error);
+            }
+            at = next;
+            self.step(app, STEP);
+        }
+        if let Err(error) = self.button(app, window, mouse, end, PointerAction::Release(pointer)) {
+            return self.refused(app, error);
+        }
+        self.step(app, STEP);
+        let mut response = self.response(app, Status::Dragged, None);
+        response.json["button"] = json!(button);
+        response.json["from"] = json!([position.x, position.y]);
+        response.json["to"] = json!([end.x, end.y]);
+        if let Some(covered) = covered {
+            response.json["covered"] = covered_at(covered);
+        }
+        response
+    }
+
+    /// A mouse button going down or up as a window delivers it: Bevy's mouse input
+    /// for the button, and picking's press or release.
+    fn button(
+        &self,
+        app: &mut App,
+        window: Entity,
+        button: MouseButton,
+        position: Vec2,
+        action: PointerAction,
+    ) -> Result<(), String> {
+        let state = match action {
+            PointerAction::Press(_) => ButtonState::Pressed,
+            _ => ButtonState::Released,
+        };
+        app.world_mut().write_message(MouseButtonInput {
+            button,
+            state,
+            window,
+        });
+        self.pointer(app, position, action)
     }
 
     fn activate(&mut self, app: &mut App, name: Name, revision: u64) -> Response {
@@ -1075,6 +1241,15 @@ fn covered_at((tried, hits): (Vec2, Vec<Hit>)) -> Value {
         "position": [tried.x, tried.y],
         "hit": hits.into_iter().map(|hit| hit.description).collect::<Vec<_>>(),
     })
+}
+
+/// "a, b or c".
+fn or_list(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => (*only).to_owned(),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+    }
 }
 
 /// Refuse to start: one `refused` response on standard output, which the agent or a
