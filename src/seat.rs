@@ -33,7 +33,7 @@
 //! the table camera's right-drag orbit (#63). `advance`, which steps the table's
 //! clock a chosen number of steps, settled or not, and sends no input, was added so a
 //! test can cross an animation's loop without counting the steps other requests take
-//! (#62).
+//! (#62); Cuba Libre is the consumer that sends it, in its native loop tests.
 //!
 //! The numbers are a step of one sixtieth of a second ([`STEP`]); settling for 1,800
 //! steps unless a request asks otherwise, and for 7,200 at most; an `advance` of 1 to
