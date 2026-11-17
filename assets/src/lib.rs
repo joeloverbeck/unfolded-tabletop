@@ -157,45 +157,6 @@ impl From<io::Error> for Cause {
     }
 }
 
-/// A game's asset error as one sentence. Superseded by [`Error`], which this
-/// package's functions return; it converts to this with the same text.
-#[deprecated(
-    note = "match `unfolded_assets::Error`'s cause, and keep a sentence error of your own if your game needs one"
-)]
-#[derive(Debug)]
-pub struct AssetError(pub String);
-
-#[allow(deprecated)]
-impl fmt::Display for AssetError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
-    }
-}
-
-#[allow(deprecated)]
-impl std::error::Error for AssetError {}
-
-#[allow(deprecated)]
-impl From<Error> for AssetError {
-    fn from(error: Error) -> Self {
-        Self(error.to_string())
-    }
-}
-
-#[allow(deprecated)]
-impl From<io::Error> for AssetError {
-    fn from(error: io::Error) -> Self {
-        Self(error.to_string())
-    }
-}
-
-#[allow(deprecated)]
-impl From<serde_json::Error> for AssetError {
-    fn from(error: serde_json::Error) -> Self {
-        Self(error.to_string())
-    }
-}
-
 /// `value` as a path of ordinary components only, inside the collection.
 pub fn relative_path(value: &str) -> Result<&Path, Error> {
     let path = Path::new(value);

@@ -4734,7 +4734,6 @@ version = "0.1.0"
 dependencies = [
  "image",
  "rustix 1.1.6",
- "serde_json",
  "sha2",
  "tempfile",
 ]

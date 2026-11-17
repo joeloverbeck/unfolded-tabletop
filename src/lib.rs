@@ -12,9 +12,6 @@ pub mod capture;
 #[cfg(feature = "render")]
 pub mod card;
 #[cfg(feature = "render")]
-#[deprecated(note = "spawn your own node with a `label_anchor::LabelAnchor` (issue #35)")]
-pub mod count_label;
-#[cfg(feature = "render")]
 pub mod label_anchor;
 #[cfg(feature = "render")]
 pub mod loading;

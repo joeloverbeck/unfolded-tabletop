@@ -3,8 +3,6 @@
 //! thing differs on purpose and is marked below. No test here needs a graphics
 //! adapter; each consumer's own checks cover a real render.
 #![cfg(feature = "render")]
-// `image_to_file` is deprecated and still holds its contract while games move to `when_ready`.
-#![allow(deprecated)]
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -20,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use unfolded_tabletop::capture::{self, Ended, Failure, Missed, Pipelines, Surface, Unsaved};
+use unfolded_tabletop::capture::{self, Ended, Missed, Pipelines, Surface, Unsaved};
 
 /// A directory of this test's own, removed when the test ends.
 struct Scratch(PathBuf);
@@ -367,27 +365,35 @@ fn soon() -> Instant {
 
 #[test]
 fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
-    let scratch = Scratch::new("image-to-file");
+    let scratch = Scratch::new("given-image");
     let mut app = host();
     capture::install::<Seen>(&mut app, UVec2::new(2, 1));
     let image = app.world().resource::<Surface>().image();
 
+    // Two ready steps, then the picture is asked for; it comes back on the third
+    // step after that, not the first.
     let path = scratch.join("picture.png");
     let mut stepped = Vec::new();
     let mut asked_for = Vec::new();
-    let result = capture::image_to_file(&mut app, image.clone(), &path, soon(), |app| {
-        stepped.push(Instant::now());
-        // The picture comes back on the third update, not the first.
-        if stepped.len() < 3 {
-            app.update();
-            asked_for = requests(app);
-            true
-        } else {
-            renderer_hands_back(app)
-        }
-    });
+    let result = capture::when_ready(
+        &mut app,
+        image.clone(),
+        &path,
+        soon(),
+        |_| true,
+        |app| {
+            stepped.push(Instant::now());
+            if stepped.len() < 5 {
+                app.update();
+                asked_for = requests(app);
+                true
+            } else {
+                renderer_hands_back(app)
+            }
+        },
+    );
     assert_eq!(result, Ok(()));
-    assert_eq!(stepped.len(), 3);
+    assert_eq!(stepped.len(), 5);
     assert_eq!(saved(&path).to_rgb8().get_pixel(0, 0).0, [255, 0, 0]);
     assert_eq!(asked_for.len(), 1);
     assert!(
@@ -395,63 +401,51 @@ fn a_capture_asks_for_the_given_image_and_returns_once_its_file_is_written() {
         "{:?}",
         asked_for[0].1
     );
-    // The host is given at least two milliseconds between steps.
-    for pair in stepped.windows(2) {
+    // The host is given at least two milliseconds between steps that wait for the
+    // picture.
+    for pair in stepped[2..].windows(2) {
         assert!(pair[1] - pair[0] >= Duration::from_millis(2), "{stepped:?}");
     }
 
-    // The next capture's step hands a picture back to the finished one as well,
+    // The next capture's steps hand a picture back to the finished one as well,
     // which writes nothing more. Arkham's wrote its file again.
     std::fs::remove_file(&path).unwrap();
     let refused = scratch.join("absent/picture.png");
-    let result = capture::image_to_file(&mut app, image, &refused, soon(), renderer_hands_back);
-    assert!(matches!(result, Err(Failure::Unsaved(_))), "{result:?}");
+    let result = capture::when_ready(
+        &mut app,
+        image.clone(),
+        &refused,
+        soon(),
+        |_| true,
+        renderer_hands_back,
+    );
+    assert!(matches!(result, Err(Missed::Unsaved(_))), "{result:?}");
     assert!(!refused.exists());
     assert_eq!(requests(&mut app).len(), 2);
     assert!(!path.exists());
-}
 
-#[test]
-fn a_capture_that_does_not_come_back_is_incomplete() {
-    let scratch = Scratch::new("incomplete");
-    let mut app = host();
-    capture::install::<Seen>(&mut app, UVec2::new(2, 1));
-    let image = app.world().resource::<Surface>().image();
-
-    // The host stops: one step is taken and no more.
-    let stopped = scratch.join("stopped.png");
-    let mut steps = 0;
-    let result = capture::image_to_file(&mut app, image.clone(), &stopped, soon(), |_| {
-        steps += 1;
-        false
-    });
-    assert_eq!(result, Err(Failure::Incomplete));
-    assert_eq!(steps, 1);
-
-    // The deadline passes while the host keeps stepping.
-    let late = scratch.join("late.png");
-    let deadline = Instant::now() + Duration::from_millis(20);
-    let result = capture::image_to_file(&mut app, image.clone(), &late, deadline, |app| {
-        app.update();
-        true
-    });
-    assert_eq!(result, Err(Failure::Incomplete));
-
-    // A picture that arrives on the last permitted step is still written.
+    // A picture that arrives on the last step the host permits is still written.
     let last = scratch.join("last.png");
-    let result = capture::image_to_file(&mut app, image, &last, Instant::now(), |app| {
-        renderer_hands_back(app);
-        false
-    });
-    assert_eq!(result, Ok(()));
+    let mut steps = 0;
+    let result = capture::when_ready(
+        &mut app,
+        image,
+        &last,
+        soon(),
+        |_| true,
+        |app| {
+            steps += 1;
+            if steps < 3 {
+                app.update();
+                true
+            } else {
+                renderer_hands_back(app);
+                false
+            }
+        },
+    );
+    assert_eq!((result, steps), (Ok(()), 3));
     assert!(last.exists());
-
-    // Not as Arkham had it: there, a picture that arrived after the capture was
-    // given up was still written, under a refusal that said no file was. That
-    // last step handed pictures back to both captures given up above.
-    assert_eq!(requests(&mut app).len(), 3);
-    assert!(!stopped.exists());
-    assert!(!late.exists());
 }
 
 #[test]
@@ -602,7 +596,8 @@ fn a_capture_when_ready_says_whether_the_host_stopped_or_the_deadline_passed() {
     assert!(!unwritable.exists());
 
     // That last capture's steps handed pictures back to both captures given up above.
-    // Neither writes its file after its capture returned.
+    // Neither writes its file after its capture returned. Not as Arkham had it: there,
+    // a picture that arrived after the capture was given up was still written.
     assert_eq!(requests(&mut app).len(), 3);
     assert!(!exited.exists());
     assert!(!late.exists());
