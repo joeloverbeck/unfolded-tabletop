@@ -76,6 +76,14 @@
 //! seat never writes a `WindowEvent`: picking makes its own `PointerInput` from those,
 //! so a press would arrive twice. Nor does it trigger observers, queue table actions or
 //! call handlers.
+//!
+//! A table that exits ends its session. The seat finds the exit after each of its own
+//! steps, and before each request from an update it did not run, such as Bevy's
+//! default render-error handler quitting from the render world's extract, while Bevy
+//! still holds the exit message. From then on every request, whatever it is, is
+//! answered `exited` and acts on nothing; batch form and a held session end there. In
+//! process, [`Seat::respond`] returns that response as an [`Exited`] error, so a
+//! consumer's test that unwraps each response fails where the table stopped.
 
 use crate::capture::{self, Missed, Pipelines, Surface};
 use bevy::{
@@ -261,6 +269,62 @@ pub enum Unadmitted {
     /// is the game's.
     Unfinished,
 }
+
+/// The table has exited, so [`Seat::respond`] has no table left to act on. Every
+/// request from the one that found the exit onwards is answered with it.
+///
+/// `Display` gives the reason: the game's own when it refused play, and otherwise
+/// "The table exited (…)" with Bevy's [`AppExit`]. A test that unwraps the response
+/// fails at the request where the table stopped, and says why.
+#[derive(Clone)]
+pub struct Exited {
+    exit: AppExit,
+    reason: String,
+    response: Value,
+}
+
+impl Exited {
+    /// How the table exited.
+    pub fn exit(&self) -> &AppExit {
+        &self.exit
+    }
+
+    /// Whether the table exited with an error, as when the game refused play or its
+    /// renderer failed, rather than ending well, as by returning to a selection.
+    pub fn is_error(&self) -> bool {
+        self.exit.is_error()
+    }
+
+    /// The `exited` response line the seat would send: `ok` is false and `error`
+    /// holds the reason only for an error exit.
+    pub fn response(&self) -> &Value {
+        &self.response
+    }
+
+    /// The `exited` response line, owned.
+    pub fn into_response(self) -> Value {
+        self.response
+    }
+}
+
+impl std::fmt::Display for Exited {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.reason)
+    }
+}
+
+impl std::fmt::Debug for Exited {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The response repeats the whole table; the reason is what a failed test needs.
+        formatter
+            .debug_struct("Exited")
+            .field("exit", &self.exit)
+            .field("reason", &self.reason)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::error::Error for Exited {}
 
 /// A key a game lets the seat press.
 #[derive(Clone, Debug)]
@@ -610,25 +674,54 @@ impl<G: Game> Seat<G> {
         }
     }
 
-    /// One request on a connection of its own, one response, for a consumer's protocol
-    /// tests, which send requests one at a time. The flag is false when the session
-    /// has ended.
-    pub fn respond(&mut self, app: &mut App, line: &str) -> (Value, bool) {
+    /// One request on a connection of its own, one response, for a consumer's tests,
+    /// which send requests one at a time. Every response but `exited` is `Ok`, `bye`
+    /// included. Once the table has exited, this request and every later one is
+    /// [`Exited`] and acts on nothing, so a test that unwraps each response stops
+    /// where the table did.
+    pub fn respond(&mut self, app: &mut App, line: &str) -> Result<Value, Exited> {
         let response = self.respond_on(app, &mut Connection::default(), line);
-        (response.json, !response.status.ends_session())
+        match &self.exit {
+            Some(exit) if response.status == Status::Exited => Err(Exited {
+                exit: exit.clone(),
+                reason: self.exit_reason(app),
+                response: response.json,
+            }),
+            _ => Ok(response.json),
+        }
     }
 
-    /// One request on `connection`, one response.
+    /// One request on `connection`, one response. A table that has exited, whether
+    /// during the seat's own steps or in an update the seat did not run, answers every
+    /// request with its exit, before reading it.
     fn respond_on(&mut self, app: &mut App, connection: &mut Connection, line: &str) -> Response {
-        let response = match serde_json::from_str::<Request>(line) {
-            Err(error) => self.refused(app, error.to_string()),
-            Ok(request) => match connection.skips(&request) {
-                Some(error) => self.response(app, Status::Skipped, Some(error)),
-                None => self.perform(app, request),
-            },
+        if self.exit.is_none() {
+            self.exit = app.should_exit();
+        }
+        let response = if self.exit.is_some() {
+            self.exited(app)
+        } else {
+            match serde_json::from_str::<Request>(line) {
+                Err(error) => self.refused(app, error.to_string()),
+                Ok(request) => match connection.skips(&request) {
+                    Some(error) => self.response(app, Status::Skipped, Some(error)),
+                    None => self.perform(app, request),
+                },
+            }
         };
         connection.answered(line, &response);
         response
+    }
+
+    /// The response of a table that has exited: an error with its reason when it
+    /// exited with one.
+    fn exited(&self, app: &mut App) -> Response {
+        let error = self
+            .exit
+            .as_ref()
+            .is_some_and(AppExit::is_error)
+            .then(|| self.exit_reason(app));
+        self.response(app, Status::Exited, error)
     }
 
     fn perform(&mut self, app: &mut App, request: Request) -> Response {
@@ -681,10 +774,9 @@ impl<G: Game> Seat<G> {
             Request::Capture { path } => self.capture(app, &path),
             Request::Quit {} => return self.response(app, Status::Bye, None),
         };
-        if let Some(exit) = &self.exit {
+        if self.exit.is_some() {
             // The table ended the session itself, for example by returning to selection.
-            let error = exit.is_error().then(|| self.exit_reason(app));
-            return self.response(app, Status::Exited, error);
+            return self.exited(app);
         }
         response
     }

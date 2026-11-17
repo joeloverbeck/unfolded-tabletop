@@ -44,8 +44,8 @@ use unfolded_tabletop::{
     },
     capture::Pipelines,
     seat::{
-        Admission, Focus, Game, Hit, Interrupt, Logical, Name, Observed, STEP, Seat, SeatKey,
-        SeatedAgent, Unadmitted, Unshown,
+        Admission, Exited, Focus, Game, Hit, Interrupt, Logical, Name, Observed, STEP, Seat,
+        SeatKey, SeatedAgent, Unadmitted, Unshown,
         socket::{Listener, Unclaimable},
     },
 };
@@ -444,8 +444,18 @@ struct Sitting<G = Plain> {
 }
 
 impl<G: Game> Sitting<G> {
+    /// The response to `request`, from a table that has not exited.
     fn ask(&mut self, request: Value) -> Value {
-        self.seat.respond(&mut self.app, &request.to_string()).0
+        self.seat
+            .respond(&mut self.app, &request.to_string())
+            .unwrap_or_else(|exited| panic!("{request}: {exited}"))
+    }
+
+    /// The exit that answers `request`.
+    fn exit(&mut self, request: Value) -> Exited {
+        self.seat
+            .respond(&mut self.app, &request.to_string())
+            .expect_err("the table should have exited")
     }
 
     fn table(&mut self) -> Mut<'_, Table> {
@@ -819,9 +829,8 @@ fn a_line_that_is_no_request_is_refused() {
         "{\"op\":\"dance\"}",
         "{\"op\":\"observe\",\"more\":1}",
     ] {
-        let (response, goes_on) = seat.seat.respond(&mut seat.app, line);
+        let response = seat.seat.respond(&mut seat.app, line).unwrap();
         assert_eq!(response["status"], "refused", "{line}");
-        assert!(goes_on);
     }
     let both = seat.ask(json!({"op": "activate", "revision": 0, "component": "a", "choice": "b"}));
     assert_eq!(
@@ -1559,13 +1568,46 @@ fn a_miss_stops_the_connections_later_activations_and_keys() {
 #[test]
 fn a_table_that_ends_itself_ends_the_session_with_its_reason() {
     let mut seat = sit();
-    let (ended, goes_on) = seat.seat.respond(
-        &mut seat.app,
-        "{\"op\":\"key\",\"revision\":0,\"key\":\"Home\"}",
+    let ended = seat
+        .seat
+        .respond(
+            &mut seat.app,
+            "{\"op\":\"key\",\"revision\":0,\"key\":\"Home\"}",
+        )
+        .unwrap_err();
+    assert!(!ended.is_error());
+    assert_eq!(ended.exit(), &AppExit::Success);
+    assert_eq!(ended.response()["status"], "exited");
+    assert_eq!(ended.response()["ok"], true);
+    assert_eq!(ended.to_string(), "The table exited (Some(Success)).");
+
+    // An error exit says why, in the response and in the error itself, and every
+    // later request, whatever it is, is answered with the exit and acts on nothing.
+    let mut seat = sit();
+    let failed = seat.exit(json!({"op": "key", "revision": 0, "key": "End"}));
+    assert!(failed.is_error());
+    assert_eq!(failed.response()["ok"], false);
+    let reason = failed.to_string();
+    assert!(
+        reason.starts_with("The table exited (Some(Error("),
+        "{reason}"
     );
-    assert_eq!(ended["status"], "exited");
-    assert_eq!(ended["ok"], true);
-    assert!(!goes_on);
+    assert_eq!(failed.response()["error"], reason);
+    for later in [
+        json!({"op": "observe"}),
+        json!({"op": "quit"}),
+        json!({"op": "advance", "steps": 5}),
+    ]
+    .iter()
+    .map(Value::to_string)
+    .chain(["nonsense".to_owned()])
+    {
+        let clock = seat.table().clock;
+        let again = seat.seat.respond(&mut seat.app, &later).unwrap_err();
+        assert_eq!(again.to_string(), reason, "{later}");
+        assert_eq!(again.response()["status"], "exited", "{later}");
+        assert_eq!(seat.table().clock, clock, "{later}");
+    }
 
     let mut seat = sit();
     let mut output = Vec::new();
@@ -1588,9 +1630,48 @@ fn a_table_that_ends_itself_ends_the_session_with_its_reason() {
     // A game that refused play gives its own reason for the exit.
     let mut seat = sit();
     seat.table().admission = Admission::Refused("The artwork went away.".into());
-    let refused = seat.ask(json!({"op": "key", "revision": 0, "key": "End"}));
-    assert_eq!(refused["status"], "exited");
-    assert_eq!(refused["error"], "The artwork went away.");
+    let refused = seat.exit(json!({"op": "key", "revision": 0, "key": "End"}));
+    assert_eq!(refused.response()["status"], "exited");
+    assert_eq!(refused.response()["error"], "The artwork went away.");
+    assert_eq!(refused.to_string(), "The artwork went away.");
+}
+
+/// Bevy's default render-error handler quits by writing `AppExit::error()` into the
+/// main world during the render world's extract, an update the seat may never see
+/// itself: here a test's own `app.update()` follows the write, as a resize might.
+fn exit_outside_the_seat(app: &mut App) {
+    app.world_mut().write_message(AppExit::error());
+    app.update();
+}
+
+#[test]
+fn a_table_that_exited_outside_the_seats_steps_answers_even_an_observe_with_its_exit() {
+    let mut seat = sit();
+    exit_outside_the_seat(&mut seat.app);
+    let clock = seat.table().clock;
+
+    let exited = seat.exit(json!({"op": "observe"}));
+
+    assert!(exited.is_error());
+    assert_eq!(exited.response()["status"], "exited");
+    assert_eq!(exited.response()["ok"], false);
+    assert_eq!(exited.to_string(), "The table exited (Some(Error(1))).");
+    assert_eq!(seat.table().clock, clock, "nothing stepped");
+
+    // On the wire the observe is answered with the exit, and nothing follows it.
+    let mut seat = sit();
+    exit_outside_the_seat(&mut seat.app);
+    let mut output = Vec::new();
+    let failed = seat.seat.serve(
+        &mut seat.app,
+        &b"{\"op\":\"observe\"}\n{\"op\":\"settle\"}\n"[..],
+        &mut output,
+    );
+    let responses = lines(&output);
+    assert_eq!(responses.len(), 2, "ready, then the exit: {responses:?}");
+    assert_eq!(responses[1]["status"], "exited");
+    assert_eq!(responses[1]["error"], "The table exited (Some(Error(1))).");
+    assert_eq!(failed, Err("The table exited (Some(Error(1))).".to_owned()));
 }
 
 #[test]
@@ -1698,11 +1779,11 @@ fn a_table_that_exits_during_a_capture_answers_that_it_exited_and_writes_nothing
     let path = scratch.join("table.png");
     seat.table().exits_when_asked = true;
 
-    let response = seat.ask(json!({"op": "capture", "path": path}));
+    let exited = seat.exit(json!({"op": "capture", "path": path}));
 
     // The picture was asked for, then the table exited before it came back.
     assert!(seat.table().findings_left_when_asked.is_some());
-    assert_eq!(response["status"], "exited", "{response}");
+    assert_eq!(exited.response()["status"], "exited", "{exited}");
     assert!(!path.exists());
 }
 
@@ -1986,7 +2067,7 @@ fn with_no_clock_of_its_own_a_tables_steps_move_bevys_time_in_place_of_the_wall_
     // Long enough for a wall clock to be told from the seat's steps.
     std::thread::sleep(Duration::from_millis(50));
 
-    let (settled, _) = seat.respond(&mut app, r#"{"op":"settle"}"#);
+    let settled = seat.respond(&mut app, r#"{"op":"settle"}"#).unwrap();
 
     assert_eq!(settled["status"], "settled", "{settled}");
     assert_eq!(settled["steps"], 3);
@@ -1997,7 +2078,9 @@ fn with_no_clock_of_its_own_a_tables_steps_move_bevys_time_in_place_of_the_wall_
 fn with_no_keys_of_its_own_a_table_lets_the_seat_press_none() {
     let (mut app, mut seat) = sit_bare(Bare);
 
-    let (refused, _) = seat.respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#);
+    let refused = seat
+        .respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#)
+        .unwrap();
 
     assert_eq!(refused["status"], "refused");
     assert_eq!(refused["error"], "Unknown key \"Tab\". Known keys: .");
@@ -2008,11 +2091,15 @@ fn with_no_keys_of_its_own_a_table_lets_the_seat_press_none() {
 fn with_no_focus_of_its_own_a_table_has_nothing_focused_for_a_key_that_can_commit() {
     let (mut app, mut seat) = sit_bare(Keyed);
 
-    let (refused, _) = seat.respond(
-        &mut app,
-        r#"{"op":"key","revision":0,"key":"Enter","focused":"Done"}"#,
-    );
-    let (pressed, _) = seat.respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#);
+    let refused = seat
+        .respond(
+            &mut app,
+            r#"{"op":"key","revision":0,"key":"Enter","focused":"Done"}"#,
+        )
+        .unwrap();
+    let pressed = seat
+        .respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#)
+        .unwrap();
 
     assert_eq!(
         refused["error"],
@@ -2031,8 +2118,8 @@ fn every_response_states_the_revision_and_what_is_pending_without_the_game() {
         table.presenting = 2;
     }
 
-    let (busy, _) = seat.respond(&mut app, r#"{"op":"observe"}"#);
-    let (settled, _) = seat.respond(&mut app, r#"{"op":"settle"}"#);
+    let busy = seat.respond(&mut app, r#"{"op":"observe"}"#).unwrap();
+    let settled = seat.respond(&mut app, r#"{"op":"settle"}"#).unwrap();
 
     assert_eq!(
         busy,
@@ -2056,11 +2143,13 @@ fn refusing(_: &World) -> Admission {
 fn a_test_of_a_tables_admission_alone_supplies_only_its_admission() {
     let (mut app, mut seat) = sit_bare(Unshown(refusing));
 
-    let (observed, _) = seat.respond(&mut app, r#"{"op":"observe"}"#);
-    let (activated, _) = seat.respond(
-        &mut app,
-        r#"{"op":"activate","revision":0,"component":"Deck"}"#,
-    );
+    let observed = seat.respond(&mut app, r#"{"op":"observe"}"#).unwrap();
+    let activated = seat
+        .respond(
+            &mut app,
+            r#"{"op":"activate","revision":0,"component":"Deck"}"#,
+        )
+        .unwrap();
 
     assert_eq!(
         seat.admit(&mut app, Duration::from_secs(30)),
