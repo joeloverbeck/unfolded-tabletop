@@ -30,7 +30,6 @@ terms used here.
 | `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |
 | `unfolded-tabletop::printed`, feature `render` | Text rows printed as ink on flat planes in the world | Bevy 0.20.0 |
 | `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
-| `unfolded-tabletop::count_label`, feature `render` | Deprecated numeric labels; use `label_anchor` | Bevy 0.20.0 |
 | `unfolded-tabletop::seat`, feature `seat` | The agent seat, in batch form or held on a local socket; enables `render` | Bevy 0.20.0 |
 
 "Never" holds under every feature set, and `scripts/check` fails if Bevy appears

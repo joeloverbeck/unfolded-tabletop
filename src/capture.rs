@@ -248,16 +248,6 @@ fn name_camera<C: Component>(
     surface.camera = Some(*camera);
 }
 
-/// Why a capture left no picture. [`image_to_file`] gives this; [`when_ready`] says
-/// more ([`Missed`]).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Failure {
-    /// The picture came back and could not be written.
-    Unsaved(Unsaved),
-    /// No picture came back: the host stopped stepping, or the deadline passed.
-    Incomplete,
-}
-
 /// Why a capture taken by [`when_ready`] left no picture.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Missed {
@@ -329,33 +319,6 @@ pub fn when_ready(
         }
     }
     ask(app, image, path, deadline, step)
-}
-
-/// Capture `image` to `path`, returning once the file is written. `step` runs one
-/// update of the caller's host, on the caller's clock, and says whether the host
-/// can go on; at least two milliseconds pass between steps. The caller decides
-/// what must be ready before it asks.
-///
-/// Once the capture has returned, a picture that arrives for it is not written.
-/// So one that ends [`Failure::Incomplete`] leaves no file behind later. Its
-/// request stays in the world until Bevy has handed that picture back, because
-/// Bevy marks the request when it does. This differs from Arkham on purpose: there a
-/// capture given up as incomplete still wrote its file when the picture came later,
-/// and a picture handed back twice was written twice.
-#[deprecated(
-    note = "use `when_ready`, which waits for the render pipelines and says whether the host stopped or the deadline passed"
-)]
-pub fn image_to_file(
-    app: &mut App,
-    image: Handle<Image>,
-    path: &Path,
-    deadline: Instant,
-    step: impl FnMut(&mut App) -> bool,
-) -> Result<(), Failure> {
-    ask(app, image, path, deadline, step).map_err(|missed| match missed {
-        Missed::Unsaved(error) => Failure::Unsaved(error),
-        Missed::Unready(_) | Missed::Incomplete(_) => Failure::Incomplete,
-    })
 }
 
 /// Ask for the picture and step until it is written, the host stops or the deadline

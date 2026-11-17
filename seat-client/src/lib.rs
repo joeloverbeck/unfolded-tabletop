@@ -11,12 +11,9 @@
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
 //! [`requests`] splits arguments or standard-input lines into request lines for
-//! [`Connection::send`]. [`connect`], [`exchange`] and [`read_line`] are the earlier
-//! calls, deprecated and kept while a pin that uses them moves: with them the caller
-//! sets the socket's read timeout and compares the count of answers with its requests.
+//! [`Connection::send`].
 #![cfg(unix)]
 
-use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
     error::Error,
@@ -340,38 +337,6 @@ pub fn requests(given: &[String], input: &mut impl BufRead) -> Result<Vec<String
     Ok(requests)
 }
 
-/// Connect without replacing the OS error kind; the caller supplies launch help
-/// or distinguishes a missing/refused socket from other failures.
-#[deprecated(note = "use `Connection::open`, which says when no seat listens")]
-pub fn connect(socket: &Path) -> std::io::Result<UnixStream> {
-    UnixStream::connect(socket)
-}
-
-/// Send every request and half-close the connection's input while concurrently
-/// copying responses unchanged to `output`, flushing each one. Returns the answer
-/// count and whether a status was refused, missed, skipped, absent or malformed.
-/// The caller compares the count with its requests and decides the exit status.
-///
-/// Set a read timeout on the stream to invoke `on_timeout` periodically; it may
-/// check consumer-owned interrupts/deadlines. Without one, reads may wait forever.
-/// As in the original client, a write failure only means fewer answers. This
-/// does not impose a write timeout or interrupt a writer blocked on a large send.
-#[deprecated(note = "use `Connection::send`, which sets the wake and says how it went")]
-pub fn exchange(
-    stream: &UnixStream,
-    requests: &[String],
-    output: &mut impl Write,
-    mut on_timeout: impl FnMut() -> Result<()>,
-) -> Result<(usize, bool)> {
-    exchange_lines(stream, requests, output, &mut on_timeout).map_err(|unsent| match unsent {
-        Unsent::Stopped(error) => error,
-        Unsent::Unreadable(error) => {
-            anyhow::Error::new(error).context("cannot read the seat's response")
-        }
-        Unsent::Unwritten(error) | Unsent::Unwoken(error) => error.into(),
-    })
-}
-
 fn exchange_lines<E>(
     stream: &UnixStream,
     requests: &[String],
@@ -411,21 +376,6 @@ fn exchange_lines<E>(
                 .and_then(|response| response["status"].as_str().map(Status::named))
                 .is_none_or(|status| status.is_some_and(Status::failed));
         }
-    })
-}
-
-/// Read one line, retaining partial bytes across socket timeouts. Invoke the
-/// consumer's callback on each timeout. False means EOF with no bytes remaining.
-/// The caller clears `line` before reading its next response.
-#[deprecated(note = "use `Connection::send` or `Connection::request`, which read the answers")]
-pub fn read_line(
-    reader: &mut impl BufRead,
-    line: &mut Vec<u8>,
-    mut on_timeout: impl FnMut() -> Result<()>,
-) -> Result<bool> {
-    wait_for_line(reader, line, &mut on_timeout).or_else(|waited| match waited {
-        Waited::Stopped(error) => Err(error),
-        Waited::Unreadable(error) => Err(error).context("cannot read the seat's response"),
     })
 }
 

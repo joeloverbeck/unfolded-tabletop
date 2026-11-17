@@ -4,11 +4,7 @@ mod common;
 
 use bevy::prelude::*;
 use common::{assert_hidden, assert_position, camera, measured};
-#[allow(deprecated)]
-use unfolded_tabletop::{
-    count_label::{self, CountLabelPlugin},
-    label_anchor::{LabelAnchor, LabelAnchorPlugin},
-};
+use unfolded_tabletop::label_anchor::{LabelAnchor, LabelAnchorPlugin};
 
 fn app_with_camera() -> (App, Entity) {
     let mut app = App::new();
@@ -158,28 +154,22 @@ fn without_one_3d_camera_nothing_changes() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn counts_and_caller_nodes_share_one_tracker_whichever_plugin_comes_first() {
-    for count_plugin_first in [true, false] {
-        let mut app = App::new();
-        if count_plugin_first {
-            app.add_plugins((CountLabelPlugin, LabelAnchorPlugin));
-        } else {
-            app.add_plugins((LabelAnchorPlugin, CountLabelPlugin));
-        }
-        app.world_mut().spawn(camera());
-        let token = app
-            .world_mut()
-            .spawn(Transform::from_xyz(0., 0., -10.))
-            .id();
-        let count = count_label::spawn(&mut app.world_mut().commands(), token, 7, Vec3::X);
-        app.world_mut().flush();
-        app.world_mut().entity_mut(count).insert(measured());
-        let caller = caller_node(&mut app, LabelAnchor::entity(token, Vec3::X));
-        app.update();
-        assert_position(&app, count, 505., 250.);
-        assert_position(&app, caller, 505., 250.);
-    }
+fn the_plugin_added_twice_installs_one_tracker() {
+    let systems = |app: &App| app.get_schedule(PostUpdate).unwrap().systems_len();
+    let mut once = App::new();
+    once.add_plugins(LabelAnchorPlugin);
+    let mut app = App::new();
+    app.add_plugins((LabelAnchorPlugin, LabelAnchorPlugin));
+    assert_eq!(systems(&app), systems(&once));
+
+    app.world_mut().spawn(camera());
+    let token = app
+        .world_mut()
+        .spawn(Transform::from_xyz(0., 0., -10.))
+        .id();
+    let label = caller_node(&mut app, LabelAnchor::entity(token, Vec3::X));
+    app.update();
+    assert_position(&app, label, 505., 250.);
 }
 
 #[test]

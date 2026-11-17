@@ -24,9 +24,8 @@ use bevy::{
     ui::UiSystems,
 };
 
-/// Installs the tracking system once, however many times it is added:
-/// `count_label::CountLabelPlugin` adds it too, so a game may add both in
-/// either order.
+/// Installs the tracking system once, however many times it is added, so several
+/// of a game's own plugins may each add it.
 pub struct LabelAnchorPlugin;
 
 #[derive(Resource)]

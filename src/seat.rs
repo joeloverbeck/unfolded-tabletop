@@ -285,13 +285,6 @@ pub trait Game {
     fn keys(&self) -> &[SeatKey] {
         &[]
     }
-    /// Kept only so that a game that answered it still builds; the seat decides
-    /// itself whether the render pipelines are ready ([`capture::Pipelines`]). A capture also
-    /// waits for this, which is ready unless the game says otherwise.
-    #[deprecated(note = "the seat decides itself whether the render pipelines are ready")]
-    fn pipelines_ready(&self, _world: &World) -> bool {
-        true
-    }
 }
 
 /// A table that shows nothing: its observation and table are null, it is at revision
@@ -1019,16 +1012,15 @@ impl<G: Game> Seat<G> {
             return self.refused(app, format!("Cannot create {}: {error}", parent.display()));
         }
         // Frozen updates draw anything the last request changed. The shared loop waits
-        // for the render pipelines, and for a game that still answers the deprecated
-        // `pipelines_ready`, then steps the seat's frozen clock until the file is written.
+        // for the render pipelines, then steps the seat's frozen clock until the file is
+        // written.
         let Self { game, exit, .. } = self;
-        #[allow(deprecated)]
         let captured = capture::when_ready(
             app,
             image,
             path,
             Instant::now() + CAPTURE_LIMIT,
-            |world| game.pipelines_ready(world),
+            |_| true,
             |app| step(game, exit, app, Duration::ZERO),
         );
         match captured {
