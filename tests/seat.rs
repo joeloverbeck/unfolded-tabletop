@@ -1,8 +1,8 @@
 //! The agent seat's protocol as Arkham had it at `0b8e6fb`, before its game-neutral
 //! half moved here, on a table that belongs to no game. Arkham's own tests hold the
-//! same protocol on its real table. The table here reads keys through Bevy's own
-//! keyboard input; its picking and its renderer are stand-ins, so no test needs a
-//! graphics adapter.
+//! same protocol on its real table. The table here reads keys and mouse buttons
+//! through Bevy's own input, and its camera is the real table camera; its picking and
+//! its renderer are stand-ins, so no test needs a graphics adapter.
 #![cfg(feature = "seat")]
 
 use bevy::{
@@ -17,7 +17,7 @@ use bevy::{
     picking::{
         backend::HitData,
         hover::HoverMap,
-        pointer::{PointerAction, PointerId, PointerInput},
+        pointer::{PointerAction, PointerButton, PointerId, PointerInput},
     },
     prelude::*,
     render::{
@@ -39,6 +39,9 @@ use std::{
     time::Duration,
 };
 use unfolded_tabletop::{
+    camera::{
+        Framing, Orbit, Pose, TableCamera, TableCameraPlugin, TableCameraSystems, TableFacts,
+    },
     capture::Pipelines,
     seat::{
         Admission, Focus, Game, Hit, Logical, Name, Observed, STEP, Seat, SeatKey, SeatedAgent,
@@ -68,6 +71,11 @@ struct Table {
     clicked: Vec<String>,
     wheels: Vec<(f32, f32)>,
     scrolls: Vec<(String, f32, f32)>,
+    /// The mouse buttons the table read going down and up through Bevy's mouse input.
+    buttons: Vec<String>,
+    /// Every press, release and cancel picking saw, and every move made while a
+    /// button was down, with the piece nearest the pointer.
+    gestures: Vec<String>,
     admission: Admission,
     /// What the stand-in render world finds of the pipelines on its next frames, one
     /// frame each. The last finding holds once these run out.
@@ -90,6 +98,8 @@ impl Default for Table {
             clicked: Vec::new(),
             wheels: Vec::new(),
             scrolls: Vec::new(),
+            buttons: Vec::new(),
+            gestures: Vec::new(),
             admission: Admission::Admitted,
             pipelines: VecDeque::new(),
             findings_left_when_asked: None,
@@ -243,8 +253,8 @@ fn read_keys(
 }
 
 /// Stands in for Bevy's picking, which needs a renderer: what is under the pointer
-/// after each pointer message, and a click when a press and its release land on the
-/// same nearest piece.
+/// after each pointer message, and a click when a primary press and its release land
+/// on the same nearest piece.
 fn pick(
     mut inputs: MessageReader<PointerInput>,
     mut hover: ResMut<HoverMap>,
@@ -252,6 +262,7 @@ fn pick(
     mut table: ResMut<Table>,
     mut held: Local<Option<&'static str>>,
     mut pressed_once: Local<bool>,
+    mut down: Local<Vec<PointerButton>>,
 ) {
     for input in inputs.read() {
         if matches!(input.action, PointerAction::Press(_)) {
@@ -276,9 +287,25 @@ fn pick(
                 .collect(),
         );
         let nearest = nearest.map(|(_, piece)| piece.name);
+        let over = nearest.unwrap_or("nothing");
         match input.action {
-            PointerAction::Press(_) => *held = nearest,
-            PointerAction::Release(_) => {
+            PointerAction::Press(button) => {
+                down.push(button);
+                table.gestures.push(format!("press {button:?} on {over}"));
+            }
+            PointerAction::Release(button) => {
+                down.retain(|held| *held != button);
+                table.gestures.push(format!("release {button:?} on {over}"));
+            }
+            PointerAction::Move { .. } if !down.is_empty() => {
+                table.gestures.push(format!("move on {over}"));
+            }
+            PointerAction::Cancel => table.gestures.push("cancel".into()),
+            _ => {}
+        }
+        match input.action {
+            PointerAction::Press(PointerButton::Primary) => *held = nearest,
+            PointerAction::Release(PointerButton::Primary) => {
                 if held.take().is_some_and(|name| Some(name) == nearest) {
                     table.clicked.extend(nearest.map(String::from));
                     table.revision += 1;
@@ -291,6 +318,16 @@ fn pick(
             }
             _ => {}
         }
+    }
+}
+
+/// The table's own mouse-button handling, behind Bevy's mouse input.
+fn read_buttons(buttons: Res<ButtonInput<MouseButton>>, mut table: ResMut<Table>) {
+    for button in buttons.get_just_pressed() {
+        table.buttons.push(format!("{button:?} down"));
+    }
+    for button in buttons.get_just_released() {
+        table.buttons.push(format!("{button:?} up"));
     }
 }
 
@@ -366,7 +403,7 @@ fn sit_with(image: Option<Handle<Image>>) -> Sitting {
         .add_message::<PointerInput>()
         .init_resource::<HoverMap>()
         .init_resource::<Table>()
-        .add_systems(Update, (read_keys, pick, read_wheel));
+        .add_systems(Update, (read_keys, pick, read_wheel, read_buttons));
     if image.is_some() {
         app.add_systems(Update, (render_world_reports, renderer_hands_back).chain());
     }
@@ -606,7 +643,7 @@ fn batch_form_is_ready_first_and_stops_acting_after_its_first_refusal() {
     assert_eq!(
         responses[2]["error"],
         format!(
-            "Skipped: an earlier request on this connection was refused, so its activations, keys and scrolls are no longer acted on. No input was sent. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
+            "Skipped: an earlier request on this connection was refused, so its activations, drags, keys and scrolls are no longer acted on. No input was sent. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
             responses[1]["error"].as_str().unwrap()
         )
     );
@@ -773,6 +810,303 @@ fn a_scroll_miss_stops_later_scrolls_and_actions_on_that_connection() {
         seat.ask(json!({"op":"scroll", "revision":0, "component":"modal", "y":-4}))["status"],
         "scrolled"
     );
+}
+
+#[test]
+fn a_drag_presses_moves_and_releases_one_button_through_mouse_and_picking_input() {
+    let mut seat = sit();
+    seat.show(piece("felt", Rect::new(0., 0., 40., 40.), 1.));
+
+    let response = seat.ask(
+        json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":10, "y":-8}),
+    );
+
+    assert_eq!(response["status"], "dragged", "{response}");
+    assert_eq!(response["ok"], true);
+    assert_eq!(response["button"], "right");
+    assert_eq!(response["from"], json!([20., 20.]));
+    assert_eq!(response["to"], json!([30., 12.]));
+    // Bevy's mouse input saw the button go down once and come up once.
+    assert_eq!(seat.table().buttons, ["Right down", "Right up"]);
+    let world = seat.app.world_mut();
+    assert_eq!(
+        world
+            .resource::<ButtonInput<MouseButton>>()
+            .get_pressed()
+            .count(),
+        0
+    );
+    // Picking saw one press, a move each step while it was held, and one release.
+    assert_eq!(
+        seat.table().gestures,
+        [
+            "press Secondary on felt",
+            "move on felt",
+            "move on felt",
+            "move on felt",
+            "move on felt",
+            "release Secondary on felt",
+        ]
+    );
+    let world = seat.app.world_mut();
+    let window = world
+        .query_filtered::<&Window, With<PrimaryWindow>>()
+        .single(world)
+        .unwrap();
+    assert_eq!(window.cursor_position(), Some(Vec2::new(30., 12.)));
+    // A secondary press and release is no click.
+    assert!(seat.table().clicked.is_empty());
+    assert_eq!(seat.table().revision, 0);
+
+    // Each named button is its own: middle is picking's middle, left its primary.
+    seat.table().gestures.clear();
+    let middle =
+        seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"middle", "y":4}));
+    assert_eq!(middle["status"], "dragged", "{middle}");
+    assert_eq!(seat.table().gestures[0], "press Middle on felt");
+    seat.table().gestures.clear();
+    let left =
+        seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"left", "x":4}));
+    assert_eq!(left["status"], "dragged", "{left}");
+    assert_eq!(seat.table().gestures[0], "press Primary on felt");
+    assert_eq!(
+        seat.table().buttons,
+        [
+            "Right down",
+            "Right up",
+            "Middle down",
+            "Middle up",
+            "Left down",
+            "Left up"
+        ]
+    );
+}
+
+#[test]
+fn a_drag_refuses_unknown_buttons_empty_or_outside_offsets_names_stale_and_busy_tables() {
+    let mut seat = sit();
+    seat.show(piece("felt", Rect::new(0., 0., 40., 40.), 1.));
+    for (request, error) in [
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"back", "x":5}),
+            "drag needs a button of left, right or middle, not \"back\". Nothing was pressed.",
+        ),
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"right"}),
+            "drag needs a nonzero finite offset in logical pixels. Nothing was pressed.",
+        ),
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "y":1e40}),
+            "drag needs a nonzero finite offset in logical pixels. Nothing was pressed.",
+        ),
+        (
+            json!({"op":"drag", "revision":0, "button":"right", "x":5}),
+            "drag needs exactly one of component or choice",
+        ),
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "choice":"x", "button":"right", "x":5}),
+            "drag needs exactly one of component or choice",
+        ),
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":-30}),
+            "The drag would end at (-10, 20), outside the 1280 by 720 window. Nothing was pressed.",
+        ),
+        // A window reports no cursor on its far edge.
+        (
+            json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":1260}),
+            "The drag would end at (1280, 20), outside the 1280 by 720 window. Nothing was pressed.",
+        ),
+        (
+            json!({"op":"drag", "revision":1, "component":"felt", "button":"right", "x":5}),
+            "Outdated: the request names revision 1, but the attempt is at revision 0. Observe again.",
+        ),
+    ] {
+        let response = seat.ask(request.clone());
+        assert_eq!(response["status"], "refused", "{request}");
+        assert_eq!(response["error"], error, "{request}");
+    }
+    seat.table().presenting = 2;
+    assert_eq!(
+        seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":5}))["status"],
+        "refused"
+    );
+    seat.table().presenting = 0;
+    // Something over the target when the pointer rests: nothing is pressed.
+    seat.show(piece("modal", Rect::new(0., 0., 40., 40.), 0.));
+    let missed =
+        seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":5}));
+    assert_eq!(missed["status"], "missed", "{missed}");
+    assert_eq!(missed["pressed"], false);
+    assert_eq!(
+        missed["error"],
+        "The pointer at (20, 20) is over \"modal\", not component felt. Nothing was pressed."
+    );
+    assert!(seat.table().buttons.is_empty());
+    assert!(seat.table().gestures.is_empty());
+}
+
+#[test]
+fn a_drag_whose_press_lands_on_something_else_lets_go_without_moving() {
+    let mut seat = sit();
+    seat.show(piece("felt", Rect::new(0., 0., 40., 40.), 1.));
+    seat.show(Piece {
+        late: true,
+        ..piece("curtain", Rect::new(0., 0., 40., 40.), 0.)
+    });
+
+    let missed =
+        seat.ask(json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":5}));
+
+    assert_eq!(missed["status"], "missed", "{missed}");
+    assert_eq!(missed["pressed"], true);
+    assert_eq!(
+        missed["error"],
+        "The press at (20, 20) landed on \"curtain\", not component felt."
+    );
+    assert_eq!(seat.table().buttons, ["Right down", "Right up"]);
+    assert_eq!(
+        seat.table().gestures,
+        [
+            "press Secondary on curtain",
+            "cancel",
+            "release Secondary on curtain"
+        ]
+    );
+}
+
+#[test]
+fn a_drag_is_skipped_after_a_refusal_and_its_miss_stops_later_presses() {
+    let mut seat = sit();
+    seat.show(piece("felt", Rect::new(0., 0., 40., 40.), 1.));
+    let input = concat!(
+        "{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}\n",
+        "{\"op\":\"drag\",\"revision\":0,\"component\":\"felt\",\"button\":\"right\",\"x\":5}\n",
+    );
+    let mut output = Vec::new();
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+    let responses = lines(&output);
+    assert_eq!(responses[2]["status"], "skipped", "{}", responses[2]);
+    assert_eq!(
+        responses[2]["error"],
+        format!(
+            "Skipped: an earlier request on this connection was refused, so its activations, drags, keys and scrolls are no longer acted on. No input was sent. Refused request: {{\"op\":\"key\",\"revision\":0,\"key\":\"F1\"}}. Reason: {}",
+            responses[1]["error"].as_str().unwrap()
+        )
+    );
+    assert!(seat.table().buttons.is_empty());
+
+    let mut seat = sit();
+    seat.show(piece("felt", Rect::new(0., 0., 40., 40.), 1.));
+    seat.show(piece("modal", Rect::new(0., 0., 40., 40.), 0.));
+    let input = concat!(
+        "{\"op\":\"drag\",\"revision\":0,\"component\":\"felt\",\"button\":\"right\",\"x\":5}\n",
+        "{\"op\":\"activate\",\"revision\":0,\"component\":\"modal\"}\n",
+        "{\"op\":\"drag\",\"revision\":0,\"component\":\"modal\",\"button\":\"right\",\"x\":5}\n",
+    );
+    let mut output = Vec::new();
+    seat.seat
+        .serve(&mut seat.app, input.as_bytes(), &mut output)
+        .unwrap();
+    assert_eq!(
+        lines(&output)
+            .iter()
+            .map(|r| r["status"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["ready", "missed", "skipped", "skipped"]
+    );
+    assert!(seat.table().buttons.is_empty());
+    assert!(seat.table().clicked.is_empty());
+}
+
+/// A home like Arkham's overview, as the camera's own tests have it.
+const HOME: Framing = Framing::new(Vec3::new(0.0, 0.0, 7.0), 72.0);
+
+/// The table with the table camera: felt fills the window, and a UI panel that is not
+/// part of the scene lies over one corner of it.
+fn sit_at_the_camera() -> Sitting {
+    let mut seat = sit();
+    seat.app
+        .add_plugins(TableCameraPlugin::<()>::default())
+        .insert_resource(Orbit::new(HOME))
+        // The stand-in picking finds what is under the pointer before the camera asks.
+        .configure_sets(Update, TableCameraSystems.after(pick));
+    seat.app
+        .world_mut()
+        .spawn((TableCamera, Transform::default()));
+    seat.show(piece("felt", Rect::new(0., 0., 1280., 720.), 2.));
+    seat.app.world_mut().spawn((
+        piece("panel", Rect::new(0., 0., 100., 100.), 0.),
+        Node::default(),
+    ));
+    seat
+}
+
+fn pose(seat: &Sitting) -> Pose {
+    seat.app.world().resource::<Orbit>().pose()
+}
+
+#[test]
+fn a_right_drag_on_the_scene_orbits_the_table_camera_and_one_from_ui_does_not() {
+    let mut seat = sit_at_the_camera();
+
+    let dragged = seat.ask(
+        json!({"op":"drag", "revision":0, "component":"felt", "button":"right", "x":40, "y":10}),
+    );
+
+    assert_eq!(dragged["status"], "dragged", "{dragged}");
+    // As the camera's own scene drag of (40, 10) logical pixels: yaw -0.24, pitch 1.04.
+    let moved = pose(&seat);
+    assert!((moved.yaw + 0.24).abs() < 0.00001, "yaw {}", moved.yaw);
+    assert!(
+        (moved.pitch - 1.04).abs() < 0.00001,
+        "pitch {}",
+        moved.pitch
+    );
+    assert_eq!(moved.distance, 72.0);
+
+    // A drag begun over a UI node outside the scene captures nothing.
+    let from_ui = seat.ask(
+        json!({"op":"drag", "revision":0, "component":"panel", "button":"right", "x":40, "y":10}),
+    );
+    assert_eq!(from_ui["status"], "dragged", "{from_ui}");
+    assert_eq!(pose(&seat), moved);
+
+    // The camera orbits on the right button only.
+    let left = seat.ask(
+        json!({"op":"drag", "revision":0, "component":"felt", "button":"left", "x":40, "y":10}),
+    );
+    assert_eq!(left["status"], "dragged", "{left}");
+    assert_eq!(pose(&seat), moved);
+}
+
+#[test]
+fn a_scroll_on_the_scene_zooms_the_table_camera_and_one_on_ui_or_a_taken_wheel_does_not() {
+    let mut seat = sit_at_the_camera();
+
+    let scrolled = seat.ask(json!({"op":"scroll", "revision":0, "component":"felt", "y":1}));
+
+    assert_eq!(scrolled["status"], "scrolled", "{scrolled}");
+    // One line in: 72 * 0.95.
+    assert!(
+        (pose(&seat).distance - 68.4).abs() < 0.0001,
+        "{:?}",
+        pose(&seat)
+    );
+    let zoomed = pose(&seat);
+
+    let on_ui = seat.ask(json!({"op":"scroll", "revision":0, "component":"panel", "y":1}));
+    assert_eq!(on_ui["status"], "scrolled", "{on_ui}");
+    assert_eq!(pose(&seat), zoomed);
+
+    seat.app.insert_resource(TableFacts {
+        takes_wheel: true,
+        ..default()
+    });
+    let taken = seat.ask(json!({"op":"scroll", "revision":0, "component":"felt", "y":1}));
+    assert_eq!(taken["status"], "scrolled", "{taken}");
+    assert_eq!(pose(&seat), zoomed);
 }
 
 #[test]
@@ -955,7 +1289,7 @@ fn a_miss_stops_the_connections_later_activations_and_keys() {
         responses[2]["error"]
             .as_str()
             .unwrap()
-            .starts_with("Skipped: an earlier request on this connection missed its target, so its activations, keys and scrolls are no longer acted on. No input was sent. Missed request: "),
+            .starts_with("Skipped: an earlier request on this connection missed its target, so its activations, drags, keys and scrolls are no longer acted on. No input was sent. Missed request: "),
         "{}",
         responses[2]["error"]
     );
