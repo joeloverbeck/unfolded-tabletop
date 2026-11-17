@@ -222,6 +222,47 @@ impl Game for Plain {
     }
 }
 
+/// [`Plain`] in all but [`Game::interrupts`], which it leaves to the seat's default.
+struct Uninterrupted;
+
+impl Game for Uninterrupted {
+    fn observe(&self, world: &mut World) -> Observed {
+        Plain.observe(world)
+    }
+
+    fn revision(&self, world: &mut World) -> u64 {
+        Plain.revision(world)
+    }
+
+    fn resolve(&self, world: &mut World, name: &Name) -> Result<Vec<Vec2>, String> {
+        Plain.resolve(world, name)
+    }
+
+    fn identify(&self, world: &mut World, entity: Entity) -> Hit {
+        Plain.identify(world, entity)
+    }
+
+    fn unsettled(&self, world: &mut World) -> Vec<String> {
+        Plain.unsettled(world)
+    }
+
+    fn advance(&self, world: &mut World, by: Duration) {
+        Plain.advance(world, by);
+    }
+
+    fn admission(&self, world: &World) -> Admission {
+        Plain.admission(world)
+    }
+
+    fn focus(&self, world: &mut World) -> Focus {
+        Plain.focus(world)
+    }
+
+    fn keys(&self) -> &[SeatKey] {
+        Plain.keys()
+    }
+}
+
 /// The keys this table reads, which are the keys the seat may press at it. Enter,
 /// Space and Y commit here: which keys do is each table's own.
 static KEYS: [SeatKey; 6] = [
@@ -397,12 +438,12 @@ fn renderer_hands_back(
     }
 }
 
-struct Sitting {
+struct Sitting<G = Plain> {
     app: App,
-    seat: Seat<Plain>,
+    seat: Seat<G>,
 }
 
-impl Sitting {
+impl<G: Game> Sitting<G> {
     fn ask(&mut self, request: Value) -> Value {
         self.seat.respond(&mut self.app, &request.to_string()).0
     }
@@ -419,6 +460,11 @@ impl Sitting {
 /// The table with no renderer, and an agent seated at it. With `image`, the seat has
 /// an image to capture and the stand-in renderer hands pictures back.
 fn sit_with(image: Option<Handle<Image>>) -> Sitting {
+    sit_at(Plain, image)
+}
+
+/// [`sit_with`], with `game` as the game's side of the seat.
+fn sit_at<G: Game>(game: G, image: Option<Handle<Image>>) -> Sitting<G> {
     let mut app = App::new();
     app.add_plugins((MinimalPlugins, InputPlugin))
         .add_message::<PointerInput>()
@@ -430,7 +476,7 @@ fn sit_with(image: Option<Handle<Image>>) -> Sitting {
     }
     app.world_mut().spawn((Window::default(), PrimaryWindow));
     let camera = app.world_mut().spawn(RenderTarget::default()).id();
-    let seat = Seat::new(Plain, &mut app, camera, image);
+    let seat = Seat::new(game, &mut app, camera, image);
     Sitting { app, seat }
 }
 
@@ -857,6 +903,31 @@ fn a_presenting_table_refuses_what_it_does_not_let_interrupt_it_and_any_stale_or
     assert_eq!(seen["observation"]["clicked"], json!([]), "{seen}");
     assert_eq!(seen["observation"]["keys"], json!([]));
     assert_eq!(seen["table"]["clock_nanos"], 0, "nothing stepped");
+    assert_eq!(seen["settled"], false);
+}
+
+#[test]
+fn with_no_interrupts_of_its_own_a_presenting_table_refuses_every_activation_and_key_as_busy() {
+    let mut seat = sit_at(Uninterrupted, None);
+    seat.show(piece("tray", Rect::new(0., 0., 20., 20.), 1.));
+    // What the table itself would take; only the game can let it through.
+    seat.table().interrupts = vec!["tray", "Tab"];
+    seat.table().presenting = 100;
+
+    for request in [
+        json!({"op": "activate", "revision": 0, "component": "tray"}),
+        json!({"op": "key", "revision": 0, "key": "Tab"}),
+    ] {
+        let refused = seat.ask(request.clone());
+        assert_eq!(refused["status"], "refused", "{request}: {refused}");
+        assert_eq!(
+            refused["error"], "The table is busy (presentation); settle first.",
+            "{request}"
+        );
+    }
+    let seen = seat.ask(json!({"op": "observe"}));
+    assert_eq!(seen["observation"]["clicked"], json!([]), "{seen}");
+    assert_eq!(seen["observation"]["keys"], json!([]));
     assert_eq!(seen["settled"], false);
 }
 
@@ -1949,26 +2020,6 @@ fn with_no_focus_of_its_own_a_table_has_nothing_focused_for_a_key_that_can_commi
     );
     assert_eq!(pressed["status"], "pressed", "{pressed}");
     assert_eq!(pressed["observation"]["keys"], json!(["Tab"]));
-}
-
-#[test]
-fn with_no_interrupts_of_its_own_a_presenting_table_refuses_every_key_as_busy() {
-    let (mut app, mut seat) = sit_bare(Keyed);
-    {
-        let mut table = app.world_mut().resource_mut::<Table>();
-        // What the table itself would take; only the game can let it through.
-        table.interrupts = vec!["Tab"];
-        table.presenting = 5;
-    }
-
-    let (refused, _) = seat.respond(&mut app, r#"{"op":"key","revision":0,"key":"Tab"}"#);
-
-    assert_eq!(refused["status"], "refused");
-    assert_eq!(
-        refused["error"],
-        "The table is busy (presentation); settle first."
-    );
-    assert_eq!(app.world().resource::<Table>().keys, Vec::<String>::new());
 }
 
 #[test]

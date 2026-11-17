@@ -8,9 +8,10 @@
 //! has keyboard focus, advance a clock of its own, name the keys the seat may press and
 //! let an activation or a key interrupt an unsettled table ([`Game::interrupts`]);
 //! otherwise nothing has focus, the seat's steps move Bevy's manual time, no key may be
-//! pressed and an unsettled table takes no input. The seat decides itself whether the render pipelines are ready before a
-//! capture ([`capture::Pipelines`]), and every response of a seated table states the
-//! revision, whether it is settled and what is pending. The table's surface, and the
+//! pressed and an unsettled table takes no input. The seat decides itself whether the
+//! render pipelines are ready before a capture ([`capture::Pipelines`]), and every
+//! response of a seated table states the revision, whether it is settled and what is
+//! pending. The table's surface, and the
 //! loop that waits for it to be ready and captures its image ([`capture::when_ready`]),
 //! come from [`crate::capture`].
 //!
@@ -60,8 +61,8 @@
 //!
 //! The protocol's guards live here, so every transport gets them: activations, points
 //! drags, scrolls and keys act only on a settled table, unless the game lets that
-//! activation or key interrupt it, and only on the revision they were decided on, a key that can
-//! commit presses only the control it names, and a connection stops pressing after its
+//! activation or key interrupt it, and only on the revision they were decided on; a
+//! key that can commit presses only the control it names; and a connection stops pressing after its
 //! first refusal or miss: its later activations, drags, keys and scrolls are skipped. A
 //! drag whose press lands on something else misses without moving: picking's press is
 //! cancelled before the button comes up where it went down, but Bevy's mouse input has
@@ -329,10 +330,13 @@ pub trait Game {
         &[]
     }
     /// Whether `input` may reach the table now although it is unsettled, because it
-    /// ends or hurries what the table is presenting rather than acting on the game.
-    /// The seat asks only while something is pending, and still refuses the request
-    /// for everything else it would refuse on a settled table, such as a revision the
-    /// attempt has moved past. Unless the game says otherwise, nothing may.
+    /// ends or hurries what the table is presenting rather than acting on the game,
+    /// as a game's own control for skipping a presentation does. Which inputs, and
+    /// when, is the game's policy: the seat reads no pending item and knows nothing
+    /// of presentations. It asks only while something is pending, and only for an
+    /// `activate` or a `key`, and still refuses the request for everything else it
+    /// would refuse on a settled table, such as a revision the attempt has moved past.
+    /// Unless the game says otherwise, nothing may.
     fn interrupts(&self, _world: &mut World, _input: Interrupt<'_>) -> bool {
         false
     }
