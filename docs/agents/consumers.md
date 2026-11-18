@@ -12,6 +12,8 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **Adding a protocol request or status.** A new `unfolded_seat_protocol::Request` or `Status` variant breaks a game that matches either type exhaustively. In each game's main checkout, list the files that name the crate, `git grep -l unfolded_seat_protocol origin/main -- '*.rs'`, and read each `match` on `Request` or `Status` in them for a `_` arm. Record the search in the CHANGELOG entry.
 
+**Changing a public item's signature.** A change to a public item's parameters or return type, such as `Seat::respond`'s (#79), breaks each game that calls it. In each game's main checkout, `git grep -n '\.<item>(' origin/main -- '*.rs'`, and read each match: a game's own method of the same name is no call. Record the callers in the CHANGELOG entry. Each caller's adoption is part of the work, checked against the branch before the change merges.
+
 **Rewriting an adapter.** List the old file's user-facing strings (`git show main:<file> | grep -oE '"[A-Z][^"]+ [^"]+"'`) and account for each one in the pull request: kept, moved, or changed and why.
 
 **Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted. When a manifest was left behind at an earlier move, it refuses and names each pin; `--align` moves them all.

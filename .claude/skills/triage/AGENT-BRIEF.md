@@ -36,6 +36,10 @@ The agent needs to know when it's done. Every agent brief must have concrete, te
 
 State what is out of scope. This prevents the agent from gold-plating or making assumptions about adjacent features.
 
+### Consumers that must adopt
+
+When the change alters a public item a game calls or matches, find the callers with `docs/agents/consumers.md` ("Changing a public item's signature"). The brief lists each calling game and makes its adoption part of the work, since `/implement` checks each one against the branch before the change merges. It also names each game whose work-item limit needs the owner's ruling for that adoption, so the owner rules at triage rather than mid-implementation.
+
 ## Template
 
 ```markdown
