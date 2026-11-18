@@ -47,9 +47,9 @@ fn card_silhouettes_keep_image_scale_and_face_outward() {
             let positions = positions(&mesh);
             let normals = normals(&mesh);
             let indices: Vec<_> = mesh.indices().unwrap().iter().collect();
-            assert_eq!(indices.len() % 3, 0);
-            for triangle in indices.chunks_exact(3) {
-                let [a, b, c] = [triangle[0], triangle[1], triangle[2]];
+            let (triangles, rest) = indices.as_chunks::<3>();
+            assert!(rest.is_empty());
+            for &[a, b, c] in triangles {
                 let cross = (positions[b] - positions[a]).cross(positions[c] - positions[a]);
                 assert!(
                     cross.dot(normals[a]) > 0.,
