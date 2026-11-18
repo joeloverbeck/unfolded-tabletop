@@ -24,6 +24,7 @@ To withdraw a change here, first revert each adopting consumer's adapter and its
 | `seat::ui_target` | Arkham `71281007a41905bf25a95a29486e10fb11b0a83f`: `src/gathering_tabletop/seat.rs` | #15 |
 | `unfolded-seat-protocol` | Split from `seat` here | #34 |
 | `unfolded-seat-client` | Arkham `8301466b5bbc20b99411901cfcd6db2b29865431`: `tools/src/seat.rs`; and `seat-wait`'s single-request exchange at `c73485c3f066442664073d276fa4d419a3e75cf3` | #17, [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241), [Cuba Libre #10](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/10); #34 |
+| `window_size` | Arkham `985a5b963612fe882115e1c8894ee802f2d37109`: `WindowSizeLog` and `log_window_size` in `src/tabletop_health.rs` | #83, [Arkham #279](https://github.com/joeloverbeck/arkham-unfolded/issues/279), [Cuba Libre #111](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/111) |
 | `held-start` | Written here | `fcdda27`; captures #52 |
 | `unfolded-dev-tools` | Arkham `d0b57009ba037ca8756a4f2756dcb550d8634773` | #27, [Arkham #249](https://github.com/joeloverbeck/arkham-unfolded/issues/249), [Netrunner #37](https://github.com/joeloverbeck/netrunner-unfolded/issues/37); tests #30 |
 | `compare-captures` | Written here | #52 |
