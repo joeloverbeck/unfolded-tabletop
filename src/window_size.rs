@@ -2,8 +2,8 @@
 //! tabletop health plugin.
 //!
 //! A desktop that scales a window can make the image the renderer fills far larger
-//! than the display: at GNOME's 125% on a 3840×2160 panel, Xwayland gives a game
-//! scale factor 2 and a window up to 6144×3456. The size a table renders at bears on
+//! than the display: on one 3840×2160 panel at GNOME's 125%, Xwayland gives a game
+//! scale factor 2 and a window of up to 6144×3456 (#83). The size a table renders at bears on
 //! its GPU load and on judging its layout at a player's display, so a game's log
 //! should say it.
 //!
@@ -15,16 +15,18 @@
 //! settles logs nothing. The hold is timed by Bevy's [`Time<Real>`], which
 //! `TimePlugin` keeps, as `DefaultPlugins` and `MinimalPlugins` include it.
 //!
-//! With no primary window, as at the agent seat or with
-//! [`capture::windowless`](crate::capture::windowless), it logs nothing. Other
-//! windows are never read.
+//! Other windows are never read, and with no primary window it logs nothing. The
+//! agent seat's surface ([`capture::install`](crate::capture::install)) is a logical
+//! primary window, so a table that adds the plugin at the seat logs the surface's
+//! size there: add it to your windowed table only.
 //!
 //! What it leaves to you: whether a table adds it, and the log subscriber and filter
 //! that decide where the line goes. Bevy's `LogPlugin` shows `info` by default.
 //!
-//! Tests hold the settle rule, one line for an `App` whose window holds and another
-//! when it settles at a new size, both under `Time<Real>` set by hand, and no line
-//! without a primary window. No test opens a real window or reads a desktop's scale.
+//! Tests hold the settle rule; and, for an `App` under `Time<Real>` set by hand, no
+//! line before the primary window's size has held, one line once it has, another
+//! when it settles at a new size, and none when the only window is not primary. No
+//! test opens a real window or reads a desktop's scale.
 use bevy::{prelude::*, window::PrimaryWindow};
 use std::time::Duration;
 
