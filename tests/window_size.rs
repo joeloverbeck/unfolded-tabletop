@@ -43,7 +43,7 @@ impl Written {
 
 /// Runs `frames` with every log line written to `written`. The subscriber is
 /// the test thread's own, so `Update` runs on that thread.
-fn logged(written: &Written, frames: impl FnOnce()) {
+fn run_logging_to(written: &Written, frames: impl FnOnce()) {
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
         .without_time()
@@ -99,7 +99,7 @@ fn the_primary_window_size_is_logged_once_it_has_held_for_half_a_second() {
     let written = Written::default();
     let mut before = vec![];
     let mut settled = vec![];
-    logged(&written, || {
+    run_logging_to(&written, || {
         table.frame_at(0);
         table.frame_at(250);
         table.frame_at(499);
@@ -140,7 +140,7 @@ fn nothing_is_logged_without_a_primary_window() {
     // A window that is not the primary one, as a game's second window would be.
     table.app.world_mut().spawn(Window::default());
     let written = Written::default();
-    logged(&written, || {
+    run_logging_to(&written, || {
         for milliseconds in [0, 500, 1_000, 5_000] {
             table.frame_at(milliseconds);
         }

@@ -84,7 +84,7 @@ impl WindowSizeLog {
 fn log_window_size(
     window: Query<&Window, With<PrimaryWindow>>,
     time: Res<Time<Real>>,
-    mut log: Local<WindowSizeLog>,
+    mut sizes: Local<WindowSizeLog>,
 ) {
     let Ok(window) = window.single() else {
         return;
@@ -94,7 +94,7 @@ fn log_window_size(
         height: window.physical_height(),
         scale_factor: window.scale_factor(),
     };
-    if let Some(size) = log.observe(size, time.elapsed()) {
+    if let Some(size) = sizes.observe(size, time.elapsed()) {
         info!(
             "Window: {}×{} physical pixels at scale factor {}",
             size.width, size.height, size.scale_factor
