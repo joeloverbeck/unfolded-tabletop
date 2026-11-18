@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Wait for this machine's build slot: no `cargo` process for 30 seconds, and no
+# check's scope (`run-*.scope`) holding 2 GB or more. One Bevy build runs at a time
+# across every session on the machine, since a build, its linkers and its GPU tests
+# can exhaust a session's memory scope. Run it before each heavy command:
+# `scripts/build-slot && <command>`. It says once on standard error that it waits.
+set -euo pipefail
+
+scopes=/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice
+
+busy() {
+  # By name: `pgrep -f` would match this script's own command line.
+  pgrep -x cargo >/dev/null && return 0
+  local scope
+  for scope in "$scopes"/run-*.scope; do
+    [[ -r $scope/memory.current ]] || continue
+    (($(<"$scope/memory.current") >= 2 * 1024 ** 3)) && return 0
+  done
+  return 1
+}
+
+quiet=0
+told=
+while ((quiet < 3)); do
+  if busy; then
+    quiet=0
+    if [[ -z $told ]]; then
+      echo "build-slot: another build is running; waiting" >&2
+      told=1
+    fi
+  else
+    quiet=$((quiet + 1))
+  fi
+  sleep 10
+done
