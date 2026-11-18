@@ -45,3 +45,4 @@ On 2026-11-14 the owner accepted a bounded `EVID-6` extension, recorded in [Cuba
 | `unfolded-hover` | Cuba Libre extension | #18 |
 | `unfolded-seat-client` | Cuba Libre extension | #17, [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) |
 | `label_anchor` | Cuba Libre extension, beside the two-consumer specialization | #35 |
+| `window_size` | Cuba Libre extension: Cuba Libre logs through it beside Arkham | #83 |
