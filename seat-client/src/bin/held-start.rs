@@ -29,7 +29,9 @@ absolute, and runs the command with no standard input. A socket path holds at mo
 107 bytes, so keep <out-dir> short. It writes, beside each other in <out-dir>:
 
   <case>.stdout, <case>.stderr  the launching command's standard output and error
-  <case>.seat.log               the held seat's log
+  <case>.seat.log               the held seat's log: the standard error of the
+                                process the launcher starts to hold the seat, the
+                                game's log lines included, in Bevy's terminal colours
   <case>.record                 the record, which is also printed
 
 The record names the command; the executable it ran, by its path and SHA-256, so a

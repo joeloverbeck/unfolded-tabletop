@@ -41,6 +41,7 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **One-shot capture:** the ignored art test captures the pouch through `capture::when_ready`. Name the test after `--`, not before it, and set `ARKHAM_POUCH_RENDER_DIR` to a directory that does not exist yet, which the test creates: `ARKHAM_GATHERING_TEST_ASSETS=<collection> ARKHAM_POUCH_RENDER_DIR=<new dir> scripts/dev cargo test --locked --features tabletop --lib -- --ignored --exact gathering_tabletop::art::tests::real_collection_loads_every_verified_image_font_and_pouch`.
 - **Merge:** after CI's "Rust checks" passes, use `scripts/tools merge-reviewed --pr <n> --head <sha> --base <main sha>`. Auto-close is off. Close an accepted issue with `scripts/tools publish comment --issue <n> --body-file <f> --close` (`docs/agents/github-administration.md`).
 - **Public text:** issues, comments and PR bodies go through `scripts/tools publish` (`issue`, `comment`, `pr-body`), whose preflight refuses private path forms. Name an evidence file by its case or file name, never by a `local/…` path.
+- **Tools in a new worktree:** the first `scripts/tools` call builds `arkham-tools` into `target/agent-tools`, which takes about two minutes. Run it after `scripts/build-slot`.
 - **Work-item limit:** none of its own.
 - **Pins a whole response:** `gathering_tabletop::seat::tests::nothing_hidden_appears_in_what_the_seat_reports` pins the response's top-level keys. A new response field changes it.
 
@@ -62,6 +63,7 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **Loops:** `native_controls_hover_camera_finish_and_process_restarts` and `native_terror_bells_loop_seamlessly_out_of_step_and_hover_their_space` cross the water and Terror loops with `advance`, two steps a request, and check that each reply took its steps on a settled table (#62).
 - **Native capture:** the ignored native regression, `CUBA_TEST_CARDS=<cards> cargo test --locked --features tabletop --test native -- --ignored --test-threads=1`, captures through the seat. Set `CUBA_NATIVE_EVIDENCE` to a new directory.
 - **Merge:** `gh pr merge --merge --match-head-commit <sha>`, after CI passes. `main` requires the branch to be up to date: when `main` moves, merge it in, run `scripts/check` again and wait for CI.
+- **Record:** each issue or pull request names the revisions of Arkham, mudsong, Netrunner and this repository that it inspected, the source locations, and a disposition (its foundation 3, "Before every feature"). Its pull request also names the constitution rules consulted.
 - **Work-item limit:** none of its own.
 
 ## mudsong (private)
