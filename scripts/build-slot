@@ -1,35 +1,64 @@
 #!/usr/bin/env bash
-# Wait for this machine's build slot: no `cargo` process for 30 seconds, and no
-# check's scope (`run-*.scope`) holding 2 GB or more. One Bevy build runs at a time
-# across every session on the machine, since a build, its linkers and its GPU tests
-# can exhaust a session's memory scope. Run it before each heavy command:
-# `scripts/build-slot && <command>`. It says once on standard error that it waits.
+# Wait for this machine's build slot: for 30 seconds, no `cargo` process whose tree
+# (cargo, rustc, linkers, test executables) holds 512 MB or more, and no check's scope
+# (`run-*.scope`) holding 2 GB or more. One Bevy build runs at a time across every
+# session on the machine, since a build, its linkers and its GPU tests can exhaust a
+# session's memory scope. A run of small builds, such as one short non-Bevy test
+# after another, holds less and does not hold the slot (#83 retro). Run it before
+# each heavy command: `scripts/build-slot && <command>`. On standard error it names
+# what holds the slot when it starts waiting, and again every five minutes.
 set -euo pipefail
 
 scopes=/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice
+holder=
+
+# Resident memory, in KiB, of process $1 and every process below it.
+tree_rss() {
+  ps -e -o pid=,ppid=,rss= | awk -v root="$1" '
+    { parent[$1] = $2; rss[$1] = $3 }
+    END {
+      for (p in rss) {
+        q = p
+        while (q != root && q in parent && q > 1) q = parent[q]
+        if (q == root) total += rss[p]
+      }
+      print total + 0
+    }'
+}
 
 busy() {
+  local pid kib scope
   # By name: `pgrep -f` would match this script's own command line.
-  pgrep -x cargo >/dev/null && return 0
-  local scope
+  for pid in $(pgrep -x cargo || true); do
+    kib=$(tree_rss "$pid")
+    if ((kib >= 512 * 1024)); then
+      holder="cargo in $(readlink "/proc/$pid/cwd" 2>/dev/null || echo "process $pid"), $((kib / 1024)) MB"
+      return 0
+    fi
+  done
   for scope in "$scopes"/run-*.scope; do
     [[ -r $scope/memory.current ]] || continue
-    (($(<"$scope/memory.current") >= 2 * 1024 ** 3)) && return 0
+    if (($(<"$scope/memory.current") >= 2 * 1024 ** 3)); then
+      holder="${scope##*/}, $(($(<"$scope/memory.current") / 1024 ** 2)) MB"
+      return 0
+    fi
   done
   return 1
 }
 
 quiet=0
-told=
+waited=0
+told=-300
 while ((quiet < 3)); do
   if busy; then
     quiet=0
-    if [[ -z $told ]]; then
-      echo "build-slot: another build is running; waiting" >&2
-      told=1
+    if ((waited - told >= 300)); then
+      echo "build-slot: waited ${waited}s so far for $holder" >&2
+      told=$waited
     fi
   else
     quiet=$((quiet + 1))
   fi
   sleep 10
+  waited=$((waited + 10))
 done

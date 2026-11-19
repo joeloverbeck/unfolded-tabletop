@@ -21,7 +21,7 @@ The one immutable Git `rev` at which a consumer depends on every package it take
 _Avoid_: version, release
 
 **Agent seat**:
-An agent sitting at a game's real table with no window, through one JSON request and one JSON response per line.
+An agent sitting at a game's real table with no window, through one JSON request and one JSON response per line. Its table still has a logical primary window with nothing behind it (`capture::install`), so code that reads the primary window runs at the seat too.
 _Avoid_: bot, harness, driver
 
 **Held start**:
