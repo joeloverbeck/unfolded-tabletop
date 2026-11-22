@@ -479,3 +479,99 @@ fn wheel_capture_and_distance_limits_are_preserved() {
     }
     assert_eq!(orbit.pose().pitch, 0.35);
 }
+
+#[test]
+fn a_configured_home_pitch_applies_at_start_and_when_home_is_pressed() {
+    let mut orbit = Orbit::new(HOME)
+        .with_navigation(0.2, 0.1..=0.8, 12.0..=80.0)
+        .unwrap();
+    assert_eq!(orbit.pose().pitch, 0.2);
+    assert_eq!(orbit.pose().distance, 72.0);
+
+    let mut input = Inputs::default();
+    input.keys.press(KeyCode::ArrowUp);
+    input.keys.press(KeyCode::ArrowRight);
+    input.step(&mut orbit);
+    assert!((orbit.pose().pitch - 0.27).abs() < 0.000_001);
+    assert!((orbit.pose().yaw + 0.1).abs() < 0.000_001);
+
+    orbit.set_home(ASIDE);
+    input.keys.reset_all();
+    input.keys.press(KeyCode::Home);
+    let step = input.step(&mut orbit);
+    assert_eq!(
+        orbit.pose(),
+        Pose {
+            yaw: 0.0,
+            pitch: 0.2,
+            distance: 30.0,
+            target: Vec3::new(-2.0, 0.0, -6.0),
+        }
+    );
+    // A distance of 30 at 0.2 radians above the target on the positive Z side.
+    let eye = Vec3::new(-2.0, 5.960_08, 23.402);
+    assert!(step.transform.translation.abs_diff_eq(eye, 0.000_1));
+}
+
+#[test]
+fn a_configured_pitch_range_limits_drag_and_keyboard_turning() {
+    let mut orbit = Orbit::new(HOME)
+        .with_navigation(0.2, 0.1..=0.8, 12.0..=80.0)
+        .unwrap();
+    let mut input = Inputs::default();
+
+    input.buttons.press(MouseButton::Right);
+    input.step(&mut orbit);
+    input.move_cursor(Vec2::new(0.0, -100.0));
+    input.step(&mut orbit);
+    assert_eq!(orbit.pose().pitch, 0.1);
+    input.move_cursor(Vec2::new(0.0, 250.0));
+    input.step(&mut orbit);
+    assert_eq!(orbit.pose().pitch, 0.8);
+
+    input.buttons.release(MouseButton::Right);
+    input.keys.press(KeyCode::ArrowDown);
+    for _ in 0..20 {
+        input.step(&mut orbit);
+    }
+    assert_eq!(orbit.pose().pitch, 0.1);
+
+    input.keys.reset_all();
+    input.keys.press(KeyCode::ArrowUp);
+    for _ in 0..20 {
+        input.step(&mut orbit);
+    }
+    assert_eq!(orbit.pose().pitch, 0.8);
+}
+
+#[test]
+fn a_configured_distance_range_limits_wheel_and_keyboard_zoom() {
+    let mut orbit = Orbit::new(DETAIL)
+        .with_navigation(0.2, 0.1..=0.8, 18.0..=22.0)
+        .unwrap();
+    let mut input = Inputs {
+        scroll_y: -100.0,
+        ..default()
+    };
+    input.step(&mut orbit);
+    assert_eq!(orbit.pose().distance, 22.0);
+
+    input.scroll_y = 100.0;
+    input.step(&mut orbit);
+    assert_eq!(orbit.pose().distance, 18.0);
+
+    input.keys.press(KeyCode::Minus);
+    for _ in 0..10 {
+        input.step(&mut orbit);
+        assert!((18.0..=22.0).contains(&orbit.pose().distance));
+    }
+    assert_eq!(orbit.pose().distance, 22.0);
+
+    input.keys.reset_all();
+    input.keys.press(KeyCode::Equal);
+    for _ in 0..10 {
+        input.step(&mut orbit);
+        assert!((18.0..=22.0).contains(&orbit.pose().distance));
+    }
+    assert_eq!(orbit.pose().distance, 18.0);
+}
