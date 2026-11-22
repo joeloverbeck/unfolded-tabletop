@@ -41,6 +41,7 @@ On 2026-11-14 the owner accepted a bounded `EVID-6` extension, recorded in [Cuba
 | `unfolded-dev-tools` | Two-consumer specialization; `compare-captures` does not widen it, since Cuba Libre and mudsong run it from a checkout of this repository and neither pins nor depends on it | #27, #52 |
 | `unfolded-random`'s generator, index and shuffle | Third-consumer waiver | this file |
 | `capture` | Third-consumer waiver | this file |
+| `slab` | Third-consumer waiver | #89 |
 | `seat`, `unfolded-seat-protocol` | Third-consumer waiver, read on 2026-11-13 as covering the seat as one mechanism | this file, #34 |
 | `unfolded-hover` | Cuba Libre extension | #18 |
 | `unfolded-seat-client` | Cuba Libre extension | #17, [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) |

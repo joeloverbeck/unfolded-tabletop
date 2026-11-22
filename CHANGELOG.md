@@ -6,6 +6,7 @@ What a consumer needs to know when it moves its pin. Each entry names the issue 
 
 ## Unreleased
 
+- `slab::spawn` assembles a consumer-owned solid and two outward picture faces under an existing entity. Supply the solid and flat face meshes, both materials, the slab center, the face offset and picking. The rear face turns so the same picture reads upright from either side (#89).
 - `camera::Orbit::with_navigation` sets the Home pitch in radians and inclusive limits for manual turning and zoom. Use `Orbit::new` for the historical settings (#88).
 - `window_size::WindowSizeLogPlugin` logs `Window: {W}×{H} physical pixels at scale factor {S}` at `info` each time the primary window's size and scale factor hold for 500 ms, so a game's log says what size its table renders at. It times the hold with Bevy's `Time<Real>` and reads only the window marked `PrimaryWindow`. Add it to your windowed table only: the seat's surface is a logical primary window, whose size it would log. It logs the same line, by the same rule, as Arkham's tabletop health plugin (#83).
 - **Breaking:** every workspace package needs Rust 1.100.0. Each one's `rust-version` is `1.100.0`, so Cargo refuses to build it with an older compiler, and this repository's `rust-toolchain.toml` pins 1.100.0. Move your own toolchain to 1.100.0 when you move your pin of this repository (#84).
