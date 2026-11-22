@@ -1,4 +1,4 @@
-//! A card's movement between two poses, lifted and turned on the way.
+//! A card's movement to a resting pose, lifted and turned on the way.
 //!
 //! [`CardMove::pose`] is a pure function of the time since the move began, read
 //! from whatever clock the consumer keeps: a frame clock, a presentation clock
@@ -8,20 +8,30 @@
 //! begins, what happens when one lands, and the lift each takes are the game's.
 //!
 //! Poses are in the parent's coordinates, with +Y up, as cards lie in XZ in
-//! [`crate::card`]. The path eases with smoothstep. A lift raises the card on a
-//! half sine over the move's eased progress, and can sway it about +Y and +Z at
-//! the top of its arc. A turn spins it about an axis of the parent's over a
-//! share of the time, after the card's own rotation, as a card turning over
-//! about its length does.
+//! [`crate::card`]. The card travels from a starting position to its resting
+//! pose and keeps that pose's rotation and scale on the way; only a [`Turn`] and
+//! a [`Lift`]'s sway rotate it. The path eases with smoothstep. A lift raises
+//! the card on a half sine over the move's eased progress, and can sway it about
+//! +Y and +Z at the top of its arc. A turn spins it about an axis of the
+//! parent's over a share of the time, after the card's own rotation, as a card
+//! turning over about its length does.
+//!
+//! Nothing is checked or refused. Give [`Turn::axis`] as a unit vector, a
+//! [`Departure::share`] from 0 up to but not including 1, and a duration that is
+//! not negative; no test holds a pose for other values. No test holds a turn
+//! that would end after the move does (`begins + lasts` above 1): its rest still
+//! takes the turn's final angle.
 
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
-/// One card's movement from one pose to another over a duration in seconds.
+/// One card's movement from a position to a resting pose over a duration in
+/// seconds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CardMove {
-    /// Where the card is at time zero, before any turn.
-    pub from: Transform,
+    /// Where the card is at time zero, in the resting pose's rotation and
+    /// scale and before any turn.
+    pub from: Vec3,
     /// Where the card rests at the end, before any turn.
     pub to: Transform,
     /// Seconds from the first pose to the second. Zero is already at rest.
@@ -34,34 +44,42 @@ pub struct CardMove {
     pub turn: Option<Turn>,
 }
 
-/// The rise of a card on its way: `height` at the middle of the move, and a
-/// sway in radians about +Y (`yaw`) and +Z (`roll`) at that height, both
-/// following the same half sine down to nothing as the card lands.
+/// The rise of a card on its way, following a half sine of the move's eased
+/// progress: nothing at either end and the full amount at the middle.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Lift {
+    /// The rise along +Y at the middle of the move.
     pub height: f32,
+    /// The sway about +Y at that height, in radians.
     pub yaw: f32,
+    /// The sway about +Z at that height, in radians.
     pub roll: f32,
 }
 
-/// A slide by `offset` over the first `share` of the move's time, a fraction
-/// from 0 to 1. The crossing to the second pose takes the rest of the time and
-/// carries the offset away with it.
+/// A first slide off a pile. The crossing to the resting pose takes the rest of
+/// the time and carries the offset away with it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Departure {
+    /// How far the card slides from its first position.
     pub offset: Vec3,
+    /// The fraction of the move's time the slide takes, from 0 up to but not
+    /// including 1.
     pub share: f32,
 }
 
-/// A spin about `axis`, a unit vector in the parent's coordinates, from angle
-/// `from` to angle `to` in radians. It begins after the fraction `begins` of
-/// the move's time and lasts the fraction `lasts`, easing with smoothstep.
+/// A spin about an axis of the parent's, easing with smoothstep over a share
+/// of the move's time.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Turn {
+    /// The axis, a unit vector in the parent's coordinates.
     pub axis: Vec3,
+    /// The angle in radians before the turn begins.
     pub from: f32,
+    /// The angle in radians once the turn ends, kept at rest.
     pub to: f32,
+    /// The fraction of the move's time before the turn begins.
     pub begins: f32,
+    /// The fraction of the move's time the turn takes.
     pub lasts: f32,
 }
 
@@ -106,14 +124,15 @@ impl Turn {
         self.from * (1. - turned) + self.to * turned
     }
 
-    fn rotation(&self, t: f32) -> Quat {
-        Quat::from_axis_angle(self.axis, self.angle(t))
+    fn rotation(&self, angle: f32) -> Quat {
+        Quat::from_axis_angle(self.axis, angle)
     }
 }
 
 impl CardMove {
-    /// A flat move with no lift, departure or turn.
-    pub fn new(from: Transform, to: Transform, duration: f32) -> Self {
+    /// A flat move with no lift, departure or turn, from `from` to rest at
+    /// `to`. A card that turns where it lies starts at `to.translation`.
+    pub fn new(from: Vec3, to: Transform, duration: f32) -> Self {
         Self {
             from,
             to,
@@ -124,10 +143,12 @@ impl CardMove {
         }
     }
 
+    /// The same move, rising and swaying by `lift` on its way.
     pub fn lifted(self, lift: Lift) -> Self {
         Self { lift, ..self }
     }
 
+    /// The same move, sliding by `departure` before it crosses.
     pub fn departing(self, departure: Departure) -> Self {
         Self {
             departure: Some(departure),
@@ -135,6 +156,7 @@ impl CardMove {
         }
     }
 
+    /// The same move, spinning by `turn` on its way.
     pub fn turned(self, turn: Turn) -> Self {
         Self {
             turn: Some(turn),
@@ -147,11 +169,11 @@ impl CardMove {
         elapsed >= self.duration
     }
 
-    /// The pose the card lands in: the second pose, turned to the turn's end.
+    /// The pose the card lands in: the resting pose, turned to the turn's end.
     pub fn rest(&self) -> Transform {
         match self.turn {
             Some(turn) => Transform {
-                rotation: Quat::from_axis_angle(turn.axis, turn.to) * self.to.rotation,
+                rotation: turn.rotation(turn.to) * self.to.rotation,
                 ..self.to
             },
             None => self.to,
@@ -167,27 +189,16 @@ impl CardMove {
         let t = (elapsed / self.duration).clamp(0., 1.);
         let (start, carry) = match self.departure {
             Some(departure) if departure.share > 0. => (
-                self.from.translation.lerp(
-                    self.from.translation + departure.offset,
-                    ease(t / departure.share),
-                ),
+                self.from
+                    .lerp(self.from + departure.offset, ease(t / departure.share)),
                 ease((t - departure.share) / (1. - departure.share)),
             ),
-            _ => (self.from.translation, ease(t)),
+            _ => (self.from, ease(t)),
         };
         let mut translation = start.lerp(self.to.translation, carry);
-        let mut rotation = if self.from.rotation == self.to.rotation {
-            self.to.rotation
-        } else {
-            self.from.rotation.slerp(self.to.rotation, carry)
-        };
-        let scale = if self.from.scale == self.to.scale {
-            self.to.scale
-        } else {
-            self.from.scale.lerp(self.to.scale, carry)
-        };
+        let mut rotation = self.to.rotation;
         if let Some(turn) = self.turn {
-            rotation = turn.rotation(t) * rotation;
+            rotation = turn.rotation(turn.angle(t)) * rotation;
         }
         if self.lift != Lift::NONE {
             let rise = (PI * ease(t)).sin();
@@ -199,7 +210,7 @@ impl CardMove {
         Transform {
             translation,
             rotation,
-            scale,
+            scale: self.to.scale,
         }
     }
 }

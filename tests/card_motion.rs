@@ -1,5 +1,5 @@
 #![cfg(feature = "render")]
-//! A card's movement between two poses at the public interface. Expectations
+//! A card's movement to a resting pose at the public interface. Expectations
 //! come from hand calculation of the smoothstep and the lift's half sine, and
 //! from Arkham Unfolded's own draw, move and location-flip formulas at
 //! `1dab37d`, transcribed below as the behaviour its migration must keep.
@@ -41,7 +41,7 @@ fn up(pose: Transform) -> Vec3 {
 fn a_flat_move_eases_from_the_first_pose_to_the_second() {
     let from = Transform::from_xyz(1., 0., 2.).with_rotation(Quat::from_rotation_y(0.3));
     let to = Transform::from_xyz(5., 0., -2.).with_rotation(Quat::from_rotation_y(0.3));
-    let motion = CardMove::new(from, to, 0.35);
+    let motion = CardMove::new(from.translation, to, 0.35);
     assert_pose(motion.pose(0.), from);
     // Halfway in time is halfway in place: smoothstep(0.5) = 0.5.
     assert_pose(
@@ -61,7 +61,7 @@ fn a_flat_move_eases_from_the_first_pose_to_the_second() {
 fn the_clock_is_the_consumers_and_clamps_at_both_ends() {
     let from = Transform::from_xyz(0., 0., 0.);
     let to = Transform::from_xyz(2., 0., 0.);
-    let motion = CardMove::new(from, to, 0.7).lifted(Lift::arc(0.5));
+    let motion = CardMove::new(from.translation, to, 0.7).lifted(Lift::arc(0.5));
     assert_eq!(motion.pose(-1.), motion.pose(0.));
     assert_eq!(motion.pose(0.), from);
     assert_eq!(motion.pose(0.7), to);
@@ -78,16 +78,16 @@ fn the_clock_is_the_consumers_and_clamps_at_both_ends() {
 
 #[test]
 fn a_move_with_no_duration_is_already_at_rest() {
-    let motion = CardMove::new(Transform::default(), Transform::from_xyz(1., 2., 3.), 0.)
-        .lifted(Lift::arc(1.));
+    let motion =
+        CardMove::new(Vec3::ZERO, Transform::from_xyz(1., 2., 3.), 0.).lifted(Lift::arc(1.));
     assert_eq!(motion.pose(0.), Transform::from_xyz(1., 2., 3.));
     assert!(motion.finished(0.));
 }
 
 #[test]
 fn the_lift_peaks_halfway_and_lands_flat() {
-    let motion = CardMove::new(Transform::default(), Transform::from_xyz(4., 0., 0.), 1.)
-        .lifted(Lift::arc(0.6));
+    let motion =
+        CardMove::new(Vec3::ZERO, Transform::from_xyz(4., 0., 0.), 1.).lifted(Lift::arc(0.6));
     // smoothstep(0.5) = 0.5 and sin(π/2) = 1: the middle, at full height.
     assert_pose(motion.pose(0.5), Transform::from_xyz(2., 0.6, 0.));
     // smoothstep(0.25) = 0.15625; sin(0.15625π) = 0.4713967.
@@ -99,18 +99,22 @@ fn the_lift_peaks_halfway_and_lands_flat() {
 }
 
 #[test]
-fn rotation_and_scale_follow_the_poses() {
-    let from = Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(1.));
+fn the_card_keeps_its_resting_rotation_and_scale_on_the_way() {
     let to = Transform::from_xyz(0., 0., 4.)
         .with_rotation(Quat::from_rotation_y(PI / 2.))
         .with_scale(Vec3::splat(2.));
-    let motion = CardMove::new(from, to, 1.);
-    let middle = motion.pose(0.5);
-    assert_pose(
-        middle,
-        Transform::from_xyz(0., 0., 2.)
-            .with_rotation(Quat::from_rotation_y(PI / 4.))
-            .with_scale(Vec3::splat(1.5)),
+    let motion = CardMove::new(Vec3::ZERO, to, 1.);
+    for elapsed in [0., 0.25, 0.5, 0.75] {
+        let pose = motion.pose(elapsed);
+        assert_eq!(pose.rotation, to.rotation);
+        assert_eq!(pose.scale, to.scale);
+    }
+    // Halfway in time is halfway in place.
+    assert!(
+        motion
+            .pose(0.5)
+            .translation
+            .abs_diff_eq(Vec3::new(0., 0., 2.), EPSILON)
     );
     assert_eq!(motion.pose(1.), to);
 }
@@ -120,7 +124,7 @@ fn rotation_and_scale_follow_the_poses() {
 #[test]
 fn a_card_turns_over_in_place_with_its_back_showing_first() {
     let at = Transform::from_xyz(3., 0.1, -1.);
-    let motion = CardMove::new(at, at, 1.)
+    let motion = CardMove::new(at.translation, at, 1.)
         .lifted(Lift::arc(0.4))
         .turned(Turn::over(Vec3::Z));
     let start = motion.pose(0.);
@@ -154,7 +158,7 @@ fn a_turn_keeps_to_its_share_of_the_time() {
         begins: 0.2,
         lasts: 0.58,
     };
-    let motion = CardMove::new(at, at, 1.).turned(turn);
+    let motion = CardMove::new(at.translation, at, 1.).turned(turn);
     assert_pose(motion.pose(0.1), at);
     assert_pose(motion.pose(0.2), at);
     // Halfway through its share, smoothstep(0.5) = 0.5 of a half turn.
@@ -177,7 +181,7 @@ fn a_turn_keeps_to_its_share_of_the_time() {
 fn a_departure_slides_the_card_out_before_it_crosses() {
     let from = Transform::from_xyz(0., 0., 0.);
     let to = Transform::from_xyz(0., 0., 10.);
-    let motion = CardMove::new(from, to, 1.).departing(Departure {
+    let motion = CardMove::new(from.translation, to, 1.).departing(Departure {
         offset: Vec3::X,
         share: 0.2,
     });
@@ -238,7 +242,7 @@ fn arkhams_draw_keeps_its_path_lift_sway_and_turn() {
         (None, 0.),
     ] {
         let mut motion = CardMove::new(
-            Transform::from_translation(start).with_rotation(rotation),
+            start,
             Transform::from_translation(end).with_rotation(rotation),
             0.7,
         )
@@ -262,13 +266,9 @@ fn arkhams_draw_keeps_its_path_lift_sway_and_turn() {
 #[test]
 fn arkhams_location_reveal_keeps_its_rise_and_turn() {
     let at = Vec3::new(2., 0.05, -1.);
-    let motion = CardMove::new(
-        Transform::from_translation(at),
-        Transform::from_translation(at),
-        1.,
-    )
-    .lifted(Lift::arc(0.86))
-    .turned(Turn::over(Vec3::Z));
+    let motion = CardMove::new(at, Transform::from_translation(at), 1.)
+        .lifted(Lift::arc(0.86))
+        .turned(Turn::over(Vec3::Z));
     for step in 0..=50 {
         let elapsed = step as f32 / 50.;
         let t = smooth(elapsed);
