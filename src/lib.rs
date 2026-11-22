@@ -20,6 +20,8 @@ pub mod printed;
 #[cfg(feature = "seat")]
 pub mod seat;
 #[cfg(feature = "render")]
+pub mod slab;
+#[cfg(feature = "render")]
 pub mod token;
 #[cfg(feature = "render")]
 pub mod window_size;

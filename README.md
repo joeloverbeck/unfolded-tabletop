@@ -27,6 +27,7 @@ terms used here.
 | `unfolded-tabletop::capture`, feature `render` | A host's plugins with no window, a surface every marked camera renders to, and one capture that waits until the table is ready | Bevy 0.20.0 |
 | `unfolded-tabletop::card`, feature `render` | Rounded physical-card meshes: face, body and outline | Bevy 0.20.0 |
 | `unfolded-tabletop::token`, feature `render` | Solid token bodies with a textured face | Bevy 0.20.0 |
+| `unfolded-tabletop::slab`, feature `render` | Solid slabs with an outward picture face on each side | Bevy 0.20.0 |
 | `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |
 | `unfolded-tabletop::printed`, feature `render` | Text rows printed as ink on flat planes in the world | Bevy 0.20.0 |
 | `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
