@@ -59,7 +59,7 @@ fn digest(mesh: &Mesh) -> u64 {
 #[test]
 fn existing_callers_get_the_meshes_they_got_before() {
     // Recorded, not computed here: each digest is the output of the revision
-    // named beside it, for the calls Arkham, Netrunner and mudsong make.
+    // named beside it, at Arkham's and Netrunner's card sizes.
     // `face` and `body` from 15580d5, before `pile` existed; `pile` from
     // c9d5102, where it was introduced (#92). Recorded on x86_64 Linux, as CI
     // runs: another target's `cos` and `sin` may round differently.

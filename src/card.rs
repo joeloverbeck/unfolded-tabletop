@@ -91,14 +91,15 @@ const SEAM_DEPTH: f32 = 0.35;
 /// origin along Y.
 ///
 /// Its side is cut by a V-shaped groove at each boundary between two cards:
-/// two flat facets meet [`SEAM_DEPTH`] of a card's thickness in from the
-/// outline, each sloping over [`SEAM_RISE`] of a card's thickness, so the
+/// two flat facets meet 0.35 of a card's thickness in from the
+/// outline, each sloping over 0.35 of a card's thickness, so the
 /// facet below faces partly up and the facet above partly down. Between its
 /// grooves each card's edge stands at the full outline. This is geometry
 /// only, with no texture; whether a seam can be seen depends on the light and
 /// on how many pixels a card's thickness covers, which no test here holds.
-/// The tests hold the seams' heights, their depth, the facets' normals and
-/// that one card gives exactly [`body`] one card thick.
+/// The tests hold the seams' heights, that each is shallower than a card,
+/// the facets' normals, that one card gives exactly [`body`] one card
+/// thick, and the exact mesh of a set of recorded calls.
 ///
 /// A caller that wants a seam every few cards passes fewer, thicker layers:
 /// the height is still `cards × card_thickness` of whatever it passes.
