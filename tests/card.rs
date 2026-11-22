@@ -67,15 +67,51 @@ fn existing_callers_get_the_meshes_they_got_before() {
         ("face(1.8, 2.5)", face(1.8, 2.5), 0x8cc741b669ca7eb2),
         ("face(1.35, 1.89)", face(1.35, 1.89), 0xd3637b2eecc26db3),
         ("face(2.0, 2.8)", face(2.0, 2.8), 0xf460f8390ae8204c),
-        ("body(1.8, 0.06, 2.5)", body(1.8, 0.06, 2.5), 0x38d74316597981d6),
-        ("body(1.35, 0.005, 1.89)", body(1.35, 0.005, 1.89), 0x9f6fc97bba501cd2),
-        ("body(2.0, 0.06, 2.8)", body(2.0, 0.06, 2.8), 0xb38477d4b311a3e6),
-        ("pile(1.8, 2.5, 0.0065, 1)", pile(1.8, 2.5, 0.0065, 1), 0x66c3d060d799806e),
-        ("pile(1.8, 2.5, 0.0065, 2)", pile(1.8, 2.5, 0.0065, 2), 0xb36c8225cdcac38a),
-        ("pile(1.8, 2.5, 0.0065, 40)", pile(1.8, 2.5, 0.0065, 40), 0x610821efd62d219e),
-        ("pile(1.35, 1.89, 0.0065, 1)", pile(1.35, 1.89, 0.0065, 1), 0x4cf982c4ca8f037e),
-        ("pile(1.35, 1.89, 0.0065, 3)", pile(1.35, 1.89, 0.0065, 3), 0x29c2d4044019b21e),
-        ("pile(1.35, 1.89, 0.0065, 40)", pile(1.35, 1.89, 0.0065, 40), 0xa0685c8506b7887e),
+        (
+            "body(1.8, 0.06, 2.5)",
+            body(1.8, 0.06, 2.5),
+            0x38d74316597981d6,
+        ),
+        (
+            "body(1.35, 0.005, 1.89)",
+            body(1.35, 0.005, 1.89),
+            0x9f6fc97bba501cd2,
+        ),
+        (
+            "body(2.0, 0.06, 2.8)",
+            body(2.0, 0.06, 2.8),
+            0xb38477d4b311a3e6,
+        ),
+        (
+            "pile(1.8, 2.5, 0.0065, 1)",
+            pile(1.8, 2.5, 0.0065, 1),
+            0x66c3d060d799806e,
+        ),
+        (
+            "pile(1.8, 2.5, 0.0065, 2)",
+            pile(1.8, 2.5, 0.0065, 2),
+            0xb36c8225cdcac38a,
+        ),
+        (
+            "pile(1.8, 2.5, 0.0065, 40)",
+            pile(1.8, 2.5, 0.0065, 40),
+            0x610821efd62d219e,
+        ),
+        (
+            "pile(1.35, 1.89, 0.0065, 1)",
+            pile(1.35, 1.89, 0.0065, 1),
+            0x4cf982c4ca8f037e,
+        ),
+        (
+            "pile(1.35, 1.89, 0.0065, 3)",
+            pile(1.35, 1.89, 0.0065, 3),
+            0x29c2d4044019b21e,
+        ),
+        (
+            "pile(1.35, 1.89, 0.0065, 40)",
+            pile(1.35, 1.89, 0.0065, 40),
+            0xa0685c8506b7887e,
+        ),
     ];
     let mut differ = Vec::new();
     for (call, mesh, expected) in recorded {
@@ -277,15 +313,24 @@ fn a_caller_rounds_its_own_corners_on_the_face_and_the_pile() {
             .collect::<Vec<_>>()
     };
     let face = face_with_corners(width, length, fraction);
-    let face_ring: Vec<_> = positions(&face).iter().map(|p| Vec2::new(p.x, p.z)).collect();
-    assert_eq!(top(&pile_with_corners(width, length, fraction, 0.0003, 5)), face_ring);
+    let face_ring: Vec<_> = positions(&face)
+        .iter()
+        .map(|p| Vec2::new(p.x, p.z))
+        .collect();
+    assert_eq!(
+        top(&pile_with_corners(width, length, fraction, 0.0003, 5)),
+        face_ring
+    );
 }
 
 #[test]
 fn the_default_corners_are_the_corner_fraction() {
     for (width, length) in SIZES {
         let same = |a: &Mesh, b: &Mesh| digest(a) == digest(b);
-        assert!(same(&face(width, length), &face_with_corners(width, length, 0.045)));
+        assert!(same(
+            &face(width, length),
+            &face_with_corners(width, length, 0.045)
+        ));
         assert!(same(
             &pile(width, length, 0.0065, 4),
             &pile_with_corners(width, length, 0.045, 0.0065, 4)
@@ -311,8 +356,13 @@ fn a_pile_drawn_in_fewer_thicker_layers_keeps_its_height_and_seams_each_layer() 
         let layer = height / layers as f32;
         let mesh = pile_with_corners(width, length, fraction, layer, layers);
         let side = straight_side(&mesh, width);
-        let reach = positions(&mesh).iter().fold(Vec3::ZERO, |m, p| m.max(p.abs()));
-        assert!((reach.y - height / 2.).abs() < 1e-7, "{cards} cards: {reach}");
+        let reach = positions(&mesh)
+            .iter()
+            .fold(Vec3::ZERO, |m, p| m.max(p.abs()));
+        assert!(
+            (reach.y - height / 2.).abs() < 1e-7,
+            "{cards} cards: {reach}"
+        );
         assert!((reach.x - width / 2.).abs() < 1e-6 && (reach.z - length / 2.).abs() < 1e-6);
         let mut seams: Vec<f32> = side
             .iter()

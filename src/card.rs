@@ -59,7 +59,6 @@ pub fn face_with_corners(width: f32, length: f32, corner_fraction: f32) -> Mesh 
     .with_inserted_indices(Indices::U32(indices))
 }
 
-
 /// One card's solid: a flat side between its two faces, centered on the
 /// origin with its thickness `height` along Y.
 pub fn body(width: f32, height: f32, length: f32) -> Mesh {

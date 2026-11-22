@@ -33,7 +33,7 @@ On 2026-11-14 the owner accepted a bounded `EVID-6` extension, recorded in [Cuba
 | Mechanism | Boundary | Record |
 | --- | --- | --- |
 | `unfolded-assets`, `card`, `token`, `loading`, the `wgpu-hal` patch | Two-consumer specialization | [Netrunner #1](https://github.com/joeloverbeck/netrunner-unfolded/issues/1) |
-| `card::pile`, `card::face_with_corners`, `card::pile_with_corners` | Two-consumer specialization: Arkham's decks and Netrunner's piles draw through `pile`, which is `pile_with_corners` at `CORNER_FRACTION` | #92, [Cuba Libre #140](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/140) |
+| `card::pile`, `card::face_with_corners`, `card::pile_with_corners` | Two-consumer specialization | #92, [Cuba Libre #140](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/140) |
 | `unfolded-record-replacement` | Two-consumer specialization; also the Cuba Libre extension, since Cuba Libre saves through it beside Arkham and Netrunner | [Netrunner #9](https://github.com/joeloverbeck/netrunner-unfolded/issues/9), #13, #36 |
 | `camera` | Two-consumer specialization; also the Cuba Libre extension, since Cuba Libre moves its camera through it beside Arkham and Netrunner | [Netrunner #11](https://github.com/joeloverbeck/netrunner-unfolded/issues/11), #37 |
 | `printed` | Two-consumer specialization | #25 |
