@@ -2,7 +2,7 @@
 //! Card silhouettes at the public interface. Expectations come from Arkham's
 //! recorded card-shape test and hand calculation of the rounded rectangle.
 use bevy::{mesh::VertexAttributeValues, prelude::*};
-use unfolded_tabletop::card::{CORNER_FRACTION, body, face, outline};
+use unfolded_tabletop::card::{CORNER_FRACTION, body, face, outline, pile};
 
 /// Arkham's investigator card and Netrunner's card, width by length.
 const SIZES: [(f32, f32); 2] = [(2.0, 2.8), (1.8, 2.5)];
@@ -43,6 +43,7 @@ fn card_silhouettes_keep_image_scale_and_face_outward() {
             face(width, length),
             body(width, 0.06, length),
             outline(width, length),
+            pile(width, length, 0.0065, 3),
         ] {
             let positions = positions(&mesh);
             let normals = normals(&mesh);
@@ -155,4 +156,120 @@ fn outlines_ring_the_card_outside_its_edge() {
         assert!(normals(&mesh).iter().all(|n| *n == Vec3::Y));
         assert!(uvs(&mesh).iter().all(|uv| *uv == Vec2::ZERO));
     }
+}
+
+#[test]
+fn a_pile_of_one_card_is_the_card_body() {
+    for (width, length) in SIZES {
+        let (single, card) = (pile(width, length, 0.0065, 1), body(width, 0.0065, length));
+        assert_eq!(positions(&single), positions(&card));
+        assert_eq!(normals(&single), normals(&card));
+        assert_eq!(uvs(&single), uvs(&card));
+        let indices = |mesh: &Mesh| mesh.indices().unwrap().iter().collect::<Vec<_>>();
+        assert_eq!(indices(&single), indices(&card));
+    }
+    // An empty pile is drawn as one card, as Arkham's deck already draws it.
+    assert_eq!(
+        positions(&pile(1.8, 2.5, 0.0065, 0)),
+        positions(&body(1.8, 0.0065, 2.5))
+    );
+}
+
+#[test]
+fn a_pile_keeps_the_card_footprint_and_stands_as_tall_as_its_cards() {
+    // Netrunner's and Arkham's piles: 0.0065 per card on their own card sizes.
+    for (width, length) in [(1.8, 2.5), (1.35, 1.89)] {
+        for cards in [2, 3, 40] {
+            let height = cards as f32 * 0.0065;
+            let mesh = pile(width, length, 0.0065, cards);
+            let positions = positions(&mesh);
+            let normals = normals(&mesh);
+            let reach = positions.iter().fold(Vec3::ZERO, |m, p| m.max(p.abs()));
+            assert!((reach.x - width / 2.).abs() < 1e-6, "{reach}");
+            assert!((reach.z - length / 2.).abs() < 1e-6, "{reach}");
+            assert!((reach.y - height / 2.).abs() < 1e-6, "{reach}");
+            // Both picture faces stay whole: 37 vertices each at the top and bottom.
+            for side in [1., -1.] {
+                let face = positions
+                    .iter()
+                    .zip(&normals)
+                    .filter(|(p, n)| n.y == side && (p.y - side * height / 2.).abs() < 1e-6)
+                    .count();
+                assert_eq!(face, 37, "{cards} cards, face {side}");
+            }
+        }
+    }
+}
+
+/// The side of the long straight edge at +X, whose faces turn only toward +X
+/// and up or down: each vertex's height and how far it sits in from the
+/// card's outline.
+fn straight_side(mesh: &Mesh, width: f32) -> Vec<(f32, f32)> {
+    positions(mesh)
+        .into_iter()
+        .zip(normals(mesh))
+        .filter(|(_, n)| n.y.abs() < 0.99 && n.x > 0.1 && n.z.abs() < 1e-6)
+        .map(|(p, _)| (p.y, width / 2. - p.x))
+        .collect()
+}
+
+#[test]
+fn a_pile_side_shows_one_seam_between_each_two_cards_as_geometry() {
+    let thickness = 0.0065;
+    for (width, length) in [(1.8, 2.5), (1.35, 1.89)] {
+        for cards in [2_usize, 3, 40] {
+            let bottom = -(cards as f32) * thickness / 2.;
+            let mesh = pile(width, length, thickness, cards);
+            let side = straight_side(&mesh, width);
+            // Seams: the side sets in from the outline only at each boundary
+            // between two cards, and stays within a card's thickness.
+            let mut seams: Vec<f32> = side
+                .iter()
+                .filter(|(_, inset)| *inset > 1e-6)
+                .map(|(y, inset)| {
+                    assert!(*inset < thickness, "a seam is shallower than a card");
+                    *y
+                })
+                .collect();
+            seams.sort_by(f32::total_cmp);
+            seams.dedup_by(|a, b| (*a - *b).abs() < 1e-7);
+            let boundaries: Vec<f32> = (1..cards).map(|k| bottom + k as f32 * thickness).collect();
+            assert_eq!(seams.len(), boundaries.len(), "{cards} cards");
+            for (seam, boundary) in seams.iter().zip(&boundaries) {
+                assert!((seam - boundary).abs() < 1e-6, "{seam} at {boundary}");
+            }
+            // Each card shows its own edge at the full outline, between its
+            // two seams (or the pile's top or bottom).
+            for k in 0..cards {
+                let (low, high) = (
+                    bottom + k as f32 * thickness,
+                    bottom + (k + 1) as f32 * thickness,
+                );
+                let full = side
+                    .iter()
+                    .any(|(y, inset)| inset.abs() < 1e-6 && *y > low + 1e-7 && *y < high - 1e-7);
+                assert!(full, "card {k} of {cards} shows its edge");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_seam_turns_its_faces_toward_and_away_from_the_light() {
+    // Each seam is a groove: the card below turns up into it and the card
+    // above turns down, so a light from above draws a line at every seam
+    // with no texture. 36 outline segments, one facet each way per seam.
+    let cards = 5;
+    let mesh = pile(1.8, 2.5, 0.0065, cards);
+    let side: Vec<Vec3> = normals(&mesh)
+        .into_iter()
+        .filter(|n| n.y.abs() < 0.99)
+        .collect();
+    let up = side.iter().filter(|n| n.y > 0.1).count();
+    let down = side.iter().filter(|n| n.y < -0.1).count();
+    assert_eq!((up, down), (36 * 4 * (cards - 1), 36 * 4 * (cards - 1)));
+    assert!(
+        side.iter().all(|n| (n.length() - 1.).abs() < 1e-5),
+        "unit normals"
+    );
 }
