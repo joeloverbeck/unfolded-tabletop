@@ -5,6 +5,8 @@ use bevy::{
     prelude::*,
 };
 
+/// Corner radius of [`face`], [`body`], [`pile`] and [`outline`], as a share
+/// of the card's shorter side.
 pub const CORNER_FRACTION: f32 = 0.045;
 
 fn perimeter(width: f32, length: f32, radius: f32) -> Vec<Vec2> {
@@ -28,7 +30,14 @@ fn perimeter(width: f32, length: f32, radius: f32) -> Vec<Vec2> {
 }
 
 pub fn face(width: f32, length: f32) -> Mesh {
-    let outline = perimeter(width, length, width.min(length) * CORNER_FRACTION);
+    face_with_corners(width, length, CORNER_FRACTION)
+}
+
+/// [`face`] with a corner radius of `corner_fraction` of the card's shorter
+/// side, for printed faces whose corners [`CORNER_FRACTION`] does not cut
+/// away. It matches the top of [`pile_with_corners`] given the same fraction.
+pub fn face_with_corners(width: f32, length: f32, corner_fraction: f32) -> Mesh {
+    let outline = perimeter(width, length, width.min(length) * corner_fraction);
     let mut positions = vec![[0., 0., 0.]];
     let mut uv = vec![[0.5, 0.5]];
     let mut indices = Vec::new();
@@ -50,20 +59,30 @@ pub fn face(width: f32, length: f32) -> Mesh {
     .with_inserted_indices(Indices::U32(indices))
 }
 
+
 /// One card's solid: a flat side between its two faces, centered on the
 /// origin with its thickness `height` along Y.
 pub fn body(width: f32, height: f32, length: f32) -> Mesh {
     solid(
         width,
-        height,
         length,
-        &[(0., -height / 2.), (0., height / 2.)],
+        CORNER_FRACTION,
+        &[
+            SidePoint {
+                inset: 0.,
+                y: -height / 2.,
+            },
+            SidePoint {
+                inset: 0.,
+                y: height / 2.,
+            },
+        ],
     )
 }
 
-/// Share of a card's thickness that each card's rounded edge takes above and
-/// below a seam.
-const SEAM_HEIGHT: f32 = 0.35;
+/// How far above and below a seam the side starts to slope into its groove,
+/// as a share of a card's thickness.
+const SEAM_RISE: f32 = 0.35;
 /// How far a seam's groove sets in from the outline, as a share of a card's
 /// thickness.
 const SEAM_DEPTH: f32 = 0.35;
@@ -72,28 +91,72 @@ const SEAM_DEPTH: f32 = 0.35;
 /// footprint of [`body`] and `cards × card_thickness` of height, centered on the
 /// origin along Y.
 ///
-/// Its side shows each card's edge: between each two cards a shallow groove
-/// sets in from the outline, so the card below turns up into it and the card
-/// above turns down. Lit from above, each seam reads as a line, with no
-/// texture. Fewer than two cards give exactly [`body`] one card thick.
+/// Its side is cut by a V-shaped groove at each boundary between two cards:
+/// two flat facets meet [`SEAM_DEPTH`] of a card's thickness in from the
+/// outline, each sloping over [`SEAM_RISE`] of a card's thickness, so the
+/// facet below faces partly up and the facet above partly down. Between its
+/// grooves each card's edge stands at the full outline. This is geometry
+/// only, with no texture; whether a seam can be seen depends on the light and
+/// on how many pixels a card's thickness covers, which no test here holds.
+/// The tests hold the seams' heights, their depth, the facets' normals and
+/// that one card gives exactly [`body`] one card thick.
+///
+/// A caller that wants a seam every few cards passes fewer, thicker layers:
+/// the height is still `cards × card_thickness` of whatever it passes.
+///
+/// # Panics
+///
+/// When `cards` is 0. What an empty pile shows is the caller's to decide.
 pub fn pile(width: f32, length: f32, card_thickness: f32, cards: usize) -> Mesh {
-    let cards = cards.max(1);
-    let height = card_thickness * cards as f32;
-    let bottom = -height / 2.;
-    let (rise, depth) = (card_thickness * SEAM_HEIGHT, card_thickness * SEAM_DEPTH);
-    let mut profile = vec![(0., bottom)];
-    for k in 1..cards {
-        let seam = bottom + card_thickness * k as f32;
-        profile.extend([(0., seam - rise), (depth, seam), (0., seam + rise)]);
-    }
-    profile.push((0., height / 2.));
-    solid(width, height, length, &profile)
+    pile_with_corners(width, length, CORNER_FRACTION, card_thickness, cards)
 }
 
-/// A card-shaped solid whose side follows `profile` from bottom to top: each
-/// point is how far the side sets in from the outline, and at what height.
-fn solid(width: f32, height: f32, length: f32, profile: &[(f32, f32)]) -> Mesh {
-    let radius = width.min(length) * CORNER_FRACTION;
+/// [`pile`] with a corner radius of `corner_fraction` of the card's shorter
+/// side, topped by the outline of [`face_with_corners`] with that fraction.
+///
+/// # Panics
+///
+/// When `cards` is 0.
+pub fn pile_with_corners(
+    width: f32,
+    length: f32,
+    corner_fraction: f32,
+    card_thickness: f32,
+    cards: usize,
+) -> Mesh {
+    assert!(cards > 0, "a pile has at least one card");
+    let height = card_thickness * cards as f32;
+    let bottom = -height / 2.;
+    let (rise, depth) = (card_thickness * SEAM_RISE, card_thickness * SEAM_DEPTH);
+    let flat = |y| SidePoint { inset: 0., y };
+    let mut profile = vec![flat(bottom)];
+    for k in 1..cards {
+        let seam = bottom + card_thickness * k as f32;
+        profile.extend([
+            flat(seam - rise),
+            SidePoint {
+                inset: depth,
+                y: seam,
+            },
+            flat(seam + rise),
+        ]);
+    }
+    profile.push(flat(height / 2.));
+    solid(width, length, corner_fraction, &profile)
+}
+
+/// A point on a solid's side, from bottom to top: how far the side sets in
+/// from the card's outline, and at what height.
+#[derive(Clone, Copy)]
+struct SidePoint {
+    inset: f32,
+    y: f32,
+}
+
+/// A card-shaped solid whose side follows `profile`, with a face at its first
+/// and last point's heights.
+fn solid(width: f32, length: f32, corner_fraction: f32, profile: &[SidePoint]) -> Mesh {
+    let radius = width.min(length) * corner_fraction;
     let outline = perimeter(width, length, radius);
     let set_in = |inset: f32| {
         if inset == 0. {
@@ -103,7 +166,7 @@ fn solid(width: f32, height: f32, length: f32, profile: &[(f32, f32)]) -> Mesh {
             perimeter(width - 2. * inset, length - 2. * inset, radius - inset)
         }
     };
-    let rings: Vec<_> = profile.iter().map(|&(inset, _)| set_in(inset)).collect();
+    let rings: Vec<_> = profile.iter().map(|point| set_in(point.inset)).collect();
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uv = Vec::new();
@@ -114,22 +177,23 @@ fn solid(width: f32, height: f32, length: f32, profile: &[(f32, f32)]) -> Mesh {
         let outward = Vec3::new(edge.y, 0., -edge.x).normalize_or_zero();
         let next = (i + 1) % outline.len();
         for band in 0..profile.len() - 1 {
-            let ((low_inset, low), (high_inset, high)) = (profile[band], profile[band + 1]);
+            let (low, high) = (profile[band], profile[band + 1]);
             // A band that sets in as it rises faces up, and one that comes
             // out faces down; a straight band faces straight out.
-            let normal = if low_inset == high_inset {
+            let normal = if low.inset == high.inset {
                 outward
             } else {
-                (outward * (high - low) + Vec3::Y * (high_inset - low_inset)).normalize_or_zero()
+                (outward * (high.y - low.y) + Vec3::Y * (high.inset - low.inset))
+                    .normalize_or_zero()
             }
             .to_array();
             let (below, above) = (&rings[band], &rings[band + 1]);
             let start = positions.len() as u32;
             positions.extend([
-                [below[i].x, low, below[i].y],
-                [below[next].x, low, below[next].y],
-                [above[next].x, high, above[next].y],
-                [above[i].x, high, above[i].y],
+                [below[i].x, low.y, below[i].y],
+                [below[next].x, low.y, below[next].y],
+                [above[next].x, high.y, above[next].y],
+                [above[i].x, high.y, above[i].y],
             ]);
             normals.extend([normal; 4]);
             uv.extend([[0., 0.], [1., 0.], [1., 1.], [0., 1.]]);
@@ -144,12 +208,14 @@ fn solid(width: f32, height: f32, length: f32, profile: &[(f32, f32)]) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
     .with_inserted_indices(Indices::U32(indices));
-    mesh.merge(&face(width, length).translated_by(Vec3::Y * height / 2.))
+    let (bottom, top) = (profile[0].y, profile[profile.len() - 1].y);
+    let face = face_with_corners(width, length, corner_fraction);
+    mesh.merge(&face.clone().translated_by(Vec3::Y * top))
         .expect("Matching card attributes");
     mesh.merge(
-        &face(width, length)
+        &face
             .rotated_by(Quat::from_rotation_x(std::f32::consts::PI))
-            .translated_by(-Vec3::Y * height / 2.),
+            .translated_by(Vec3::Y * bottom),
     )
     .expect("Matching card attributes");
     mesh
