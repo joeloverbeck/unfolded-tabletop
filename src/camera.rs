@@ -11,16 +11,16 @@
 //! [`Navigation`] says whether this frame's input moved it.
 //!
 //! [`Orbit`] owns the orbit, camera-relative WASD pan, wheel normalization, scene-drag
-//! capture and follow interpolation. The game keeps its home target and distance, its
-//! focus and follow targets and when they change, its named views, its table framing
-//! and its own pointer regions. Visibility, modal lifecycle and viewport policy stay
-//! with the game too.
+//! capture and follow interpolation. The game keeps its Home framing and navigation
+//! settings, its focus and follow targets and when they change, its named views,
+//! its table framing and pointer regions. Visibility, modal lifecycle and viewport
+//! policy also stay with the game.
 //!
-//! The bounds are the ones Arkham's camera had: pitch [`PITCH`], 0.35 to 1.35 radians;
-//! manual distance [`DISTANCE`], 6 to 90 world units; and wheel distance multiplied by
-//! 0.95 per line, with follow interpolation after the distance clamp. Focus and follow
-//! targets are not validated here. These bounds are not a promise to fit arbitrary
-//! tables.
+//! With default navigation the pitch range is [`PITCH`] (0.35 to 1.35 radians) and the
+//! distance clamp uses [`DISTANCE`] (6 to 90 world units). A game can choose its Home
+//! pitch and manual limits with [`Orbit::with_navigation`]. Wheel distance scales by
+//! 0.95 per line. Follow interpolation runs after the distance clamp, and a framing
+//! or a follow target may be outside the manual distance range.
 //!
 //! [`Orbit::step`] with [`FrameInput`] and [`Capture`] is the motion alone, without
 //! gathering. It is kept while games move to [`TableCameraPlugin`].
@@ -44,10 +44,10 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-/// The pitch the camera keeps within, in radians above the table.
+/// The default pitch limits, in radians above the table.
 pub const PITCH: RangeInclusive<f32> = 0.35..=1.35;
 
-/// The distance manual navigation keeps within, in world units. A framing may be
+/// The default distance limits, in world units. A framing may be
 /// nearer or farther; follow interpolation is not clamped.
 pub const DISTANCE: RangeInclusive<f32> = 6.0..=90.0;
 
@@ -145,7 +145,7 @@ pub struct Pose {
 impl Pose {
     /// The yaw of every framing, in radians: looking along negative Z.
     pub const DEFAULT_YAW: f32 = 0.0;
-    /// The pitch of every framing, in radians.
+    /// The default pitch of a framing, in radians.
     pub const DEFAULT_PITCH: f32 = 1.0;
 
     /// The pose the camera takes at a framing: the default yaw and pitch.
@@ -358,9 +358,33 @@ pub struct CameraStep {
     pub stopped_following: bool,
 }
 
+/// A setting refused by [`Orbit::with_navigation`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InvalidNavigation {
+    /// The pitch limits must be finite and contain the Home pitch.
+    Pitch,
+    /// The distance limits must be positive, finite and ordered.
+    Distance,
+}
+
+impl std::fmt::Display for InvalidNavigation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Self::Pitch => "camera pitch limits must be finite and contain the Home pitch",
+            Self::Distance => "camera distance limits must be positive, finite and ordered",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for InvalidNavigation {}
+
 #[derive(Resource)]
 pub struct Orbit {
     home: Framing,
+    home_pitch: f32,
+    pitch_limits: RangeInclusive<f32>,
+    distance_limits: Option<RangeInclusive<f32>>,
     pose: Pose,
     desired_target: Vec3,
     desired_distance: f32,
@@ -375,6 +399,9 @@ impl Orbit {
         let pose = Pose::at(home);
         Self {
             home,
+            home_pitch: Pose::DEFAULT_PITCH,
+            pitch_limits: PITCH,
+            distance_limits: None,
             pose,
             desired_target: pose.target,
             desired_distance: pose.distance,
@@ -383,10 +410,39 @@ impl Orbit {
         }
     }
 
+    /// Set the Home pitch and the inclusive limits for manual turning and zoom.
+    /// Move to the existing Home framing with those settings.
+    ///
+    /// # Errors
+    /// Returns [`InvalidNavigation`] for non-finite pitch limits, a Home pitch
+    /// outside those limits, or a distance range with non-positive, non-finite
+    /// or reversed endpoints.
+    pub fn with_navigation(
+        mut self,
+        home_pitch: f32,
+        pitch: RangeInclusive<f32>,
+        distance: RangeInclusive<f32>,
+    ) -> Result<Self, InvalidNavigation> {
+        if !(pitch.start().is_finite() && pitch.end().is_finite() && pitch.contains(&home_pitch)) {
+            return Err(InvalidNavigation::Pitch);
+        }
+        if !distance.start().is_finite()
+            || !distance.end().is_finite()
+            || distance.is_empty()
+            || *distance.start() <= 0.0
+        {
+            return Err(InvalidNavigation::Distance);
+        }
+        self.home_pitch = home_pitch;
+        self.pitch_limits = pitch;
+        self.distance_limits = Some(distance);
+        self.reset_home();
+        Ok(self)
+    }
+
     pub fn with_home(mut self, framing: impl Into<Framing>) -> Self {
-        let framing = framing.into();
-        self.home = framing;
-        self.focus(framing);
+        self.set_home(framing);
+        self.reset_home();
         self
     }
 
@@ -398,6 +454,11 @@ impl Orbit {
     /// Change where Home returns the camera, without moving it.
     pub fn set_home(&mut self, framing: impl Into<Framing>) {
         self.home = framing.into();
+    }
+
+    fn reset_home(&mut self) {
+        self.focus(self.home);
+        self.pose.pitch = self.home_pitch;
     }
 
     pub fn pose(&self) -> Pose {
@@ -466,6 +527,8 @@ impl Orbit {
     }
 
     pub fn step(&mut self, input: FrameInput<'_>) -> CameraStep {
+        let distance_limits = self.distance_limits.as_ref().unwrap_or(&DISTANCE);
+        let (nearest, farthest) = (*distance_limits.start(), *distance_limits.end());
         let pointer_enabled = input.window.focused && !input.capture.pointer_blocked;
         let cursor = input.window.cursor_position();
         let scene_pointer = pointer_enabled && cursor.is_some() && !input.capture.over_ui;
@@ -498,8 +561,8 @@ impl Orbit {
         if scene_pointer && !input.capture.wheel && input.scroll_y != 0.0 {
             // Equal opposite scrolls undo each other away from the limits. A fixed
             // proportion traverses the overview quickly while preserving close control.
-            self.pose.distance = (self.pose.distance * 0.95_f32.powf(input.scroll_y))
-                .clamp(*DISTANCE.start(), *DISTANCE.end());
+            self.pose.distance =
+                (self.pose.distance * 0.95_f32.powf(input.scroll_y)).clamp(nearest, farthest);
             changed = true;
         }
         if input.window.focused && !input.capture.keyboard {
@@ -518,9 +581,15 @@ impl Orbit {
                     changed = true;
                 }
             }
+            if self.distance_limits.is_some()
+                && input.keys.any_pressed([KeyCode::Equal, KeyCode::Minus])
+            {
+                // Freeze configured zoom at its limit. Default zoom uses the later clamp.
+                self.pose.distance = self.pose.distance.clamp(nearest, farthest);
+            }
             if input.keys.just_pressed(KeyCode::Home) {
                 // Home resets framing, not a held scene drag's capture.
-                self.focus(self.home);
+                self.reset_home();
                 changed = true;
             }
         }
@@ -535,8 +604,11 @@ impl Orbit {
             self.following = false;
             self.freeze_framing();
         }
-        self.pose.pitch = self.pose.pitch.clamp(*PITCH.start(), *PITCH.end());
-        self.pose.distance = self.pose.distance.clamp(*DISTANCE.start(), *DISTANCE.end());
+        self.pose.pitch = self
+            .pose
+            .pitch
+            .clamp(*self.pitch_limits.start(), *self.pitch_limits.end());
+        self.pose.distance = self.pose.distance.clamp(nearest, farthest);
         let blend = (input.dt * 4.0).min(1.0);
         // Preserve the original clamp-then-interpolate ordering.
         self.pose.distance += (self.desired_distance - self.pose.distance) * blend;
