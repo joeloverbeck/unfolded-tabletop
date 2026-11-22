@@ -26,6 +26,7 @@ terms used here.
 | `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow, gathering its own input | Bevy 0.20.0 |
 | `unfolded-tabletop::capture`, feature `render` | A host's plugins with no window, a surface every marked camera renders to, and one capture that waits until the table is ready | Bevy 0.20.0 |
 | `unfolded-tabletop::card`, feature `render` | Rounded physical-card meshes: face, body, pile and outline | Bevy 0.20.0 |
+| `unfolded-tabletop::card_motion`, feature `render` | A card's movement to a resting pose, with lift and turn, at a time the game supplies | Bevy 0.20.0 |
 | `unfolded-tabletop::token`, feature `render` | Solid token bodies with a textured face | Bevy 0.20.0 |
 | `unfolded-tabletop::slab`, feature `render` | Solid slabs with an outward picture face on each side | Bevy 0.20.0 |
 | `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |

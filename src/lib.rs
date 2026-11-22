@@ -12,6 +12,8 @@ pub mod capture;
 #[cfg(feature = "render")]
 pub mod card;
 #[cfg(feature = "render")]
+pub mod card_motion;
+#[cfg(feature = "render")]
 pub mod label_anchor;
 #[cfg(feature = "render")]
 pub mod loading;

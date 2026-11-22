@@ -44,6 +44,7 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **Tools in a new worktree:** the first `scripts/tools` call builds `arkham-tools` into `target/agent-tools`, which takes about two minutes. Run it after `scripts/build-slot`.
 - **Work-item limit:** none of its own.
 - **Pins a whole response:** `gathering_tabletop::seat::tests::nothing_hidden_appears_in_what_the_seat_reports` pins the response's top-level keys. A new response field changes it.
+- **Motion captures:** the seat alone advances its presentation clock, so `settle` with a step count stops a card's motion at the same presentation time on every run. Its `gathering_draw_review` example writes saves whose first choice starts the opening draws, a mulligan, an action draw and an encounter draw; take that choice in `held-start`, then alternate `{"op":"settle","steps":13}` and `capture` to compare a motion before and after (Cuba Libre #141).
 
 ## Netrunner Unfolded
 
@@ -72,5 +73,6 @@ Record the "before" case with `--clean` from `main`, then the "after" case from 
 - **Held capture:** `held-start` with a `settle` and a `capture` request, followed by its own seat command.
 - **Verify and merge:** its README, "Working here". Its merge command verifies the exact head itself, and refuses when its main has moved.
 - **Work-item limit:** set by the owner's newest ruling on its limit issue. Each adoption of a change from this repository needs a slot of its own: read that ruling before opening anything there.
+- **Card motion:** its cards move on its fixed screen and turn there and in its scene by narrowing, with its own easing and staging, so it does not use `card_motion` (Cuba Libre #141).
 
 Keep this public file to what kind of change each game needs. Leave out mudsong's paths, identifiers and content.
