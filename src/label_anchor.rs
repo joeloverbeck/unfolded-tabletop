@@ -17,10 +17,11 @@
 //! projected where it now is. The node is hidden when projection fails. Tracking
 //! needs exactly one `Camera3d` that is not marked [`OtherView`]: with none, or
 //! several, it changes nothing. A game that draws another 3D view with a camera
-//! of its own marks that camera, and the nodes follow the unmarked one. No node
-//! follows a marked camera, and the module makes no promise about offsets that
-//! rotate with a parent. When a count updates and whether a zero shows stay with
-//! the caller.
+//! of its own may mark that camera, and the nodes follow the unmarked one; a
+//! second camera left unmarked still makes several. No node follows a marked
+//! camera, and a node is not hidden where a marked camera's view covers its
+//! anchor. The module makes no promise about offsets that rotate with a parent.
+//! When a count updates and whether a zero shows stay with the caller.
 use bevy::{
     camera::{CameraUpdateSystems, visibility::VisibilitySystems},
     prelude::*,
@@ -61,8 +62,7 @@ impl Plugin for LabelAnchorPlugin {
 /// Marks a `Camera3d` that shows another view than the one the nodes follow, such
 /// as a tray a game draws with a camera of its own. The tracking system does not
 /// count a marked camera, so one unmarked `Camera3d` beside any number of marked
-/// ones is tracked as it is alone. Without the mark every `Camera3d` counts, as
-/// before the mark existed.
+/// ones is tracked as if it were alone. Without the mark every `Camera3d` counts.
 #[derive(Component, Default, Clone, Copy, Debug)]
 pub struct OtherView;
 

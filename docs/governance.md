@@ -30,6 +30,8 @@ On 2026-11-14 the owner accepted a bounded `EVID-6` extension, recorded in [Cuba
 
 On 2026-11-22 the owner read the extension as covering a mechanism whose Cuba Libre consumer is already ticketed in an active, owner-approved spec: card motion, whose consumer is ticket [#145](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/145) of Cuba Libre spec [#137](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/137). If #137 ends without #145 using the mechanism, it moves back to Arkham.
 
+On 2026-11-23 the owner authorized `label_anchor::OtherView` for Cuba Libre's card tray, ticket [#143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) of the same spec: a marker only Cuba Libre is to use, on a mechanism Arkham, Netrunner and Cuba Libre use. If #137 ends without #143 using it, it is removed.
+
 ## Which boundary covers each mechanism
 
 | Mechanism | Boundary | Record |
@@ -50,6 +52,6 @@ On 2026-11-22 the owner read the extension as covering a mechanism whose Cuba Li
 | `unfolded-hover` | Cuba Libre extension | #18 |
 | `unfolded-seat-client` | Cuba Libre extension | #17, [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) |
 | `label_anchor` | Cuba Libre extension, beside the two-consumer specialization | #35 |
-| `label_anchor::OtherView` | Cuba Libre extension, as an operation of `label_anchor`, which Arkham, Netrunner and Cuba Libre use, under the 2026-11-22 reading of a consumer ticketed in an active, owner-approved spec. No game marks a camera with it: its consumer is Cuba Libre's card tray, ticket [#143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) of its spec [#137](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/137), whose camera does not carry it yet. If #137 ends without #143 using it, it is removed | [Cuba Libre #143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) |
+| `label_anchor::OtherView` | Cuba Libre extension, as the owner authorized on 2026-11-23: a marker on `label_anchor`, which Arkham, Netrunner and Cuba Libre use. No game marks a camera with it: its consumer is Cuba Libre's card tray, ticket [#143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) of its spec [#137](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/137), not yet built. If #137 ends without #143 using it, it is removed | [Cuba Libre #143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) |
 | `window_size` | Cuba Libre extension, for its adoption by Cuba Libre beside Arkham | #83, [Arkham #279](https://github.com/joeloverbeck/arkham-unfolded/issues/279), [Cuba Libre #111](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/111) |
 | `card_motion` | Cuba Libre extension, read on 2026-11-22 as covering a consumer ticketed in an active, owner-approved spec. Cuba Libre does not use it yet: its consumer is the card advance, ticket [#145](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/145) of its spec [#137](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/137), not yet built | [Cuba Libre #141](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/141) |
