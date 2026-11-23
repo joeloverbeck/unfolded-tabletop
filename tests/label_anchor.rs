@@ -4,7 +4,7 @@ mod common;
 
 use bevy::prelude::*;
 use common::{assert_hidden, assert_position, camera, measured};
-use unfolded_tabletop::label_anchor::{LabelAnchor, LabelAnchorPlugin};
+use unfolded_tabletop::label_anchor::{LabelAnchor, LabelAnchorPlugin, OtherView};
 
 fn app_with_camera() -> (App, Entity) {
     let mut app = App::new();
@@ -151,6 +151,48 @@ fn without_one_3d_camera_nothing_changes() {
     app.world_mut().despawn(camera);
     app.update();
     assert!(app.world().get_entity(label).is_ok());
+}
+
+#[test]
+fn a_camera_marked_as_another_view_is_not_counted() {
+    let (mut app, followed) = app_with_camera();
+    // A second 3D camera for another view, looking from 20 to the right.
+    let other = app
+        .world_mut()
+        .spawn((camera(), OtherView))
+        .insert(GlobalTransform::from_translation(Vec3::X * 20.))
+        .id();
+    let label = caller_node(&mut app, LabelAnchor::point(Vec3::new(2., 4., -10.)));
+    app.update();
+    // The unmarked camera at the origin places it: (500 + 25 × 2, 250 − 25 × 4),
+    // less half the 40-pixel width. The marked one would put it at x 30.
+    assert_position(&app, label, 530., 150.);
+
+    // The node follows the unmarked camera, and never the marked one.
+    app.world_mut()
+        .entity_mut(other)
+        .insert(GlobalTransform::from_translation(Vec3::X * -8.));
+    app.update();
+    assert_position(&app, label, 530., 150.);
+    app.world_mut()
+        .entity_mut(followed)
+        .insert(GlobalTransform::from_translation(Vec3::X * 2.));
+    app.update();
+    assert_position(&app, label, 480., 150.);
+
+    // Without its mark the second camera counts, and with two nothing changes.
+    app.world_mut().entity_mut(other).remove::<OtherView>();
+    app.world_mut()
+        .entity_mut(followed)
+        .insert(GlobalTransform::from_translation(Vec3::X * 6.));
+    app.update();
+    assert_position(&app, label, 480., 150.);
+
+    // Marked cameras alone are no camera to follow: nothing changes.
+    app.world_mut().entity_mut(other).insert(OtherView);
+    app.world_mut().despawn(followed);
+    app.update();
+    assert_position(&app, label, 480., 150.);
 }
 
 #[test]
