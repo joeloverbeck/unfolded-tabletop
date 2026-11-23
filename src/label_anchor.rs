@@ -128,11 +128,13 @@ impl LabelAnchor {
     }
 }
 
-// One 3D camera without `OtherView` is required: with none, or several, nothing
-// changes.
+/// A camera the nodes may follow: a 3D camera that is not marked [`OtherView`].
+type Followed = (With<Camera3d>, Without<OtherView>);
+
+// One followed camera is required: with none, or several, nothing changes.
 fn position(
     mut commands: Commands,
-    camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<OtherView>)>,
+    camera: Query<(&Camera, &GlobalTransform), Followed>,
     transforms: Query<&Transform>,
     mut nodes: Query<(
         Entity,
