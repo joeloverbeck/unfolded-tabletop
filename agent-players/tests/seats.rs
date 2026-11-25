@@ -662,6 +662,8 @@ fn a_decision_whose_choice_is_held_is_not_told() {
     let red = join(&mut seats, RED, now);
     game.settled = false;
     assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    // The answer that said it was held showed the decision still pending.
+    seats.told_in_answer(&red, 7);
     wait(&mut seats, &red, 1, Some(7), now);
     assert_eq!(decision(&mut seats, &red, 7, now), None);
 }

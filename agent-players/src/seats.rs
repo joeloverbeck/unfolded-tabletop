@@ -503,7 +503,11 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         session.heard = now;
         match session.told {
             Some(told) if told.unread => session.told = None,
-            Some(told) if decision == Some(told.revision) && session.released.is_none() => {
+            Some(told)
+                if decision == Some(told.revision)
+                    && session.held.is_none()
+                    && session.released.is_none() =>
+            {
                 return Waiting::Refused(reply);
             }
             _ => {}
