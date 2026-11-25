@@ -58,21 +58,16 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-/// How a Codex session waits without a model call, in the words Cuba Libre #198 measured:
-/// neither a raised limit alone nor "one long poll" without this call held there. Say
-/// which of your commands wait and how to run them, "exactly", then this as it stands.
-/// The folder's settings raise the limit it names.
-pub const CODEX_WAIT: &str = "\
-This replaces your usual limit of 60 seconds for a blocking wait and your usual progress updates: I ask for one blocking wait of up to two hours, I need no communication from you while it runs, and I can interrupt it by typing. This session's background_terminal_max_timeout is 7200000 ms, so the long poll is allowed. Every extra check costs me money. Make each of them this one exec call, with the command in place of COMMAND:
+/// How a Codex session waits without a model call. Say which of your commands wait and
+/// how to run them, "exactly", then this as it stands. The folder's settings raise the
+/// limit it names.
+///
+/// These words, with the code in them, are what Cuba Libre #198 measured. It did not try
+/// the words without the code, which is being measured, so this text may change: quote it
+/// nowhere else, and write your folders from it.
+pub const CODEX_WAIT: &str = include_str!("codex_wait.txt");
 
-// @exec: {\"yield_time_ms\": 7200000}
-let r = await tools.exec_command({cmd:\"COMMAND\",yield_time_ms:30000});
-while (r.session_id !== undefined) r = await tools.write_stdin({session_id:r.session_id,chars:\"\",yield_time_ms:7200000});
-text(r);
-
-If that cell yields anyway, wait on it with yield_time_ms 7200000.";
-
-/// The milliseconds [`CODEX_WAIT`] names.
+/// The longest poll, in milliseconds, that [`CODEX_WAIT`] asks for.
 const CODEX_LIMIT: u32 = 7_200_000;
 /// What Codex reads of its instructions by its default `project_doc_max_bytes`.
 const LONGEST: usize = 32 * 1024;

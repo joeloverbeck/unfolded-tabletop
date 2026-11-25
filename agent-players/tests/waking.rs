@@ -278,17 +278,14 @@ impl Codex {
     /// one choice and the next wait in one command, or the end of its turn.
     fn start(table: &Table, id: &str) -> Self {
         let read = |name: &str| fs::read_to_string(table.folder.join(name)).unwrap();
-        // The call it is told to make holds one command for as long as its settings let
-        // it, and the command is one its rules allow without an approval.
-        let instructions = read("AGENTS.md");
-        let (_, call) = instructions.split_once("// @exec: ").unwrap();
-        let asked: Value = serde_json::from_str(call.lines().next().unwrap()).unwrap();
+        // It is told how to wait, its settings let one poll last that long, and the command
+        // is one its rules allow without an approval.
+        assert!(read("AGENTS.md").contains(CODEX_WAIT));
         let settings = read(".codex/config.toml");
         let (_, limit) = settings
             .split_once("background_terminal_max_timeout = ")
             .unwrap();
         let limit: u64 = limit.lines().next().unwrap().parse().unwrap();
-        assert_eq!(asked["yield_time_ms"], json!(limit));
         assert!(limit >= 2 * 60 * 60 * 1000, "Two hours");
         let rules = read(".codex/rules/player.rules");
         let (_, pattern) = rules.split_once("pattern = [\"").unwrap();

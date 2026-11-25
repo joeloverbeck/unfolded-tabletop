@@ -18,10 +18,11 @@ can think for an hour. How each tool does it is measured, not accepted one by on
 
 - **Codex** waits in one long poll, which #197's own rule takes from
   [Cuba Libre #198](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7157575553).
-  Its own instructions hold a blocking wait to 60 seconds, so the player's instructions
-  must give the exact call, and the folder's settings must raise the limit. With both, a
-  wait of 15 minutes took no model call, in both sessions that tried. `folder::CODEX_WAIT`
-  is that wording.
+  Its own instructions hold a blocking wait to 60 seconds. The player's instructions lift
+  that and give a call to make, and the folder's settings raise the limit. With these, a
+  wait of 15 minutes took no model call, in both sessions that tried. Whether the words do
+  it without the call was not tried and is being measured; `folder::CODEX_WAIT` is the one
+  place that holds them.
 - **Claude Code** runs the wait in the background and ends its turn. It is woken when
   the command ends, at three calls for each decision.
 
@@ -40,7 +41,7 @@ is not interrupted. Waits longer than 16 minutes were not measured.
   known fallback if real play misses a limit.
 - **Waits that end at a period**, as Arkham's Codex partners use. Each costs a model call
   while nothing happens.
-- **Codex instructions without the exact call.** Told only that the wait returns when it is
+- **Codex instructions that do not lift the 60 seconds.** Told only that the wait returns when it is
   needed, a session took about three model calls a minute. Told to wait in one long poll,
   with the limit raised, it took one a minute.
 - **Claude Code's foreground wait.** It took one call for each decision, in the one

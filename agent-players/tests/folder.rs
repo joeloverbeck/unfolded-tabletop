@@ -10,11 +10,8 @@ use std::{
 };
 use unfolded_agent_players::folder::{CODEX_WAIT, Folders, Unwritten, install};
 
-/// The probe's own text, as its `AGENTS.md` ended.
-const PROBED: &str = include_str!("fixtures/codex_wait.txt");
-
 fn instructions(client: &Path) -> String {
-    format!("Run `{} wait`, exactly. {PROBED}", client.display())
+    format!("Run `{} wait`, exactly. {CODEX_WAIT}", client.display())
 }
 
 /// Every file in `directory`, by its path there.
@@ -73,11 +70,6 @@ impl Places {
             instructions: &self.instructions,
         }
     }
-}
-
-#[test]
-fn the_codex_wait_is_the_probes_text() {
-    assert_eq!(CODEX_WAIT, PROBED.trim_end());
 }
 
 #[test]
@@ -292,10 +284,10 @@ fn folders_that_would_not_hold_are_refused_and_nothing_is_written() {
     };
     let text = &places.instructions;
     assert!(matches!(
-        with(&text.replace("60 seconds", "a minute")),
+        with(&text.replace(CODEX_WAIT, &CODEX_WAIT[1..])),
         Unwritten::NoWait
     ));
-    assert!(matches!(with(PROBED), Unwritten::NoClient));
+    assert!(matches!(with(CODEX_WAIT), Unwritten::NoClient));
     // Codex reads 32 KiB: the first length is the longest, the second one more.
     let long = |length: usize| format!("{text}{}", "x".repeat(length - text.len()));
     assert!(matches!(with(&long(32_769)), Unwritten::TooLong(32_769)));
