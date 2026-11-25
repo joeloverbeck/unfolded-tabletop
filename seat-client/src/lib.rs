@@ -11,8 +11,11 @@
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
 //! [`requests`] splits arguments or standard-input lines into request lines for
-//! [`Connection::send`].
+//! [`Connection::send`]. [`hosting`] keeps a held seat's table running while others play
+//! at it.
 #![cfg(unix)]
+
+pub mod hosting;
 
 use serde_json::Value;
 use std::{
