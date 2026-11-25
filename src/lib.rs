@@ -1,10 +1,10 @@
 //! Concrete mechanisms shared by named consumer games: presentation, screen
 //! capture and the agent seat, behind `render` and `seat`.
 //!
-//! Seeded randomness, hover, recoverable file replacement, asset reads and the
-//! held-seat client live in packages of their own that cannot depend on Bevy:
-//! `unfolded-random`, `unfolded-hover`, `unfolded-record-replacement`,
-//! `unfolded-assets` and `unfolded-seat-client`.
+//! Seeded randomness, hover, recoverable file replacement, asset reads, the held-seat
+//! client and the agent players' client live in packages of their own that cannot
+//! depend on Bevy: `unfolded-random`, `unfolded-hover`, `unfolded-record-replacement`,
+//! `unfolded-assets`, `unfolded-seat-client` and `unfolded-agent-players`.
 #[cfg(feature = "seat")]
 pub mod agent_transport;
 #[cfg(feature = "render")]
