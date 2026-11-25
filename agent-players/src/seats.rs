@@ -371,10 +371,11 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
     }
 
     /// How long since the session that holds `seat` was last heard from: zero while it
-    /// waits. `None` when no session holds it.
+    /// waits, and while its choice is held, when nothing is asked of it. `None` when no
+    /// session holds it.
     pub fn silence(&self, seat: &S, now: Instant) -> Option<Duration> {
         let session = self.sessions.iter().find(|session| session.seat == *seat)?;
-        Some(if session.wait.is_some() {
+        Some(if session.wait.is_some() || session.held.is_some() {
             Duration::ZERO
         } else {
             now.saturating_duration_since(session.heard)
@@ -400,10 +401,12 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
             if let Err(reason) = game.commit(&seat, &choice) {
                 return Submitted::Refused(Refusal::Game(reason));
             }
-            self.acted(id);
+            self.decided(id);
+            let _ = self.withdraw(id);
             return Submitted::Applied;
         }
-        self.acted(id);
+        self.decided(id);
+        let _ = self.withdraw(id);
         self.order += 1;
         let order = self.order;
         self.session_mut(id).expect("Seated").held = Some(HeldChoice {
@@ -414,13 +417,19 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         Submitted::Held
     }
 
-    /// The session `id` answered its decision, through [`submit`](Self::submit) or in a
-    /// way of the game's own: what it had held is dropped, and the decision it was told
-    /// is over, so one that comes to it again is told again. The held choice, if it had
-    /// one.
-    pub fn acted(&mut self, id: &str) -> Option<C> {
+    /// The session `id` answered its decision in a way of the game's own, as
+    /// [`submit`](Self::submit) says for itself: the decision it was told is over, so one
+    /// that comes to it again is told again.
+    pub fn decided(&mut self, id: &str) {
+        if let Some(session) = self.session_mut(id) {
+            session.told = None;
+        }
+    }
+
+    /// Cancel the choice the session `id` has held, and the news of one released before.
+    /// The cancelled choice.
+    pub fn withdraw(&mut self, id: &str) -> Option<C> {
         let session = self.session_mut(id)?;
-        session.told = None;
         session.released = None;
         session.held.take().map(|held| held.choice)
     }

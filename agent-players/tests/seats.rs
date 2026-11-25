@@ -751,6 +751,42 @@ fn silence_is_counted_from_the_last_request_or_the_last_answer_to_a_wait() {
     );
 }
 
+/// Nothing is asked of a session whose choice waits for the table.
+#[test]
+fn a_session_whose_choice_is_held_is_not_silent() {
+    let now = Instant::now();
+    let later = now + Duration::from_secs(300);
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert_eq!(seats.silence(&RED, later), Some(Duration::ZERO));
+    // A choice the game takes another way is withdrawn, and not applied here.
+    assert_eq!(seats.withdraw(&red), Some("march"));
+    assert_eq!(seats.silence(&RED, later), Some(Duration::from_secs(300)));
+    game.settled = true;
+    assert_eq!(seats.settle(&mut game), []);
+    assert_eq!(game.save, ["the opening"]);
+}
+
+/// A game's own way of answering a decision ends it as a submission does.
+#[test]
+fn a_decision_that_comes_again_after_it_was_answered_is_told_again() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert!(decision(&mut seats, &red, 7, now).is_some());
+    seats.decided(&red);
+    wait(&mut seats, &red, 2, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+    // Another player's change at the same revision asks for it again.
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((2, Told::Decision))
+    );
+}
+
 /// A wait by an identity that holds no seat is not held.
 #[test]
 fn a_session_without_a_seat_has_no_wait() {
