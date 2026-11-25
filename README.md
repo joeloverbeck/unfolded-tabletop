@@ -21,7 +21,8 @@ terms used here.
 | `unfolded-record-replacement` | A game's save record, on a locked, staged replacement that keeps the previous record | never |
 | `unfolded-assets` | Bounded and SHA-256-verified reads, bounded PNG crops, and publication of a prepared directory | never |
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
-| `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |
+| `unfolded-seat-client` | A client for a held agent seat, on Unix, the keeping of its table running, and the `held-start` tool | never |
+| `unfolded-agent-players` | The player's side of a game's socket for agent players, on Unix: one request, one answer | never |
 | `unfolded-dev-tools` | Bounded context readers, a recorder for checks, and the `compare-captures` tool | never |
 | `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow, gathering its own input | Bevy 0.20.0 |
 | `unfolded-tabletop::capture`, feature `render` | A host's plugins with no window, a surface every marked camera renders to, and one capture that waits until the table is ready | Bevy 0.20.0 |
@@ -34,6 +35,7 @@ terms used here.
 | `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
 | `unfolded-tabletop::window_size`, feature `render` | A log line for each size the primary window settles at | Bevy 0.20.0 |
 | `unfolded-tabletop::seat`, feature `seat` | The agent seat, in batch form or held on a local socket; enables `render` | Bevy 0.20.0 |
+| `unfolded-tabletop::agent_transport`, feature `seat` | A running game's side of its socket for agent players: requests taken by a frame, each answered on it or on a later one | Bevy 0.20.0 |
 
 "Never" holds under every feature set, and `scripts/check` fails if Bevy appears
 below any of those packages. `unfolded-random` has no dependencies at all.

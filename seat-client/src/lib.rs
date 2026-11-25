@@ -1,18 +1,22 @@
 //! Unix socket client for the held agent seat, extracted from Arkham's tools.
-//! No renderer is required. A [`Connection`] answers the two questions its callers
-//! ask: "send these requests and tell me how it went" ([`Connection::send`]) and
-//! "send one request and give me its answer" ([`Connection::request`]). Both wake
-//! regularly while the seat says nothing, to run the caller's check of its own
-//! deadline or interrupt. Consumers own launch diagnostics, signal handling,
+//! No renderer is required. A [`Connection`] answers the questions its callers ask:
+//! "send these requests and tell me how it went" ([`Connection::send`]), "send one
+//! request and give me its answer" ([`Connection::request`]) and, for a protocol that is
+//! not the seat's, "send one line and give me the line back" ([`Connection::ask`]). Each
+//! wakes regularly while nothing arrives, to run the caller's check of its own deadline
+//! or interrupt. Consumers own launch diagnostics, signal handling,
 //! deadlines, wording and exit statuses: a caller's check returns its own error, which
 //! comes back as it is, and every other failure is a cause to match ([`Unsent`],
-//! [`RequestError`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
+//! [`RequestError`], [`AskError`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
 //! nothing bounds a write; a final line without a newline is accepted as it arrived.
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
 //! [`requests`] splits arguments or standard-input lines into request lines for
-//! [`Connection::send`].
+//! [`Connection::send`]. [`hosting`] keeps a held seat's table running while others play
+//! at it.
 #![cfg(unix)]
+
+pub mod hosting;
 
 use serde_json::Value;
 use std::{
@@ -194,6 +198,37 @@ impl<E: fmt::Debug + fmt::Display> Error for RequestError<E> {
     }
 }
 
+/// Why a line asked with [`Connection::ask`] has no line back. `E` is the caller's check's
+/// own error.
+#[derive(Debug)]
+pub enum AskError<E> {
+    /// The line could not be sent.
+    Unwritable(io::Error),
+    /// The caller's check ended the wait, with its error.
+    Stopped(E),
+    /// Reading the line back failed.
+    Unreadable(io::Error),
+}
+
+impl<E: fmt::Display> fmt::Display for AskError<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unwritable(error) | Self::Unreadable(error) => error.fmt(formatter),
+            Self::Stopped(error) => error.fmt(formatter),
+        }
+    }
+}
+
+/// The caller's own error is its own: as a source it is not named.
+impl<E: fmt::Debug + fmt::Display> Error for AskError<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Unwritable(error) | Self::Unreadable(error) => error.source(),
+            Self::Stopped(_) => None,
+        }
+    }
+}
+
 impl From<UnixStream> for Connection {
     fn from(stream: UnixStream) -> Self {
         Self { stream }
@@ -242,29 +277,19 @@ impl Connection {
     pub fn request<E>(
         self,
         request: &Request,
-        mut check: impl FnMut() -> Result<(), E>,
+        check: impl FnMut() -> Result<(), E>,
     ) -> Result<Reply, RequestError<E>> {
-        self.stream
-            .set_read_timeout(Some(WAKE))
-            .map_err(RequestError::Unreadable)?;
         let request = request.to_string();
-        if (&self.stream)
-            .write_all(format!("{request}\n").as_bytes())
-            .is_err()
-        {
-            return Ok(Reply::Ended(Ended::Closed));
-        }
-        let _ = self.stream.shutdown(Shutdown::Write);
-        let mut line = Vec::new();
-        match wait_for_line(&mut BufReader::new(&self.stream), &mut line, &mut check) {
-            Ok(true) => {}
-            Ok(false) => return Ok(Reply::Ended(Ended::Unanswered)),
-            Err(Waited::Stopped(error)) => return Err(RequestError::Stopped(error)),
-            Err(Waited::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
+        let line = match self.ask(&request, check) {
+            Ok(Some(line)) => line,
+            Ok(None) => return Ok(Reply::Ended(Ended::Unanswered)),
+            Err(AskError::Unwritable(_)) => return Ok(Reply::Ended(Ended::Closed)),
+            Err(AskError::Stopped(error)) => return Err(RequestError::Stopped(error)),
+            Err(AskError::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
                 return Ok(Reply::Ended(Ended::Reset(error)));
             }
-            Err(Waited::Unreadable(error)) => return Err(RequestError::Unreadable(error)),
-        }
+            Err(AskError::Unreadable(error)) => return Err(RequestError::Unreadable(error)),
+        };
         let text = String::from_utf8_lossy(&line).trim_end().to_owned();
         let response = match serde_json::from_slice::<Value>(&line) {
             Ok(response) => response,
@@ -281,6 +306,30 @@ impl Connection {
                 response,
                 line: text,
             })),
+        }
+    }
+
+    /// Send one line of any protocol, given without its line ending, end the connection's
+    /// input and read one line back, as it arrived; `None` when the connection closed
+    /// without one. While nothing arrives, `check` runs about five times a second, and its
+    /// error ends the wait. `unfolded-agent-players` asks a game this way.
+    pub fn ask<E>(
+        self,
+        request: &str,
+        mut check: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<Vec<u8>>, AskError<E>> {
+        self.stream
+            .set_read_timeout(Some(WAKE))
+            .map_err(AskError::Unreadable)?;
+        (&self.stream)
+            .write_all(format!("{request}\n").as_bytes())
+            .map_err(AskError::Unwritable)?;
+        let _ = self.stream.shutdown(Shutdown::Write);
+        let mut line = Vec::new();
+        match wait_for_line(&mut BufReader::new(&self.stream), &mut line, &mut check) {
+            Ok(arrived) => Ok(arrived.then_some(line)),
+            Err(Waited::Stopped(error)) => Err(AskError::Stopped(error)),
+            Err(Waited::Unreadable(error)) => Err(AskError::Unreadable(error)),
         }
     }
 }
