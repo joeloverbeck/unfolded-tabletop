@@ -1,26 +1,36 @@
-//! The small folder an agent player's session runs in, outside your checkout: the
-//! player's instructions and, for Claude Code and Codex, the permission for one client
-//! program, so that a game command needs no prompt and no approval model, with the
-//! settings under which a session waits without a model call. A session is woken by its
-//! wait ending; why it does not poll is `docs/adr/0001-agent-sessions-are-woken.md`.
+//! The small folders an agent player's sessions run in, outside your checkout, one for
+//! Claude Code and one for Codex: the player's instructions, that tool's permission for
+//! one client program, and the settings under which a session waits without a model call.
+//! A session is woken by its wait ending; why it does not poll is
+//! `docs/adr/0001-agent-sessions-are-woken.md`.
 //!
-//! A [`Player`] holds your folder, your client program and your instructions, and writes
-//! the folder. [`install`] puts a built client program in its place. Which program it is,
-//! what the instructions say besides [`CODEX_WAIT`], where the folder and the program lie
-//! and when they are written stay yours. Give both fixed places: each tool asks whether it
-//! may trust a folder the first time, and the permission names the program by its path.
+//! [`Folders`] holds your two folders, your client program and your instructions, and
+//! writes the folders. [`install`] puts a built client program in its place. Which program
+//! it is, what the instructions say besides [`CODEX_WAIT`], where everything lies and when
+//! it is written stay yours. Give all three fixed places: each tool asks whether it may
+//! trust a folder the first time, and the permission names the program by its path. A
+//! path is ASCII letters, digits, `/`, `.`, `_` and `-` only.
 //!
-//! What keeps a session from writing the program is its tool's own sandbox, and no test
-//! here runs either tool. Codex's lets a session write its folder and the temporary
-//! directories, so keep the program out of both. Claude Code's is turned on by the
-//! folder's settings for every command but the client program's, and its file tools are
-//! denied the program's directory. Cuba Libre #198 and #202 measured what Codex 0.172.0
-//! and Claude Code 2.1.332 do with these settings.
+//! A tool runs in its own folder because Codex may write any file of the folder it runs in
+//! but `.codex`, and so would write Claude Code's settings beside its own. A session may
+//! keep notes in its folder's `notes`.
+//!
+//! **What was measured,** in Cuba Libre #198 and #202; no test here runs a tool. Codex
+//! 0.172.0's sandbox, which needs no model, let a command write the Codex folder but
+//! `.codex`, and nothing else on the machine: the temporary directories are excluded.
+//! Claude Code 2.1.332's permission rules refused its file tools and a copy the program's
+//! directory and what configures a session. Its sandbox, which these settings ask for,
+//! is not measured to hold a limit: on the one machine it was tried on it could start no
+//! command, so every command but the client program's failed. It needs `bubblewrap` and
+//! `socat`, and without them these settings have Claude Code refuse to start, saying so.
+//! Tell your player's human.
 
 use serde_json::json;
 use std::{
     error::Error,
-    fmt, fs, io,
+    fmt,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
 };
@@ -43,37 +53,58 @@ If that cell yields anyway, wait on it with yield_time_ms 7200000.";
 const CODEX_LIMIT: u32 = 7_200_000;
 /// What Codex reads of its instructions by its default `project_doc_max_bytes`.
 const LONGEST: usize = 32 * 1024;
+/// Where a session keeps its notes, in its folder.
+const NOTES: &str = "notes";
 
-/// A player's folder, as [`Player::write`] makes it.
+/// The folders of a game's agent players, as [`Folders::write`] makes them.
 #[derive(Clone, Copy, Debug)]
-pub struct Player<'a> {
-    /// The folder the sessions run in.
-    pub folder: &'a Path,
-    /// The one client program the sessions may run, outside the folder.
+pub struct Folders<'a> {
+    /// The folder Claude Code's sessions run in.
+    pub claude_code: &'a Path,
+    /// The folder Codex's sessions run in.
+    pub codex: &'a Path,
+    /// The one client program the sessions may run. Keep nothing else in its directory.
     pub client: &'a Path,
     /// The player's whole instructions, [`CODEX_WAIT`] among them, naming the client
     /// program by the path above: the permission knows no other spelling.
     pub instructions: &'a str,
 }
 
-impl Player<'_> {
-    /// Write the folder, making it where there is none: `AGENTS.md` and `CLAUDE.md`, the
-    /// same instructions for Codex and for Claude Code, and each tool's settings. Files
-    /// of those names are replaced, and nothing else in the folder is touched. A refusal
-    /// comes before anything is written; a file that could not be written may leave the
-    /// folder written in part.
+impl Folders<'_> {
+    /// Write both folders, making them where there are none. Claude Code's holds the
+    /// instructions as `CLAUDE.md`, and `.claude/settings.json`; Codex's holds them as
+    /// `AGENTS.md`, and `.codex/config.toml` and `.codex/rules/player.rules`. Files of
+    /// those names are replaced.
     ///
-    /// In Codex the client program's commands are allowed, and one poll may last as long
-    /// as [`CODEX_WAIT`] asks. In Claude Code they are allowed and excluded from its
-    /// sandbox, where every other command runs; its file tools may write the folder's
-    /// `notes` directory unasked, and are denied the instructions, the settings and the
-    /// program's directory; and its connectors and artifacts are off, whose descriptions
-    /// each model call would carry.
+    /// Anything else in a folder is refused, since a session could have put it there to
+    /// change what a later one may do; but for plain files directly in `notes`, whose names
+    /// begin with neither a dot, `CLAUDE` nor `AGENTS`. A link is refused everywhere. A refusal comes before
+    /// anything is written; a file that could not be written may leave the folders written
+    /// in part.
+    ///
+    /// In Codex the client program's commands are allowed and run outside its sandbox,
+    /// which lets other commands write the folder and nothing else, and one poll may last
+    /// as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
+    /// allowed, and excluded from its sandbox, which every other command is to run in, by
+    /// no permission of its own; its file tools are denied the program's directory,
+    /// Codex's folder, both tools' settings in the home directory, and what configures a
+    /// session in its own folder; and its connectors and artifacts are off, whose
+    /// descriptions each model call would carry. The client program's is the only
+    /// permission either tool is given.
     pub fn write(&self) -> Result<(), Unwritten> {
         let client = plain(self.client)?;
-        plain(self.folder)?;
-        if self.client.starts_with(self.folder) {
-            return Err(Unwritten::ClientInside);
+        let codex = plain(self.codex)?;
+        plain(self.claude_code)?;
+        let Some(beside) = self.client.parent() else {
+            return Err(Unwritten::Path(self.client.to_owned()));
+        };
+        let places = [beside, self.claude_code, self.codex];
+        for (index, inner) in places.into_iter().enumerate() {
+            for outer in places[..index].iter().chain(&places[index + 1..]) {
+                if inner.starts_with(outer) {
+                    return Err(Unwritten::Nested(inner.to_owned(), (*outer).to_owned()));
+                }
+            }
         }
         if !self.instructions.contains(CODEX_WAIT) {
             return Err(Unwritten::NoWait);
@@ -84,38 +115,44 @@ impl Player<'_> {
         if self.instructions.len() > LONGEST {
             return Err(Unwritten::TooLong(self.instructions.len()));
         }
-        let beside = self
-            .client
-            .parent()
-            .and_then(Path::to_str)
-            .ok_or_else(|| Unwritten::Path(self.client.to_owned()))?;
-        let claude = json!({
+        let beside = beside.display();
+        let settings = json!({
             "disableClaudeAiConnectors": true,
             "enableArtifact": false,
             "permissions": {
-                "allow": [format!("Bash({client}:*)"), "Edit(/notes/**)"],
+                "allow": [format!("Bash({client}:*)")],
                 "deny": [
-                    "Edit(/AGENTS.md)",
                     "Edit(/CLAUDE.md)",
+                    "Edit(/CLAUDE.local.md)",
+                    "Edit(/AGENTS.md)",
+                    "Edit(/.mcp.json)",
                     "Edit(/.claude/**)",
-                    "Edit(/.codex/**)",
+                    "Edit(~/.claude/**)",
+                    "Edit(~/.codex/**)",
                     // Two slashes begin a path that is not the folder's own.
                     format!("Edit(/{beside}/**)"),
+                    format!("Edit(/{codex}/**)"),
                 ],
             },
             "sandbox": {
                 "enabled": true,
                 "failIfUnavailable": true,
+                "autoAllowBashIfSandboxed": false,
                 "allowUnsandboxedCommands": false,
                 "excludedCommands": [format!("{client}:*")],
             },
         });
-        let files = [
-            ("AGENTS.md", self.instructions.to_owned()),
+        let claude_code = [
             ("CLAUDE.md", self.instructions.to_owned()),
+            (".claude/settings.json", format!("{settings:#}\n")),
+        ];
+        let codex = [
+            ("AGENTS.md", self.instructions.to_owned()),
             (
                 ".codex/config.toml",
-                format!("background_terminal_max_timeout = {CODEX_LIMIT}\n"),
+                format!(
+                    "background_terminal_max_timeout = {CODEX_LIMIT}\nsandbox_mode = \"workspace-write\"\n\n[sandbox_workspace_write]\nwritable_roots = []\nexclude_slash_tmp = true\nexclude_tmpdir_env_var = true\n"
+                ),
             ),
             (
                 ".codex/rules/player.rules",
@@ -123,16 +160,80 @@ impl Player<'_> {
                     "prefix_rule(\n    pattern = [\"{client}\"],\n    decision = \"allow\",\n    justification = \"The player's one client program.\",\n)\n"
                 ),
             ),
-            (".claude/settings.json", format!("{claude:#}\n")),
         ];
-        for (name, text) in files {
-            let path = self.folder.join(name);
-            let directory = path.parent().unwrap_or(self.folder);
-            fs::create_dir_all(directory).map_err(|error| failed(directory, error))?;
-            fs::write(&path, text).map_err(|error| failed(&path, error))?;
-        }
-        Ok(())
+        own(self.claude_code, &claude_code)?;
+        own(self.codex, &codex)?;
+        put(self.claude_code, &claude_code)?;
+        put(self.codex, &codex)
     }
+}
+
+/// That `folder`, where there is one, holds nothing but `files` and notes.
+fn own(folder: &Path, files: &[(&str, String)]) -> Result<(), Unwritten> {
+    match fs::symlink_metadata(folder) {
+        Ok(found) if found.is_dir() => {}
+        Ok(_) => return Err(Unwritten::Foreign(folder.to_owned())),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(failed(folder, error)),
+    }
+    let mut left = vec![PathBuf::new()];
+    while let Some(within) = left.pop() {
+        let directory = folder.join(&within);
+        for entry in fs::read_dir(&directory).map_err(|error| failed(&directory, error))? {
+            let entry = entry.map_err(|error| failed(&directory, error))?;
+            let path = within.join(entry.file_name());
+            let kind = entry
+                .file_type()
+                .map_err(|error| failed(&entry.path(), error))?;
+            let ours = if kind.is_dir() {
+                path == Path::new(NOTES)
+                    || files
+                        .iter()
+                        .any(|(name, _)| Path::new(name).starts_with(&path))
+            } else {
+                kind.is_file()
+                    && (within == Path::new(NOTES) && note(&entry.file_name())
+                        || files.iter().any(|(name, _)| Path::new(name) == path))
+            };
+            if !ours {
+                return Err(Unwritten::Foreign(entry.path()));
+            }
+            if kind.is_dir() {
+                left.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether a file of this name in `notes` is a note, which neither tool reads by itself.
+fn note(name: &std::ffi::OsStr) -> bool {
+    let name = name.to_string_lossy().to_lowercase();
+    ![".", "claude", "agents"]
+        .iter()
+        .any(|start| name.starts_with(start))
+}
+
+fn put(folder: &Path, files: &[(&str, String)]) -> Result<(), Unwritten> {
+    for (name, text) in files {
+        let path = folder.join(name);
+        let directory = path.parent().unwrap_or(folder);
+        fs::create_dir_all(directory).map_err(|error| failed(directory, error))?;
+        // A file of its own each time, so that nothing is written through a link.
+        match fs::remove_file(&path) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                return Err(failed(&path, error));
+            }
+            _ => {}
+        }
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .and_then(|mut file| file.write_all(text.as_bytes()))
+            .map_err(|error| failed(&path, error))?;
+    }
+    Ok(())
 }
 
 /// Copy the `built` client program to `client`, the path your permission names. The copy
@@ -176,21 +277,25 @@ fn failed(path: &Path, error: io::Error) -> Unwritten {
     Unwritten::Failed(path.to_owned(), error)
 }
 
-/// Why a player's folder or its client program was not written.
+/// Why the folders or the client program were not written.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Unwritten {
     /// A path is not absolute, contains `..`, or holds more than ASCII letters, digits,
     /// `/`, `.`, `_` and `-`.
     Path(PathBuf),
-    /// The client program's path lies in the folder, which its sessions write.
-    ClientInside,
+    /// The first lies in the second or is it: two of the folders and the client program's
+    /// directory, as they are spelled; links are not followed.
+    Nested(PathBuf, PathBuf),
     /// The instructions lack [`CODEX_WAIT`].
     NoWait,
     /// The instructions do not name the client program by its path.
     NoClient,
     /// The instructions are this many bytes long, more than Codex reads.
     TooLong(usize),
+    /// A folder holds this, which is not among what was written there and is no note, or
+    /// the folder itself is something else, such as a link.
+    Foreign(PathBuf),
     /// A file or directory could not be read or written.
     Failed(PathBuf, io::Error),
 }
@@ -203,7 +308,12 @@ impl fmt::Display for Unwritten {
                 "{} must be an absolute path of ASCII letters, digits, \"/\", \".\", \"_\" and \"-\" only, without \"..\"",
                 path.display()
             ),
-            Self::ClientInside => f.write_str("the client program lies in the player's folder"),
+            Self::Nested(inner, outer) => write!(
+                f,
+                "{} lies in {}, which must be a place of its own",
+                inner.display(),
+                outer.display()
+            ),
             Self::NoWait => f.write_str("the instructions lack how a Codex session waits"),
             Self::NoClient => {
                 f.write_str("the instructions do not name the client program by its path")
@@ -211,6 +321,11 @@ impl fmt::Display for Unwritten {
             Self::TooLong(bytes) => write!(
                 f,
                 "the instructions are {bytes} bytes long, and Codex reads {LONGEST}"
+            ),
+            Self::Foreign(path) => write!(
+                f,
+                "{} is not part of a player's folder and could change what a session may do: look at it, then remove it",
+                path.display()
             ),
             Self::Failed(path, error) => write!(f, "{}: {error}", path.display()),
         }

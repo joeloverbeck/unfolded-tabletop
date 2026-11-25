@@ -1,9 +1,10 @@
 //! Seam: waking a session over the socket, from its folder to the table's record of who
 //! waits for what. A stand-in table serves a socket with `Seats`. A stand-in for Codex
-//! takes a folder `Player` wrote, runs the installed client program as its instructions
-//! say, one process at a time, and counts what would call Codex's model: each time a
-//! command ends. Expectations come from Cuba Libre #202. What Codex itself does with the
-//! folder was measured in Cuba Libre #198; nothing here runs it.
+//! reads a folder `Folders` wrote for the limit of one poll and the one program its rules
+//! allow, runs that program with requests of this test's own, one process at a time, and
+//! counts what would call Codex's model: each time a command ends. Expectations come from
+//! Cuba Libre #202. What Codex does with such a folder was measured in Cuba Libre #198;
+//! nothing here runs it.
 
 use serde_json::{Value, json};
 use std::{
@@ -22,7 +23,7 @@ use std::{
 };
 use unfolded_agent_players::{
     client,
-    folder::{CODEX_WAIT, Player, install},
+    folder::{CODEX_WAIT, Folders, install},
     seats::{Ended, Event, Game, Joining, Pending, Seats, Submitted, Told, Waiting},
 };
 
@@ -124,8 +125,9 @@ fn table(turns: &[&'static str]) -> Table {
     let client = directory.path().join("client/play");
     install(&std::env::current_exe().unwrap(), &client).unwrap();
     let program = client.display();
-    Player {
-        folder: &folder,
+    Folders {
+        claude_code: &directory.path().join("claude-code"),
+        codex: &folder,
         client: &client,
         instructions: &format!("How to run `{program}`, exactly. {CODEX_WAIT}"),
     }
@@ -285,7 +287,7 @@ impl Codex {
         let (_, limit) = settings
             .split_once("background_terminal_max_timeout = ")
             .unwrap();
-        let limit: u64 = limit.trim().parse().unwrap();
+        let limit: u64 = limit.lines().next().unwrap().parse().unwrap();
         assert_eq!(asked["yield_time_ms"], json!(limit));
         assert!(limit >= 2 * 60 * 60 * 1000, "Two hours");
         let rules = read(".codex/rules/player.rules");
