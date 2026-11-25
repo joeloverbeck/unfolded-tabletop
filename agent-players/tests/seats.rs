@@ -707,16 +707,16 @@ fn a_wait_whose_client_died_ends() {
     assert!(!seats.hung_up(dead));
     assert!(!seats.waits(&red));
     assert!(seats.waits(&blue));
-    // Last heard from as its client died.
-    assert_eq!(
-        seats.silence(&RED, later + Duration::from_secs(60)),
-        Some(Duration::from_secs(60))
-    );
     // Its seat and its held choice are still its own.
     assert_eq!(seats.holder(&RED), Holder::Session(red.clone()));
     game.settled = true;
     assert_eq!(seats.settle(&mut game).len(), 1);
     assert_eq!(game.save, ["the opening", "red: march"]);
+    // Last heard from as its client died, and not while its wait was held.
+    assert_eq!(
+        seats.silence(&RED, later + Duration::from_secs(60)),
+        Some(Duration::from_secs(60))
+    );
     // And what its wait would have told it is told to the next.
     assert_eq!(decision(&mut seats, &red, 9, later), None);
     wait(&mut seats, &red, 3, Some(9), later);
