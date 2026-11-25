@@ -39,8 +39,9 @@ is not interrupted. Waits longer than 16 minutes were not measured.
   known fallback if real play misses a limit.
 - **Waits that end at a period**, as Arkham's Codex partners used. Each costs a model call
   while nothing happens.
-- **A raised limit alone, or "one long poll" without the call.** The first took about
-  three model calls a minute, and the second one.
+- **Codex instructions without the exact call.** Told only that the wait returns when it is
+  needed, a session took about three model calls a minute. Told to wait in one long poll,
+  with the limit raised, it took one a minute.
 - **Claude Code's foreground wait.** It took one call for each decision, in the one
   session that tried it. It has a longest time, and a message the human types waits for the
   event. Joel had accepted the background wait, and it stays.
