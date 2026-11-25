@@ -13,8 +13,9 @@
 //! What keeps a session from writing the program is its tool's own sandbox, and no test
 //! here runs either tool. Codex's lets a session write its folder and the temporary
 //! directories, so keep the program out of both. Claude Code's is turned on by the
-//! folder's settings for every command but the client program's. Cuba Libre #198 and #202
-//! measured what Codex 0.172.0 and Claude Code 2.1.332 do with these settings.
+//! folder's settings for every command but the client program's, and its file tools are
+//! denied the program's directory. Cuba Libre #198 and #202 measured what Codex 0.172.0
+//! and Claude Code 2.1.332 do with these settings.
 
 use serde_json::json;
 use std::{

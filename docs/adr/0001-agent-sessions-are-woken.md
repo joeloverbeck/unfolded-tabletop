@@ -27,6 +27,8 @@ measured each way in both tools before anything was built:
 
 The session runs in a small folder that holds its instructions and each tool's permission
 for the one client program. That permission is what keeps the approval model out of play.
+The program lies outside the folder, and each tool's sandbox keeps a session from writing
+it. Claude Code's is off by default, so the folder turns it on.
 
 What this gives up: a Codex session is woken only while its window is open and its turn
 is not interrupted. Waits longer than 16 minutes were not measured.
@@ -45,5 +47,11 @@ is not interrupted. Waits longer than 16 minutes were not measured.
 - **Claude Code's foreground wait.** It took one call for each decision, in the one
   session that tried it. It has a longest time, and a message the human types waits for the
   event. Joel had accepted the background wait, and it stays.
+- **Claude Code's sandbox with its sockets allowed, and the client program inside it.** Its
+  file limits held in Cuba Libre #202's measurement, but a command asked the user's
+  session bus to write outside the folder, and it did. So the client program is excluded
+  by name, and every other command stays inside with its sockets blocked. On the machine
+  of that measurement, an Ubuntu that restricts user namespaces, the sandbox then starts
+  no command at all: every command but the client's fails.
 - **Claude Code's Monitor.** It ends after 30 minutes at most, so it would wake a session
   for nothing.
