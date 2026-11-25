@@ -1,9 +1,11 @@
 //! Seam: a held seat's table kept running, against a stand-in seat on a real socket.
-//! Expectations come from Arkham's `seat-wait` (Arkham #218), whose exchange moved here:
-//! one connection per request, an observe and then settles, and how each ending shows.
+//! Expectations come from Arkham's `seat-wait` (Arkham #218), whose loop moved here: one
+//! connection per request, an observe and then settles, what runs in the pause between
+//! them, and how each ending shows.
 
 use serde_json::{Value, json};
 use std::{
+    cell::Cell,
     convert::Infallible,
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixListener,
@@ -57,6 +59,12 @@ fn seat(answers: &'static [&'static str]) -> Seat {
     }
 }
 
+/// A caller's pause: it sleeps.
+fn paused<E>(duration: Duration) -> Result<(), E> {
+    thread::sleep(duration);
+    Ok(())
+}
+
 /// Kept running for at most a minute, with no check, and stopped at revision `stop`.
 /// What was seen: each answer's revision.
 fn kept(socket: &Path, stop: u64) -> (Result<Kept<u64>, Unkept<Infallible>>, Vec<u64>) {
@@ -66,6 +74,7 @@ fn kept(socket: &Path, stop: u64) -> (Result<Kept<u64>, Unkept<Infallible>>, Vec
         socket,
         until,
         || Ok(()),
+        paused,
         |answer| {
             let revision = answer["revision"].as_u64().unwrap();
             seen.push(revision);
@@ -120,13 +129,14 @@ fn a_resting_table_is_settled_twice_a_second_and_the_time_ends_it() {
         }
     });
     let began = Instant::now();
-    let mut checks = 0;
+    let mut pauses = Vec::new();
     let kept = keep_running(
         &socket,
         began + Duration::from_millis(1_200),
-        || {
-            checks += 1;
-            Ok::<(), Infallible>(())
+        || Ok::<(), Infallible>(()),
+        |pause| {
+            pauses.push(pause);
+            paused(pause)
         },
         |_| Ok(Next::<()>::Rest),
     );
@@ -134,10 +144,14 @@ fn a_resting_table_is_settled_twice_a_second_and_the_time_ends_it() {
     assert!(matches!(kept, Ok(Kept::TimedOut)), "{kept:?}");
     assert!(took >= Duration::from_millis(1_200), "{took:?}");
     assert!(took < Duration::from_secs(10), "{took:?}");
-    assert!(checks > 3, "an interrupt is noticed between requests");
     // At 0, 0.5 and 1 second, and fewer on a slow host.
     let asked = asked.load(Ordering::SeqCst);
     assert!((2..=3).contains(&asked), "asked {asked} times");
+    // A pause of at most half a second after each answer, the last cut at the time.
+    let half = Duration::from_millis(500);
+    assert_eq!(pauses.len(), asked);
+    assert!(pauses.iter().all(|pause| *pause <= half), "{pauses:?}");
+    assert!(*pauses.last().unwrap() < half, "{pauses:?}");
 }
 
 #[test]
@@ -200,13 +214,14 @@ fn an_answer_that_is_neither_an_observation_nor_a_settle_fails() {
 }
 
 #[test]
-fn the_callers_check_and_its_reading_of_an_answer_end_it_with_their_own_errors() {
+fn the_callers_check_pause_and_reading_of_an_answer_end_it_with_their_own_errors() {
     let resting = seat(&[r#"{"status":"observed"}"#]);
     let until = Instant::now() + Duration::from_secs(60);
     let interrupted = keep_running(
         &resting.socket,
         until,
-        || Err("interrupted"),
+        || Ok(()),
+        |_| Err("interrupted"),
         |_| Ok(Next::<()>::Rest),
     );
     assert!(
@@ -220,6 +235,7 @@ fn the_callers_check_and_its_reading_of_an_answer_end_it_with_their_own_errors()
         &unread.socket,
         until,
         || Ok(()),
+        paused,
         |_| Err::<Next<()>, _>("no revision"),
     );
     assert!(
@@ -232,6 +248,37 @@ fn the_callers_check_and_its_reading_of_an_answer_end_it_with_their_own_errors()
     let directory = tempfile::tempdir().unwrap();
     let socket = directory.path().join("seat.sock");
     let _silent = UnixListener::bind(&socket).unwrap();
-    let stopped = keep_running(&socket, until, || Err("too long"), |_| Ok(Next::<()>::Rest));
-    assert!(matches!(stopped, Err(Unkept::Unasked(_))), "{stopped:?}");
+    let stopped = keep_running(
+        &socket,
+        until,
+        || Err("too long"),
+        paused,
+        |_| Ok(Next::<()>::Rest),
+    );
+    assert!(matches!(stopped, Err(Unkept::Request(_))), "{stopped:?}");
+}
+
+#[test]
+fn an_answer_that_came_late_is_not_a_seat_that_did_not_answer() {
+    // The caller gives up on a request past the time. Its seat answered, and the moment
+    // to give up comes in the pause that follows.
+    let seat = seat(&[r#"{"status":"observed"}"#]);
+    let given_up = Cell::new(false);
+    let kept = keep_running(
+        &seat.socket,
+        Instant::now() + Duration::from_millis(100),
+        || {
+            if given_up.get() {
+                return Err("it did not answer in time");
+            }
+            Ok(())
+        },
+        |pause| {
+            given_up.set(true);
+            paused(pause)
+        },
+        |_| Ok(Next::<()>::Rest),
+    );
+    assert!(matches!(kept, Ok(Kept::TimedOut)), "{kept:?}");
+    seat.received.join().unwrap();
 }

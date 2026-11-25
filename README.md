@@ -35,7 +35,7 @@ terms used here.
 | `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
 | `unfolded-tabletop::window_size`, feature `render` | A log line for each size the primary window settles at | Bevy 0.20.0 |
 | `unfolded-tabletop::seat`, feature `seat` | The agent seat, in batch form or held on a local socket; enables `render` | Bevy 0.20.0 |
-| `unfolded-tabletop::agent_transport`, feature `seat` | A running game's side of its socket for agent players: requests taken by frames, answers sent on any later frame | Bevy 0.20.0 |
+| `unfolded-tabletop::agent_transport`, feature `seat` | A running game's side of its socket for agent players: requests taken by a frame, each answered on it or on a later one | Bevy 0.20.0 |
 
 "Never" holds under every feature set, and `scripts/check` fails if Bevy appears
 below any of those packages. `unfolded-random` has no dependencies at all.

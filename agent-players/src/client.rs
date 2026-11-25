@@ -13,7 +13,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use unfolded_seat_client::{Connection, Unasked, Unreached};
+use unfolded_seat_client::{AskError, Connection, Unreached};
 
 /// Send `request`, one line given without its line ending, to the game listening on
 /// `socket`, end the connection's input and read one answer. The game may hold it as long
@@ -29,15 +29,12 @@ pub fn request<E>(
     })?;
     let line = connection
         .ask(request, check)
-        .map_err(|unasked| match unasked {
-            Unasked::Stopped(error) => Unanswered::Stopped(error),
-            Unasked::Unsent(error) => Unanswered::Unsent(error),
-            Unasked::Unreadable(error) => Unanswered::Unreadable(error),
+        .map_err(|failed| match failed {
+            AskError::Stopped(error) => Unanswered::Stopped(error),
+            AskError::Unsent(error) => Unanswered::Unsent(error),
+            AskError::Unreadable(error) => Unanswered::Unreadable(error),
         })?;
-    if line.is_empty() {
-        return Err(Unanswered::Closed);
-    }
-    Ok(Answer { line })
+    line.map(|line| Answer { line }).ok_or(Unanswered::Closed)
 }
 
 /// The one line that answered a request.

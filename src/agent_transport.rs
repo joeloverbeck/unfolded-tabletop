@@ -20,12 +20,14 @@
 //! still answer it, and the answer goes nowhere. A client that only ended its input, as
 //! `unfolded-agent-players` does after each request, has not hung up.
 //!
-//! **Closing.** Dropping the transport stops accepting, waits up to a second for the
-//! connections to write the answers already sent and end, cuts those still open and
-//! removes the path. Answer what is held before dropping it.
+//! **Closing.** Dropping the transport stops accepting and removes the path, then waits
+//! up to a second for the connections to write the answers already sent and end, and cuts
+//! those still open. A request that is untaken or still held by then is cut with its
+//! connection: its client reads an end and no line. So take and answer what has arrived
+//! before dropping the transport.
 //!
 //! Not here: the requests, who may send them, what they are answered, where the socket
-//! is and what the player is told. The transport reads no request. The lines it writes
+//! is and what the player is told. The transport reads no request. The answers it sends
 //! itself are the game's, through [`Protocol`].
 
 use crate::seat::socket::{Listener, Unclaimed};
@@ -54,7 +56,8 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 /// A [`Waker`] for a table in a winit window, where a reactive frame loop otherwise
 /// sleeps until input. `None` without winit's event loop, as at the agent seat, whose
-/// frames run only in its requests.
+/// frames run only in its requests. What no test here holds is that it wakes a sleeping
+/// window: a request to a game's windowed table does.
 pub fn window_waker(world: &World) -> Option<Waker> {
     let proxy = (**world.get_resource::<EventLoopProxyWrapper>()?).clone();
     Some(Arc::new(move || {
@@ -62,19 +65,20 @@ pub fn window_waker(world: &World) -> Option<Waker> {
     }))
 }
 
-/// What the transport must say itself, in the game's words: whole answer lines, without
-/// their line endings.
+/// The game's words where the transport speaks for it: the answers it must send itself,
+/// each a whole line without its line ending, and what its log calls the players.
 pub trait Protocol: Send + Sync + 'static {
-    /// What the log calls these players, such as `Agent partners`.
+    /// What begins the transport's own log line when it cannot accept a connection, such
+    /// as `Agent partners`.
     fn players(&self) -> &str;
 
-    /// The answer to a request the game let go of unanswered, after which the connection
-    /// ends.
+    /// The answer to a request whose [`Reply`] the game dropped unsent while its
+    /// connection was open, after which the connection ends.
     fn closed(&self) -> String;
 
-    /// How long `request` may stay unanswered, and its answer then. The connection goes
-    /// on. Unless a game says otherwise, every request waits as long as the game holds
-    /// it.
+    /// How long `request` may stay unanswered, and its answer then, after which the
+    /// connection goes on and the game's own answer to it goes nowhere. Unless a game says
+    /// otherwise, every request waits as long as the game holds it.
     fn unanswered(&self, request: &str) -> Option<(Duration, String)> {
         let _ = request;
         None
@@ -90,7 +94,8 @@ pub struct Incoming {
 }
 
 /// Where one request's answer goes. Dropped unsent, the request is answered with
-/// [`Protocol::closed`].
+/// [`Protocol::closed`], unless [`Protocol::unanswered`] has answered it, its client has
+/// hung up or the transport has cut its connection.
 #[derive(Debug)]
 pub struct Reply {
     answer: mpsc::Sender<String>,
@@ -109,13 +114,13 @@ impl Reply {
     /// table with one it has not ended yet is not settled, as with
     /// [`Transport::waiting`].
     pub fn hung_up(&self) -> bool {
-        hung_up(&self.stream)
+        ended(&self.stream)
     }
 }
 
-/// Whether the other end of `stream` is closed. An end that closed only its input still
+/// Whether `stream` is closed at either end. A client that ended only its input still
 /// reads.
-fn hung_up(stream: &UnixStream) -> bool {
+fn ended(stream: &UnixStream) -> bool {
     let mut polled = [PollFd::new(stream, PollFlags::empty())];
     let at_once = Timespec {
         tv_sec: 0,
@@ -361,7 +366,7 @@ fn held(
             Err(RecvTimeoutError::Disconnected) => return Held::LetGo,
             Err(RecvTimeoutError::Timeout) => {}
         }
-        if hung_up(stream) {
+        if ended(stream) {
             return Held::HungUp;
         }
         if let Some((end, answer)) = &limit

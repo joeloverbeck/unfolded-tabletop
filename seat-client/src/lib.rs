@@ -7,7 +7,7 @@
 //! or interrupt. Consumers own launch diagnostics, signal handling,
 //! deadlines, wording and exit statuses: a caller's check returns its own error, which
 //! comes back as it is, and every other failure is a cause to match ([`Unsent`],
-//! [`RequestError`], [`Unasked`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
+//! [`RequestError`], [`AskError`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
 //! nothing bounds a write; a final line without a newline is accepted as it arrived.
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!
@@ -201,7 +201,7 @@ impl<E: fmt::Debug + fmt::Display> Error for RequestError<E> {
 /// Why a line asked with [`Connection::ask`] has no line back. `E` is the caller's check's
 /// own error.
 #[derive(Debug)]
-pub enum Unasked<E> {
+pub enum AskError<E> {
     /// The line could not be sent.
     Unsent(io::Error),
     /// The caller's check ended the wait, with its error.
@@ -210,7 +210,7 @@ pub enum Unasked<E> {
     Unreadable(io::Error),
 }
 
-impl<E: fmt::Display> fmt::Display for Unasked<E> {
+impl<E: fmt::Display> fmt::Display for AskError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unsent(error) | Self::Unreadable(error) => error.fmt(formatter),
@@ -220,7 +220,7 @@ impl<E: fmt::Display> fmt::Display for Unasked<E> {
 }
 
 /// The caller's own error is its own: as a source it is not named.
-impl<E: fmt::Debug + fmt::Display> Error for Unasked<E> {
+impl<E: fmt::Debug + fmt::Display> Error for AskError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Unsent(error) | Self::Unreadable(error) => error.source(),
@@ -281,14 +281,14 @@ impl Connection {
     ) -> Result<Reply, RequestError<E>> {
         let request = request.to_string();
         let line = match self.ask(&request, check) {
-            Ok(line) if line.is_empty() => return Ok(Reply::Ended(Ended::Unanswered)),
-            Ok(line) => line,
-            Err(Unasked::Unsent(_)) => return Ok(Reply::Ended(Ended::Closed)),
-            Err(Unasked::Stopped(error)) => return Err(RequestError::Stopped(error)),
-            Err(Unasked::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
+            Ok(Some(line)) => line,
+            Ok(None) => return Ok(Reply::Ended(Ended::Unanswered)),
+            Err(AskError::Unsent(_)) => return Ok(Reply::Ended(Ended::Closed)),
+            Err(AskError::Stopped(error)) => return Err(RequestError::Stopped(error)),
+            Err(AskError::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
                 return Ok(Reply::Ended(Ended::Reset(error)));
             }
-            Err(Unasked::Unreadable(error)) => return Err(RequestError::Unreadable(error)),
+            Err(AskError::Unreadable(error)) => return Err(RequestError::Unreadable(error)),
         };
         let text = String::from_utf8_lossy(&line).trim_end().to_owned();
         let response = match serde_json::from_slice::<Value>(&line) {
@@ -310,26 +310,26 @@ impl Connection {
     }
 
     /// Send one line of any protocol, given without its line ending, end the connection's
-    /// input and read one line back, as it arrived; empty when the connection closed
+    /// input and read one line back, as it arrived; `None` when the connection closed
     /// without one. While nothing arrives, `check` runs about five times a second, and its
     /// error ends the wait. `unfolded-agent-players` asks a game this way.
     pub fn ask<E>(
         self,
         request: &str,
         mut check: impl FnMut() -> Result<(), E>,
-    ) -> Result<Vec<u8>, Unasked<E>> {
+    ) -> Result<Option<Vec<u8>>, AskError<E>> {
         self.stream
             .set_read_timeout(Some(WAKE))
-            .map_err(Unasked::Unreadable)?;
+            .map_err(AskError::Unreadable)?;
         (&self.stream)
             .write_all(format!("{request}\n").as_bytes())
-            .map_err(Unasked::Unsent)?;
+            .map_err(AskError::Unsent)?;
         let _ = self.stream.shutdown(Shutdown::Write);
         let mut line = Vec::new();
         match wait_for_line(&mut BufReader::new(&self.stream), &mut line, &mut check) {
-            Ok(_) => Ok(line),
-            Err(Waited::Stopped(error)) => Err(Unasked::Stopped(error)),
-            Err(Waited::Unreadable(error)) => Err(Unasked::Unreadable(error)),
+            Ok(arrived) => Ok(arrived.then_some(line)),
+            Err(Waited::Stopped(error)) => Err(AskError::Stopped(error)),
+            Err(Waited::Unreadable(error)) => Err(AskError::Unreadable(error)),
         }
     }
 }

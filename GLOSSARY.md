@@ -25,8 +25,8 @@ An agent sitting at a game's real table with no window, through one JSON request
 _Avoid_: bot, harness, driver
 
 **Agent player**:
-An external agent that plays at a table someone else is running, by sending requests of the game's own protocol to a socket the running game opens. Each game has its own word for one, such as Arkham's agent partner.
-_Avoid_: agent seat (the windowless table an agent sits at alone), bot, client
+An external agent that plays at a table someone else is running, by sending requests of the game's own protocol to a socket the running game opens. A game may have its own word for one, as Arkham has agent partner.
+_Avoid_: agent seat (the windowless table an agent sits at alone), bot
 
 **Held start**:
 A start of the agent seat whose session is kept open on a local socket across shell commands, rather than answered on standard input and output.
