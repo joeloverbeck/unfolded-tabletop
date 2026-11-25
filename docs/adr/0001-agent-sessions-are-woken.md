@@ -1,0 +1,48 @@
+---
+status: accepted
+---
+
+# Agent sessions are woken and do not poll
+
+An agent player's session waits inside one command, which ends when its seat has
+something to decide. Until then no model runs, and the command's end is what wakes it.
+No session looks in at intervals.
+
+Joel accepted this with Cuba Libre's spec
+[#197](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197),
+[activated](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7156330255)
+on 2026-11-25: an idle session costs nothing, each event costs at most one waiting call,
+and a game command needs no approval model. A poll costs a model call for each period in
+which nothing happened, and a game's other players can think for an hour.
+
+[Cuba Libre #198](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7157575553)
+measured each way in both tools before anything was built:
+
+- **Codex** waits in one long poll. Its own instructions hold a blocking wait to 60
+  seconds, so the player's instructions must give the exact call, and the folder's
+  settings must raise the limit. With both, a wait of 15 minutes took no model call, in
+  both sessions that tried. `folder::CODEX_WAIT` is that wording.
+- **Claude Code** runs the wait in the background and ends its turn. It is woken when
+  the command ends, at three calls for each decision.
+
+The session runs in a small folder that holds its instructions and each tool's permission
+for the one client program. That permission is what keeps the approval model out of play.
+
+What this gives up: a Codex session is woken only while its window is open and its turn
+is not interrupted. Waits longer than 16 minutes were not measured.
+
+## Considered options
+
+- **A waiter for Codex**, a process that queues one message for each event to a session
+  that has ended its turn, resuming one whose window is closed. It worked. #197 chose the
+  long poll if that met every waiting limit, and it did, so no waiter was built. It is the
+  known fallback if real play misses a limit.
+- **Waits that end at a period**, as Arkham's Codex partners used. Each costs a model call
+  while nothing happens.
+- **A raised limit alone, or "one long poll" without the call.** The first took about
+  three model calls a minute, and the second one.
+- **Claude Code's foreground wait.** It took one call for each decision, in the one
+  session that tried it. It has a longest time, and a message the human types waits for the
+  event. Joel had accepted the background wait, and it stays.
+- **Claude Code's Monitor.** It ends after 30 minutes at most, so it would wake a session
+  for nothing.

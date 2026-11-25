@@ -19,9 +19,10 @@
 //! wait: a newer one replaces it, and one whose client has died ends
 //! ([`Seats::end_hung_up`]). A wait may be for everything but the decision its seat has as
 //! it begins ([`Pending::Before`]). A session that waits is not silent, unless its wait
-//! cannot tell it the decision its seat has ([`Seats::silence`]). Another request of the session's leaves it as it is, unless
-//! the game ends it ([`Seats::end_wait`]). For a request that submits and then waits, a
-//! game submits and then gives the wait the same reply.
+//! cannot tell it the decision its seat has ([`Seats::silence`]). Another request of the
+//! session's leaves its wait as it is, unless the game ends it ([`Seats::end_wait`]). For
+//! a request that submits and then waits, a game submits and then gives the wait the same
+//! reply.
 //!
 //! **Events.** Each is told once. A session's own decision is told by the answer to its
 //! submission ([`Seats::told_in_answer`]) or by its wait ([`Seats::tell`]), whichever

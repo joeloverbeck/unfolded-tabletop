@@ -3,9 +3,12 @@
 //! side of its socket is `unfolded_tabletop::agent_transport`.
 //!
 //! [`client`] is the player's side: one request, one answer, and its tool's identifiers of
-//! its session. [`seats`] is the table's: who holds each seat, and how the session that
-//! holds one submits its choices and waits.
+//! its session. [`folder`] is where a player's session runs: its instructions, its tools'
+//! permission for the client program, and what lets it wait without a model call.
+//! [`seats`] is the table's: who holds each seat, and how the session that holds one
+//! submits its choices and waits.
 #![cfg(unix)]
 
 pub mod client;
+pub mod folder;
 pub mod seats;
