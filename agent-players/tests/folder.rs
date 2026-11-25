@@ -148,7 +148,15 @@ fn a_folder_that_would_not_hold_is_refused_and_nothing_is_written() {
         refused(&folder, &client, &long(32_769)),
         Unwritten::TooLong(32_769)
     ));
-    for path in ["play", "/a path", "/a/../play", "/a:b", "/a(b", "/a\"b", "/é"] {
+    for path in [
+        "play",
+        "/a path",
+        "/a/../play",
+        "/a:b",
+        "/a(b",
+        "/a\"b",
+        "/é",
+    ] {
         let path = Path::new(path);
         assert!(
             matches!(
