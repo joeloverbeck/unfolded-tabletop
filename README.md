@@ -22,7 +22,7 @@ terms used here.
 | `unfolded-assets` | Bounded and SHA-256-verified reads, bounded PNG crops, and publication of a prepared directory | never |
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
 | `unfolded-seat-client` | A client for a held agent seat, on Unix, the keeping of its table running, and the `held-start` tool | never |
-| `unfolded-agent-players` | For a game's agent players, on Unix: the player's side of its socket, one request and one answer, and the table's record of who holds each seat and of what each session waits for | never |
+| `unfolded-agent-players` | For a game's agent players, on Unix: the player's side of its socket, one request and one answer, the folders their sessions run in, and the table's record of who holds each seat and of what each session waits for | never |
 | `unfolded-dev-tools` | Bounded context readers, a recorder for checks, and the `compare-captures` tool | never |
 | `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow, gathering its own input | Bevy 0.20.0 |
 | `unfolded-tabletop::capture`, feature `render` | A host's plugins with no window, a surface every marked camera renders to, and one capture that waits until the table is ready | Bevy 0.20.0 |
