@@ -24,7 +24,8 @@ use unfolded_tabletop::{
     seat::socket::Unclaimable,
 };
 
-/// A game whose request `brief` may stay unanswered for a second.
+/// A game whose request `brief` may stay unanswered for a second, and `endless` for
+/// longer than any clock counts.
 struct Game;
 
 impl Protocol for Game {
@@ -37,9 +38,12 @@ impl Protocol for Game {
     }
 
     fn unanswered(&self, request: &str) -> Option<(Duration, String)> {
-        request
-            .starts_with("brief")
-            .then(|| (Duration::from_secs(1), format!("nothing for {request}")))
+        let within = match request.split(' ').next()? {
+            "brief" => Duration::from_secs(1),
+            "endless" => Duration::MAX,
+            _ => return None,
+        };
+        Some((within, format!("nothing for {request}")))
     }
 }
 
@@ -235,6 +239,11 @@ fn what_the_transport_says_itself_is_in_the_games_words() {
     client.send("brief again");
     open.next().reply.send("in time".into());
     assert_eq!(client.answer(), "in time\n");
+
+    // A limit beyond what the clock can count is none.
+    client.send("endless look");
+    open.next().reply.send("in the end".into());
+    assert_eq!(client.answer(), "in the end\n");
 
     // A request the game lets go of ends its connection.
     client.send("wait");
