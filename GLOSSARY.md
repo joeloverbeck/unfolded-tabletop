@@ -29,7 +29,7 @@ An external agent that plays at a table someone else is running, by sending requ
 _Avoid_: agent seat (the windowless table an agent sits at alone), bot
 
 **Player seat**:
-A side or character of a game that one player plays, as Cuba Libre has factions and Arkham has investigators. It is the human's, handed over and unclaimed, or held by one session of an agent player.
+A side or character of a game that one player plays, as Cuba Libre has factions and Arkham has investigators. It is the human's, handed over and unclaimed, or held by one session, the agent player that joined for it.
 _Avoid_: agent seat (the windowless table an agent sits at alone)
 
 **Held start**:

@@ -12,23 +12,33 @@
 //! **Submissions.** [`Seats::submit`] answers at once: applied, held or refused. A held
 //! choice waits for the table, never for another player. [`Seats::settle`] applies it
 //! once the game says the table is settled, at the revision it was made for, and
-//! releases it with the reason otherwise. Taking the seat back cancels it.
+//! releases it with the reason otherwise. Taking the seat back cancels it. A game that
+//! holds a choice in a way of its own releases it with [`Seats::release`].
 //!
 //! **Waiting.** A wait has no period unless the session asks for one. A session has one
 //! wait: a newer one replaces it, and one whose client has died ends
-//! ([`Seats::end_hung_up`]). A request that submits and then waits is a submission and
-//! then a wait on the same reply: one refused for the session's own next decision is
-//! answered as the submission is, at once.
+//! ([`Seats::end_hung_up`]). Another request of the session's leaves it as it is, unless
+//! the game ends it ([`Seats::end_wait`]). For a request that submits and then waits, a
+//! game submits and then gives the wait the same reply.
 //!
 //! **Events.** Each is told once. A session's own decision is told by the answer to its
 //! submission ([`Seats::told_in_answer`]) or by its wait ([`Seats::tell`]), whichever
-//! comes first. A wait may be one nobody reads any more, whose tool was interrupted and
-//! left its client running. So a decision told only by a wait is told again to the
-//! session's next wait, unless the session has been answered since with a view of it
-//! ([`Seats::read`]) or has submitted. Once a decision was told in an answer, a wait
-//! that could tell only it is refused ([`Waiting::Refused`]) rather than held for the
-//! session's own move. The end of a session is for the game to tell its held wait
-//! ([`Ended`]), and each later request of its identity ([`Seats::ended`]).
+//! comes first; a view in another answer shows it and does not tell it. A wait may be one
+//! nobody reads any more, whose tool was interrupted and left its client running. So a
+//! decision told only by a wait is told again to the session's next wait, unless since
+//! then an answer other than a wait's has shown it ([`Seats::read`]) or the session has
+//! submitted. A wait whose session was told its decision, and which neither tells it
+//! again nor has anything else to tell, is refused ([`Waiting::Refused`]) rather than
+//! held for the session's own move.
+//!
+//! A held choice's release is told by a wait or by an answer that is not a wait's,
+//! whichever comes first. While only waits have told it, the next of either tells it
+//! again, until the session submits. What of the game's own news has been told is the
+//! game's to know, and to tell again if it will.
+//!
+//! The end of a session is for the game to tell its held wait ([`Ended`]), and each later
+//! request of its identity ([`Seats::ended`]) unless it left, when the identity is
+//! unknown.
 //!
 //! What no test here holds is a real tool: that its interrupted wait runs on, and that its
 //! commands are given its identifiers. Cuba Libre #198 found both.
@@ -125,7 +135,7 @@ pub struct Released<C> {
 pub struct Settled {
     /// The identity of the session that made it.
     pub session: String,
-    /// Whether it was applied. One that was not is told to the session's next wait.
+    /// Whether it was applied. One that was not is released, and the session is told.
     pub applied: bool,
 }
 
@@ -151,12 +161,30 @@ pub enum Event<N> {
 /// What a wait was answered.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Told<C, N> {
-    /// The session's held choice was released.
-    Released(Released<C>),
-    Decision,
+    /// A held choice of the session's was released. `again` when an earlier wait told
+    /// it, which nobody may have read.
+    Released { released: Released<C>, again: bool },
+    /// The session's decision. `again` when an earlier wait told it, which nobody may
+    /// have read: answer with the position whole, not from what that wait showed.
+    Decision { again: bool },
+    /// The game's own news.
     News(N),
     /// The period the session asked for ended.
     Elapsed,
+}
+
+/// What the game has for a session as its wait arrives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pending {
+    /// Its seat has no decision of its own to make. One it was told of before is over, so
+    /// it is told again if it comes back at the same revision.
+    Nothing,
+    /// Its seat's decision at this revision, whether told or not, and nothing else that
+    /// the game would tell it now.
+    Decision(u64),
+    /// Whether or not its seat has a decision, something else may end this wait: the game
+    /// has news to tell it now, or the wait is not for the decision.
+    Other,
 }
 
 /// What became of a wait as it arrived.
@@ -164,8 +192,10 @@ pub enum Told<C, N> {
 pub enum Waiting<R> {
     /// It is held, in place of the session's older one, which is to be answered so.
     Held { replaced: Option<R> },
-    /// It could tell only the decision the session was told in an answer and has not
-    /// made, so nothing the session waits for would end it.
+    /// It is not held, and any older wait of the session's stays. Either no session has
+    /// that identity, or the wait came with [`Pending::Decision`] for the decision the
+    /// session was told of, and by more than a wait nobody may have read: held, it would
+    /// wait for the session's own move.
     Refused(R),
 }
 
@@ -183,12 +213,54 @@ struct HeldChoice<C> {
     order: u64,
 }
 
+/// How far a session has been told of a decision or a release.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Telling {
+    /// Not at all.
+    Untold,
+    /// Only by a wait, which nobody may have read.
+    Unread,
+    /// Only by a wait, and the session has come back since: the next wait tells it again.
+    Again,
+    /// By an answer it read.
+    Read,
+}
+
+impl Telling {
+    /// A wait is to tell it.
+    fn due(self) -> bool {
+        matches!(self, Self::Untold | Self::Again)
+    }
+
+    /// The session has come back with another wait.
+    fn waited(&mut self) {
+        if *self == Self::Unread {
+            *self = Self::Again;
+        }
+    }
+}
+
 /// The decision a session was last told of.
 #[derive(Clone, Copy, Debug)]
 struct ToldDecision {
     revision: u64,
-    /// Only by a wait, which nobody may have read.
-    unread: bool,
+    telling: Telling,
+}
+
+/// A released choice that no answer but a wait's has told its session of.
+#[derive(Debug)]
+struct Release<C> {
+    released: Released<C>,
+    telling: Telling,
+}
+
+/// What a held wait is to be answered.
+enum Due {
+    /// The release at this place.
+    Release(usize),
+    /// The event at this place.
+    Event(usize),
+    Elapsed,
 }
 
 #[derive(Debug)]
@@ -200,7 +272,7 @@ struct Session<S, C, R> {
     heard: Instant,
     told: Option<ToldDecision>,
     held: Option<HeldChoice<C>>,
-    released: Option<Released<C>>,
+    released: Vec<Release<C>>,
     wait: Option<Wait<R>>,
 }
 
@@ -217,7 +289,7 @@ pub struct Seats<S, C, R> {
     order: u64,
 }
 
-impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
+impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
     /// A game's seats, every one the human's.
     pub fn new(seats: impl IntoIterator<Item = S>) -> Self {
         Self {
@@ -312,7 +384,7 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
             heard: now,
             told: None,
             held: None,
-            released: None,
+            released: Vec::new(),
             wait: None,
         });
         Ok(id)
@@ -420,20 +492,31 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
     }
 
     /// The session `id` answered its decision in a way of the game's own, as
-    /// [`submit`](Self::submit) says for itself: the decision it was told is over, so one
-    /// that comes to it again is told again.
+    /// [`submit`](Self::submit) says for itself. The decision it was told is over, so one
+    /// that comes to it again is told again; and it has gone on from what its last wait
+    /// told it, a release included.
     pub fn decided(&mut self, id: &str) {
         if let Some(session) = self.session_mut(id) {
             session.told = None;
+            session
+                .released
+                .retain(|release| release.telling == Telling::Untold);
         }
     }
 
-    /// Cancel the choice the session `id` has held, and the news of one released before.
-    /// The cancelled choice.
+    /// Cancel the choice the session `id` has held: the cancelled choice.
     pub fn withdraw(&mut self, id: &str) -> Option<C> {
         let session = self.session_mut(id)?;
-        session.released = None;
         session.held.take().map(|held| held.choice)
+    }
+
+    /// A choice of the session `id` that the game held in a way of its own is released,
+    /// as [`settle`](Self::settle) releases one: its session is told, and its decision is
+    /// its own again.
+    pub fn release(&mut self, id: &str, released: Released<C>) {
+        if let Some(session) = self.session_mut(id) {
+            session.release(released);
+        }
     }
 
     /// The choice the session `id` has held, and the revision it was made at.
@@ -474,8 +557,7 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
             let held = session.held.take().expect("Listed as holding");
             let applied = result.is_ok();
             if let Err(why) = result {
-                session.told = None;
-                session.released = Some(Released {
+                session.release(Released {
                     choice: held.choice,
                     why,
                 });
@@ -488,31 +570,36 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         settled
     }
 
-    /// Hold a wait of the session `id`, which must hold a seat. `decision` is the
-    /// revision of the decision it would tell, when its seat has one. `period` is the
-    /// one the session asked for; one beyond what the clock can count is none.
+    /// Hold a wait of the session `id`, unless it is [refused](Waiting::Refused).
+    /// `pending` is what the game has for the session now. `period` is the one the
+    /// session asked for; one beyond what the clock can count is none.
     pub fn wait(
         &mut self,
         id: &str,
         reply: R,
         period: Option<Duration>,
-        decision: Option<u64>,
+        pending: Pending,
         now: Instant,
     ) -> Waiting<R> {
         let Some(session) = self.session_mut(id) else {
             return Waiting::Refused(reply);
         };
         session.heard = now;
-        match session.told {
-            Some(told) if told.unread => session.told = None,
-            Some(told)
-                if decision == Some(told.revision)
-                    && session.held.is_none()
-                    && session.released.is_none() =>
+        for release in &mut session.released {
+            release.telling.waited();
+        }
+        if pending == Pending::Nothing {
+            session.told = None;
+        }
+        if let Some(told) = &mut session.told {
+            told.telling.waited();
+            if pending == Pending::Decision(told.revision)
+                && told.telling == Telling::Read
+                && session.held.is_none()
+                && session.released.is_empty()
             {
                 return Waiting::Refused(reply);
             }
-            _ => {}
         }
         let wait = Wait {
             reply,
@@ -529,6 +616,12 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
             .is_some_and(|session| session.wait.is_some())
     }
 
+    /// End the held wait of the session `id`, which is to be answered so. What it would
+    /// have told stays to be told.
+    pub fn end_wait(&mut self, id: &str) -> Option<R> {
+        Some(self.session_mut(id)?.wait.take()?.reply)
+    }
+
     /// Answer the wait of the session `id` if its moment has come: with a choice of its
     /// own that was released, the first of `events` it has not been told, or the end of
     /// its period. `events` are the game's, in the order to tell them.
@@ -540,34 +633,42 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
     ) -> Option<(R, Told<C, N>)> {
         let session = self.session_mut(id)?;
         let mut events: Vec<Event<N>> = events.into_iter().collect();
-        let pending = events.iter().find_map(|event| match event {
+        let due = session.due(&events, now)?;
+        let shown = events.iter().find_map(|event| match event {
             Event::Decision(revision) => Some(*revision),
             Event::News(_) => None,
         });
-        let deadline = session.wait.as_ref()?.deadline;
-        let told = if let Some(released) = session.released.take() {
-            Told::Released(released)
-        } else if let Some(first) = events.iter().position(|event| session.untold(event)) {
-            match events.swap_remove(first) {
-                Event::Decision(_) => Told::Decision,
-                Event::News(news) => Told::News(news),
+        let again = session
+            .told
+            .is_some_and(|told| Some(told.revision) == shown && told.telling == Telling::Again);
+        let told = match due {
+            Due::Release(index) => {
+                let release = &mut session.released[index];
+                let again = release.telling == Telling::Again;
+                release.telling = Telling::Unread;
+                Told::Released {
+                    released: release.released.clone(),
+                    again,
+                }
             }
-        } else if deadline.is_some_and(|deadline| now >= deadline) {
-            Told::Elapsed
-        } else {
-            return None;
+            Due::Event(index) => match events.swap_remove(index) {
+                Event::Decision(_) => Told::Decision { again },
+                Event::News(news) => Told::News(news),
+            },
+            Due::Elapsed => Told::Elapsed,
         };
+        // The answer shows the decision that is pending beside what it tells.
         if !matches!(told, Told::Elapsed)
-            && let Some(revision) = pending
+            && let Some(revision) = shown
             && session.untold::<N>(&Event::Decision(revision))
         {
             session.told = Some(ToldDecision {
                 revision,
-                unread: true,
+                telling: Telling::Unread,
             });
         }
         session.heard = now;
-        let wait = session.wait.take().expect("Found above");
+        let wait = session.wait.take().expect("Due");
         Some((wait.reply, told))
     }
 
@@ -578,15 +679,9 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         events: impl IntoIterator<Item = Event<N>>,
         now: Instant,
     ) -> bool {
-        let Some(session) = self.session(id) else {
-            return false;
-        };
-        let Some(wait) = &session.wait else {
-            return false;
-        };
-        session.released.is_some()
-            || wait.deadline.is_some_and(|deadline| now >= deadline)
-            || events.into_iter().any(|event| session.untold(&event))
+        let events: Vec<Event<N>> = events.into_iter().collect();
+        self.session(id)
+            .is_some_and(|session| session.due(&events, now).is_some())
     }
 
     /// The answer to a submission of the session `id` shows it its own decision at
@@ -595,20 +690,30 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         if let Some(session) = self.session_mut(id) {
             session.told = Some(ToldDecision {
                 revision,
-                unread: false,
+                telling: Telling::Read,
             });
         }
     }
 
-    /// The session `id` is answered something other than a wait that shows its position
-    /// whole, so what its last wait told it is known.
-    pub fn read(&mut self, id: &str) {
-        if let Some(told) = self
-            .session_mut(id)
-            .and_then(|session| session.told.as_mut())
+    /// The session `id` is answered something other than a wait that shows it its
+    /// position whole, so what its last wait told it is known. The releases it has been
+    /// told of by no answer, or only by a wait, for this answer to tell: they are not told
+    /// again.
+    #[must_use = "The answer is to tell them"]
+    pub fn read(&mut self, id: &str) -> Vec<Released<C>> {
+        let Some(session) = self.session_mut(id) else {
+            return Vec::new();
+        };
+        if let Some(told) = &mut session.told
+            && told.telling == Telling::Unread
         {
-            told.unread = false;
+            told.telling = Telling::Read;
         }
+        session
+            .released
+            .drain(..)
+            .map(|release| release.released)
+            .collect()
     }
 
     /// Whether a held wait's client has died, as `hung_up` says of its reply.
@@ -635,12 +740,36 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
 }
 
 impl<S, C, R> Session<S, C, R> {
+    /// A choice of its own that was held is not applied, and its decision is its own
+    /// again.
+    fn release(&mut self, released: Released<C>) {
+        self.told = None;
+        self.released.push(Release {
+            released,
+            telling: Telling::Untold,
+        });
+    }
+
+    /// What its held wait, if it has one, is to be answered now.
+    fn due<N>(&self, events: &[Event<N>], now: Instant) -> Option<Due> {
+        let deadline = self.wait.as_ref()?.deadline;
+        let released = |release: &Release<C>| release.telling.due();
+        if let Some(index) = self.released.iter().position(released) {
+            return Some(Due::Release(index));
+        }
+        if let Some(index) = events.iter().position(|event| self.untold(event)) {
+            return Some(Due::Event(index));
+        }
+        (deadline.is_some_and(|deadline| now >= deadline)).then_some(Due::Elapsed)
+    }
+
     /// Whether `event` is still to be told. A decision is not while the session's choice
     /// in it is held.
     fn untold<N>(&self, event: &Event<N>) -> bool {
         match event {
             Event::Decision(revision) => {
-                self.told.is_none_or(|told| told.revision != *revision)
+                self.told
+                    .is_none_or(|told| told.revision != *revision || told.telling.due())
                     && self
                         .held
                         .as_ref()
@@ -664,7 +793,8 @@ fn check<G: Game>(
     game.check(seat, choice).map_err(Refusal::Game)
 }
 
-/// An identity no earlier session of this process's tables can have had.
+/// An identity: 48 random bits, or the clock's when the system gives none. Nothing is
+/// compared, and no two sessions of a table are expected to share one.
 fn token() -> String {
     use std::io::Read;
     let mut bytes = [0u8; 6];
