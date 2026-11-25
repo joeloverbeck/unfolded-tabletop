@@ -22,8 +22,9 @@ can think for an hour. How each tool does it is measured, not accepted one by on
   that and say in words how to poll, and the folder's settings raise the limit. One session
   given the words of `folder::CODEX_WAIT` waited 15 minutes without a
   [model call](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7173116900),
-  as two had that were given code to run. Cuba Libre #205 and Arkham #297 measure the words
-  in play; a limit missed there goes to the owner.
+  as two had that were given code to run. That one session ran under the approval policy
+  `on-request` with a reviewing model. The written folder sets `never` and `user`, and no
+  session has run in such a folder.
 - **Claude Code** runs the wait in the background and ends its turn. It is woken when
   the command ends, at three calls for each decision.
 
@@ -42,9 +43,9 @@ is not interrupted. Waits longer than 16 minutes were not measured.
   known fallback if real play misses a limit.
 - **Waits that end at a period**, as Arkham's Codex partners use. Each costs a model call
   while nothing happens.
-- **Codex instructions that do not lift the 60 seconds.** Told only that the wait returns when it is
-  needed, a session took about three model calls a minute. Told to wait in one long poll,
-  with the limit raised, it took one a minute.
+- **Earlier Codex instructions.** Told only that the wait returns when it is needed, one
+  session took about three model calls a minute. Told to wait in one long poll, with the limit
+  raised, one took one a minute.
 - **Claude Code's foreground wait.** It took one call for each decision, in the one
   session that tried it. It has a longest time, and a message the human types waits for the
   event. The owner had accepted the background wait, and it stays.

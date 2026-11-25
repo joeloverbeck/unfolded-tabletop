@@ -3,8 +3,10 @@
 //! reads a folder `Folders` wrote for the limit of one poll and the one program its rules
 //! allow, runs that program with requests of this test's own, one process at a time, and
 //! counts what would call Codex's model: each time a command ends. Expectations come from
-//! Cuba Libre #202. Nothing here runs Codex. What it does with the words and with
-//! the rule was measured in Cuba Libre #198, in folders with fewer settings.
+//! Cuba Libre #202. Nothing here runs Codex. The words were measured once, in one
+//! session under the approval policy `on-request` with a reviewing model (Cuba Libre #198);
+//! the written folder sets `never` and `user`, and no session runs in such a folder until
+//! Cuba Libre #205 and Arkham #297. The rule was measured in #198's folders.
 
 use serde_json::{Value, json};
 use std::{

@@ -16,34 +16,40 @@
 //! keep notes in its folder's `notes`.
 //!
 //! **What was measured,** in Cuba Libre #198 and #202, on one machine; no test here runs a
-//! tool, and no Codex session has run in such a folder since it was one for each tool.
+//! tool, and no session of Codex runs in such a folder until Cuba Libre #205 and Arkham
+//! #297.
 //!
 //! - Codex 0.172.0's sandbox, tried without a model, let a command write the Codex folder
-//!   but `.codex`, and no other file that the rest of the machine sees. The folder's
-//!   approval policy, `never`, stands over a user's own: the session is told that a
-//!   command which asks to leave the sandbox is rejected, whoever reviews the user's. That
+//!   but `.codex`, and no other file that the rest of the machine sees. The folder
+//!   sets the approval policy `never` and the reviewer `user`. Trusted, over the one user
+//!   configuration checked (`on-request`, with a reviewing model), `codex debug
+//!   prompt-input` says that a command which asks to leave the sandbox is rejected. A
+//!   command-line option can undo it, and an untrusted folder gets the user's policy. That
 //!   the rule then still runs the client program outside the sandbox was read in Codex's
 //!   source at that version, not run.
 //! - Claude Code 2.1.332 in `auto` mode, with these settings but for `.agents`, ran the
 //!   client program by the rule, with no approval model, in the background too, and earlier
 //!   settings' interactive session showed no prompt. Its deny rules refused its file tools
-//!   and a copy what they name. Its file tools wrote the folder's other files unasked, and
+//!   what was tried of what they name, but for `.agents`, which was not in any measured
+//!   settings, and `.claude.json` and `AGENTS.md`, which were not tried; and, in an earlier
+//!   set, a copy over the client program. Its file tools wrote the folder's other files unasked, and
 //!   files elsewhere that no rule denies, with the approval model's consent. In `default`
 //!   mode the client program ran by the rule with the sockets of its sandbox allowed, and
 //!   in an earlier folder of both tools; a note was asked for.
 //! - Claude Code's sandbox, with these settings, could start no command on that machine, an
 //!   Ubuntu that restricts user namespaces. So every command but the client program's
 //!   failed, whatever it was. With its sockets allowed, which these settings do not, it
-//!   started, and refused each write that was tried to a place outside the folder that is
-//!   not a temporary directory, and to what the deny rules spell out inside it. A pattern,
-//!   `**`, does not bind a command there: one that is approved could write
-//!   `notes/CLAUDE.md` or `AGENTS.override.md`, until the folder is written again. One that
+//!   started, and refused each write that was tried to a place outside the folder, where no
+//!   temporary directory was tried, and to what the deny rules spell out inside it. A
+//!   pattern, `**`, does not bind a command there: one that is approved could write
+//!   `notes/CLAUDE.md` or `AGENTS.override.md`, which stays until the file is removed;
+//!   writing the folder refuses it. One that
 //!   asked the session bus to write outside had it done. Claude Code's sandbox needs
 //!   `bubblewrap` and `socat`; without `bubblewrap`, Claude Code ended at its start with
 //!   the reason, and without `socat` it was not tried.
 //!
-//! The sessions of one tool share its folder: until it is written again, one Codex session
-//! may leave another an `AGENTS.override.md`. The MCP servers of a user's own settings
+//! The sessions of one tool share its folder: one Codex session may leave another an
+//! `AGENTS.override.md`, until the file is removed. The MCP servers of a user's own settings
 //! stay with the tool in any folder.
 //!
 //! Tell your player's human what of this they meet.
@@ -59,7 +65,9 @@ use std::{
 };
 
 /// How a Codex session waits without a model call, in words that Cuba Libre #198 measured
-/// in one session: 15 minutes without a model call. Say which of your commands wait and
+/// once: one session, under the approval policy `on-request` with a reviewing model, waited
+/// 15 minutes without a model call. [`Folders::write`]'s folder sets `never` and `user`, and
+/// no session runs in such a folder until Cuba Libre #205 and Arkham #297. Say which of your commands wait and
 /// how to run them, "exactly", then this as it stands. The folder's settings raise the
 /// limit it names.
 pub const CODEX_WAIT: &str = "\
@@ -101,8 +109,8 @@ impl Folders<'_> {
     /// written may leave the folders written in part.
     ///
     /// In Codex the client program's commands are allowed and to run outside its sandbox.
-    /// That lets other commands write the folder but `.codex` and nothing else, and none
-    /// may ask to leave it. One poll may last as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
+    /// That lets other commands write the folder but `.codex` and nothing else; the approval
+    /// policy is `never`, of which the module says what was measured. One poll may last as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
     /// allowed, and excluded from its sandbox, which every other command is to run in, without
     /// a permission of its own; its file tools are denied the program's directory,
     /// Codex's folder and, wherever they lie, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
