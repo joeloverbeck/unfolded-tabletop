@@ -5,6 +5,8 @@
 //! held-seat client live in packages of their own that cannot depend on Bevy:
 //! `unfolded-random`, `unfolded-hover`, `unfolded-record-replacement`,
 //! `unfolded-assets` and `unfolded-seat-client`.
+#[cfg(feature = "seat")]
+pub mod agent_transport;
 #[cfg(feature = "render")]
 pub mod camera;
 #[cfg(feature = "render")]
