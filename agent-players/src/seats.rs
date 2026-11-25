@@ -610,8 +610,8 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
             _ => None,
         };
         if let Some(told) = &mut session.told {
-            // A wait that is not for it does not ask for it.
-            if before != Some(told.revision) {
+            // A wait that is not for its decision does not ask for it.
+            if before.is_none() {
                 told.telling.waited();
             }
             if pending == Pending::Decision(told.revision)
