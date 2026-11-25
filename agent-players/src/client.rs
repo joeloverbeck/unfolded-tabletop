@@ -105,3 +105,32 @@ impl<E: fmt::Debug + fmt::Display> Error for Unanswered<E> {
         }
     }
 }
+
+/// The variables in which a tool gives the commands it runs its own identifier of the
+/// session: Claude Code's, then Codex's. Cuba Libre #198 found Codex's unchanged across
+/// resumption and window changes, and Claude Code's unchanged by resumption and new after
+/// "Move to background and exit".
+const SESSION_VARIABLES: [&str; 2] = ["CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"];
+
+/// This session's identifiers, as its tool gives them to the commands it runs, for a
+/// join to carry. `None` when the tool gives none.
+///
+/// Both tools' are given together, since a session of one that was started from the
+/// other's inherits that one's: two such sessions differ in their own. A table compares
+/// the text and reads nothing from it. Nothing proves it: a session that leaves it out,
+/// or gives another, is not recognised by it.
+pub fn session() -> Option<String> {
+    session_in(|variable| std::env::var(variable).ok())
+}
+
+/// [`session`], from the environment `read` gives.
+pub fn session_in(read: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let given: Vec<String> = SESSION_VARIABLES
+        .into_iter()
+        .filter_map(|variable| {
+            let value = read(variable).filter(|value| !value.is_empty())?;
+            Some(format!("{variable}={value}"))
+        })
+        .collect();
+    (!given.is_empty()).then(|| given.join(" "))
+}

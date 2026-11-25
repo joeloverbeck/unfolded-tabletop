@@ -28,6 +28,10 @@ _Avoid_: bot, harness, driver
 An external agent that plays at a table someone else is running, by sending requests of the game's own protocol to a socket the running game opens. A game may have its own word for one, as Arkham has agent partner.
 _Avoid_: agent seat (the windowless table an agent sits at alone), bot
 
+**Player seat**:
+A side or character of a game that one player plays, as Cuba Libre has factions and Arkham has investigators. It is the human's, handed over and unclaimed, or held by one session, the agent player that joined for it.
+_Avoid_: agent seat (the windowless table an agent sits at alone)
+
 **Held start**:
 A start of the agent seat whose session is kept open on a local socket across shell commands, rather than answered on standard input and output.
 _Avoid_: daemon, server mode

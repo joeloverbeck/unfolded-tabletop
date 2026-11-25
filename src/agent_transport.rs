@@ -78,7 +78,8 @@ pub trait Protocol: Send + Sync + 'static {
 
     /// How long `request` may stay unanswered, and its answer then, after which the
     /// connection goes on and the game's own answer to it goes nowhere. Unless a game says
-    /// otherwise, every request waits as long as the game holds it.
+    /// otherwise, every request waits as long as the game holds it; so does one given
+    /// longer than the clock can count.
     fn unanswered(&self, request: &str) -> Option<(Duration, String)> {
         let _ = request;
         None
@@ -355,7 +356,8 @@ fn held(
     answered: &mpsc::Receiver<String>,
     limit: Option<(Duration, String)>,
 ) -> Held {
-    let limit = limit.map(|(within, answer)| (Instant::now() + within, answer));
+    let limit =
+        limit.and_then(|(within, answer)| Some((Instant::now().checked_add(within)?, answer)));
     loop {
         let watch = match &limit {
             Some((end, _)) => end.saturating_duration_since(Instant::now()).min(WATCH),

@@ -9,7 +9,7 @@ use std::{
     thread,
     time::Duration,
 };
-use unfolded_agent_players::client::{Answer, Unanswered, request};
+use unfolded_agent_players::client::{Answer, Unanswered, request, session_in};
 
 struct Game {
     socket: PathBuf,
@@ -135,4 +135,34 @@ fn the_callers_check_runs_during_the_wait_and_its_error_ends_it() {
         "{stopped}"
     );
     assert_eq!(checks, 3);
+}
+
+/// The variables are those Cuba Libre #198 found each tool to give its commands.
+#[test]
+fn a_sessions_identifiers_are_those_its_tool_gives() {
+    let given = |variables: &'static [(&'static str, &'static str)]| {
+        session_in(|name| {
+            variables
+                .iter()
+                .find(|(variable, _)| *variable == name)
+                .map(|(_, value)| (*value).to_owned())
+        })
+    };
+    assert_eq!(given(&[]), None);
+    assert_eq!(given(&[("CODEX_THREAD_ID", "")]), None);
+    assert_eq!(
+        given(&[("CODEX_THREAD_ID", "t1"), ("CODEX_SESSION_ID", "t1")]).as_deref(),
+        Some("CODEX_THREAD_ID=t1")
+    );
+    assert_eq!(
+        given(&[("CLAUDE_CODE_SESSION_ID", "c1")]).as_deref(),
+        Some("CLAUDE_CODE_SESSION_ID=c1")
+    );
+    // A Codex session started from a Claude Code session's command inherits its
+    // identifier, and is another session than one started beside it.
+    let nested = |thread| match thread {
+        "t1" => given(&[("CLAUDE_CODE_SESSION_ID", "c1"), ("CODEX_THREAD_ID", "t1")]),
+        _ => given(&[("CLAUDE_CODE_SESSION_ID", "c1"), ("CODEX_THREAD_ID", "t2")]),
+    };
+    assert_ne!(nested("t1"), nested("t2"));
 }

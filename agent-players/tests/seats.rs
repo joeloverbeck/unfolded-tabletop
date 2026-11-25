@@ -1,0 +1,1171 @@
+//! Seam: who holds a seat and how its session waits, against a stand-in game with no
+//! window, no socket and no model. Expectations come from Cuba Libre #197 ("The shared
+//! mechanism") and #201, with its corrections 17 to 23.
+
+use std::time::{Duration, Instant};
+use unfolded_agent_players::seats::{
+    ClaimRefused, Ended, Event, Game, Holder, Joining, Pending, Refusal, Released, Seats, Settled,
+    Submitted, Told, Waiting,
+};
+
+const RED: &str = "red";
+const BLUE: &str = "blue";
+const GREEN: &str = "green";
+
+/// A position each choice moves on by one, for the seat whose turn it is, and the save
+/// each commit writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Position {
+    revision: u64,
+    turn: &'static str,
+    settled: bool,
+    save: Vec<String>,
+    /// The commit fails, as a save that cannot be written does.
+    broken: bool,
+}
+
+impl Game for Position {
+    type Seat = &'static str;
+    type Choice = &'static str;
+
+    fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    fn settled(&self) -> bool {
+        self.settled
+    }
+
+    fn check(&self, seat: &&'static str, choice: &&'static str) -> Result<(), String> {
+        if *seat != self.turn {
+            Err(format!("It is {}'s turn.", self.turn))
+        } else if *choice == "impossible" {
+            Err("That is not offered.".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn commit(&mut self, seat: &&'static str, choice: &&'static str) -> Result<(), String> {
+        if self.broken {
+            return Err("The save could not be written.".into());
+        }
+        self.revision += 1;
+        self.save.push(format!("{seat}: {choice}"));
+        Ok(())
+    }
+}
+
+type Table = Seats<&'static str, &'static str, u32>;
+
+fn position() -> Position {
+    Position {
+        revision: 7,
+        turn: RED,
+        settled: true,
+        save: vec!["the opening".into()],
+        broken: false,
+    }
+}
+
+/// Red and blue handed over, green the human's.
+fn table() -> Table {
+    let mut seats = Seats::new([RED, BLUE, GREEN]);
+    seats.hand_over(&RED);
+    seats.hand_over(&BLUE);
+    seats
+}
+
+/// Join as a session that says nothing of itself.
+fn join(seats: &mut Table, seat: &'static str, now: Instant) -> String {
+    seats.claim(&seat, Joining::default(), now).unwrap()
+}
+
+fn wait(seats: &mut Table, id: &str, reply: u32, decision: Option<u64>, now: Instant) {
+    assert_eq!(
+        seats.wait(id, reply, None, pending(decision), now),
+        Waiting::Held { replaced: None }
+    );
+}
+
+/// A game with nothing but the seat's decision, if any, to tell.
+fn pending(decision: Option<u64>) -> Pending {
+    decision.map_or(Pending::Nothing, Pending::Decision)
+}
+
+/// What a wait is told when the game has only a decision for it.
+fn decision(
+    seats: &mut Table,
+    id: &str,
+    revision: u64,
+    now: Instant,
+) -> Option<(u32, Told<&'static str, &'static str>)> {
+    seats.tell(id, [Event::Decision(revision)], now)
+}
+
+fn news(
+    seats: &mut Table,
+    id: &str,
+    news: &'static str,
+    now: Instant,
+) -> Option<(u32, Told<&'static str, &'static str>)> {
+    seats.tell(id, [Event::News(news)], now)
+}
+
+fn told_released(
+    choice: &'static str,
+    why: Refusal,
+    again: bool,
+) -> Told<&'static str, &'static str> {
+    Told::Released {
+        released: Released { choice, why },
+        again,
+    }
+}
+
+/// Red's choice "march", held and then released as the position moved to revision 8.
+fn released(now: Instant) -> (Table, Position, String) {
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    game.revision = 8;
+    assert_eq!(seats.settle(&mut game).len(), 1);
+    game.settled = true;
+    (seats, game, red)
+}
+
+fn nothing(
+    seats: &mut Table,
+    id: &str,
+    now: Instant,
+) -> Option<(u32, Told<&'static str, &'static str>)> {
+    seats.tell(id, [], now)
+}
+
+#[test]
+fn a_seat_is_the_humans_handed_over_or_held() {
+    let now = Instant::now();
+    let mut seats = Table::new([RED, BLUE]);
+    assert_eq!(seats.holder(&RED), Holder::Human);
+    seats.hand_over(&RED);
+    assert_eq!(seats.holder(&RED), Holder::Unclaimed);
+    let red = join(&mut seats, RED, now);
+    assert_eq!(seats.holder(&RED), Holder::Session(red.clone()));
+    assert_eq!(seats.seat(&red), Some(&RED));
+    assert_eq!(seats.holder(&BLUE), Holder::Human);
+    assert_eq!(seats.holder(&"no such seat"), Holder::Human);
+    // Handing over a seat that is held changes nothing.
+    seats.hand_over(&RED);
+    assert_eq!(seats.holder(&RED), Holder::Session(red.clone()));
+    // A session that leaves gives its seat to whoever joins next, and its identity is
+    // not used again.
+    assert_eq!(
+        seats.leave(&red),
+        Some(Ended {
+            identity: red.clone(),
+            wait: None,
+            choice: None
+        })
+    );
+    assert_eq!(seats.holder(&RED), Holder::Unclaimed);
+    assert_eq!((seats.seat(&red), seats.ended(&red)), (None, None));
+    assert_ne!(join(&mut seats, RED, now), red);
+}
+
+#[test]
+fn a_claim_is_refused_with_nothing_changed() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    let before = format!("{seats:?}");
+    // Two sessions claim one seat: the second is refused.
+    assert_eq!(
+        seats.claim(&RED, Joining::default(), now),
+        Err(ClaimRefused::Held)
+    );
+    // A seat not handed over, and one the game does not have.
+    assert_eq!(
+        seats.claim(&GREEN, Joining::default(), now),
+        Err(ClaimRefused::Humans)
+    );
+    assert_eq!(
+        seats.claim(&"no such seat", Joining::default(), now),
+        Err(ClaimRefused::Humans)
+    );
+    // The holder's identity, whichever seat it claims.
+    for seat in [BLUE, RED, GREEN] {
+        assert_eq!(
+            seats.claim(
+                &seat,
+                Joining {
+                    identity: Some(&red),
+                    session: None
+                },
+                now
+            ),
+            Err(ClaimRefused::Holds(RED))
+        );
+    }
+    assert_eq!(format!("{seats:?}"), before);
+}
+
+#[test]
+fn one_session_holds_one_seat_by_its_tools_identifiers() {
+    let now = Instant::now();
+    let mut seats = table();
+    let joining = |session| Joining {
+        identity: None,
+        session: Some(session),
+    };
+    let red = seats.claim(&RED, joining("thread 1"), now).unwrap();
+    let before = format!("{seats:?}");
+    assert_eq!(
+        seats.claim(&BLUE, joining("thread 1"), now),
+        Err(ClaimRefused::SameSession(RED))
+    );
+    assert_eq!(format!("{seats:?}"), before);
+    // It is recognised at a join and nowhere else: the identity is what holds the seat.
+    assert_eq!(seats.seat("thread 1"), None);
+    assert!(seats.claim(&BLUE, joining("thread 2"), now).is_ok());
+    // Once it holds no seat it may join again.
+    let _ = seats.take_back(&RED, "Taken back.");
+    seats.hand_over(&RED);
+    let again = seats
+        .claim(
+            &RED,
+            Joining {
+                identity: Some(&red),
+                session: Some("thread 1"),
+            },
+            now,
+        )
+        .unwrap();
+    assert_ne!(again, red);
+}
+
+/// A tool that gives no identifiers: only the identity the session gives is recognised.
+#[test]
+fn a_session_that_says_nothing_of_itself_is_a_new_one() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    assert_ne!(red, blue);
+}
+
+#[test]
+fn a_submission_is_applied_at_once_at_a_settled_table() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    assert_eq!(
+        seats.submit(&red, 7, "march", &mut game),
+        Submitted::Applied
+    );
+    assert_eq!(game.revision, 8);
+    assert_eq!(game.save, ["the opening", "red: march"]);
+    assert_eq!(seats.held(&red), None);
+}
+
+/// A choice by a session without a seat, for another seat's decision, at a stale or a
+/// future revision, not offered, or that cannot be saved, at a settled table and at one
+/// that is not.
+#[test]
+fn a_refused_submission_leaves_the_position_the_save_and_every_seat_unchanged() {
+    let now = Instant::now();
+    for settled in [true, false] {
+        let (mut seats, mut game) = (table(), position());
+        let red = join(&mut seats, RED, now);
+        let blue = join(&mut seats, BLUE, now);
+        wait(&mut seats, &blue, 1, None, now);
+        game.settled = settled;
+        let (position, sessions) = (game.clone(), format!("{seats:?}"));
+        for (id, revision, choice, refusal) in [
+            ("nobody", 7, "march", Refusal::Unseated),
+            (&blue, 7, "march", Refusal::Game("It is red's turn.".into())),
+            (&red, 6, "march", Refusal::Stale { current: 7 }),
+            (&red, 8, "march", Refusal::Stale { current: 7 }),
+            (
+                &red,
+                7,
+                "impossible",
+                Refusal::Game("That is not offered.".into()),
+            ),
+        ] {
+            assert_eq!(
+                seats.submit(id, revision, choice, &mut game),
+                Submitted::Refused(refusal)
+            );
+        }
+        assert_eq!(game, position);
+        assert_eq!(format!("{seats:?}"), sessions);
+    }
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.broken = true;
+    let before = game.clone();
+    assert_eq!(
+        seats.submit(&red, 7, "march", &mut game),
+        Submitted::Refused(Refusal::Game("The save could not be written.".into()))
+    );
+    assert_eq!((game, seats.held(&red)), (before, None));
+}
+
+#[test]
+fn a_choice_at_an_unsettled_table_is_held_until_it_settles() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.settled = false;
+    let before = game.clone();
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert!(!seats.settle_due(7, false));
+    assert_eq!(seats.settle(&mut game), []);
+    assert_eq!(game, before);
+    assert_eq!(seats.held(&red), Some((7, &"march")));
+    game.settled = true;
+    assert!(seats.settle_due(7, true));
+    assert_eq!(
+        seats.settle(&mut game),
+        [Settled {
+            identity: red.clone(),
+            applied: true
+        }]
+    );
+    assert_eq!(game.save, ["the opening", "red: march"]);
+    assert_eq!(seats.held(&red), None);
+    // Nothing is told of it: it needs nothing of the session.
+    wait(&mut seats, &red, 1, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+}
+
+#[test]
+fn a_later_choice_replaces_the_held_one_and_a_refused_one_does_not() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert!(matches!(
+        seats.submit(&red, 7, "impossible", &mut game),
+        Submitted::Refused(_)
+    ));
+    assert_eq!(seats.held(&red), Some((7, &"march")));
+    assert_eq!(seats.submit(&red, 7, "rally", &mut game), Submitted::Held);
+    game.settled = true;
+    assert_eq!(seats.submit(&red, 7, "pass", &mut game), Submitted::Applied);
+    assert_eq!(seats.settle(&mut game), []);
+    assert_eq!(game.save, ["the opening", "red: pass"]);
+}
+
+/// A held choice is released, with the reason, when the position has moved, settled or
+/// not, and when the game refuses it as it is applied.
+#[test]
+fn a_held_choice_is_released_with_the_reason() {
+    let now = Instant::now();
+    let held = |now| {
+        let (mut seats, mut game) = (table(), position());
+        let red = join(&mut seats, RED, now);
+        game.settled = false;
+        assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+        // The answer showed the decision it was made in.
+        seats.told_in_answer(&red, 7);
+        wait(&mut seats, &red, 1, None, now);
+        (seats, game, red)
+    };
+
+    let (mut seats, mut game, red) = held(now);
+    game.revision = 8;
+    assert!(seats.settle_due(8, false));
+    assert_eq!(
+        seats.settle(&mut game),
+        [Settled {
+            identity: red.clone(),
+            applied: false
+        }]
+    );
+    assert_eq!(game.save, ["the opening"]);
+    assert!(seats.would_tell::<()>(&red, [], now));
+    let why = Refusal::Stale { current: 8 };
+    assert_eq!(
+        nothing(&mut seats, &red, now),
+        Some((1, told_released("march", why.clone(), false)))
+    );
+    // It is told once; and again to the next wait, since nobody may have read that one
+    // (correction 20), until an answer that is no wait's tells it.
+    for reply in [2, 3] {
+        wait(&mut seats, &red, reply, None, now);
+        assert!(seats.would_tell::<()>(&red, [], now));
+        assert_eq!(
+            nothing(&mut seats, &red, now),
+            Some((reply, told_released("march", why.clone(), true)))
+        );
+    }
+    let march = Released {
+        choice: "march",
+        why,
+    };
+    assert_eq!(seats.read(&red), [march]);
+    assert_eq!(seats.read(&red), []);
+    wait(&mut seats, &red, 4, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+
+    for (change, why) in [
+        (
+            (|game| game.turn = BLUE) as fn(&mut Position),
+            "It is blue's turn.",
+        ),
+        (|game| game.broken = true, "The save could not be written."),
+    ] {
+        let (mut seats, mut game, red) = held(now);
+        change(&mut game);
+        game.settled = true;
+        let before = game.clone();
+        assert_eq!(seats.settle(&mut game).len(), 1);
+        assert_eq!(game, before);
+        // The decision is the session's again, and it is told of it with the release.
+        assert_eq!(
+            decision(&mut seats, &red, 7, now),
+            Some((1, told_released("march", Refusal::Game(why.into()), false)))
+        );
+        assert_eq!(seats.read(&red).len(), 1);
+        // That answer showed it the decision too, so a wait would be for its own move.
+        assert_eq!(
+            seats.wait(&red, 2, None, pending(Some(7)), now),
+            Waiting::Refused(2)
+        );
+    }
+}
+
+/// The decision that came with a release is told again with it, if only a wait told them.
+#[test]
+fn a_decision_that_came_with_a_release_is_still_told_to_the_next_wait() {
+    let now = Instant::now();
+    let (mut seats, mut game, red) = released(now);
+    wait(&mut seats, &red, 1, Some(8), now);
+    let stale = Refusal::Stale { current: 8 };
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((1, told_released("march", stale.clone(), false)))
+    );
+    wait(&mut seats, &red, 2, Some(8), now);
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, told_released("march", stale, true)))
+    );
+    // A submission since: what the waits told it is over.
+    assert_eq!(
+        seats.submit(&red, 8, "rally", &mut game),
+        Submitted::Applied
+    );
+    assert_eq!(seats.read(&red), []);
+    wait(&mut seats, &red, 3, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+}
+
+/// Correction 20: a release nobody has been told of outlives a later submission, whose
+/// answer or wait tells it, and a choice withdrawn. A refused submission drops neither an
+/// untold release nor one that only a wait told.
+#[test]
+fn a_later_submission_or_withdrawal_discards_no_untold_release() {
+    let now = Instant::now();
+    for settled in [true, false] {
+        for answered in [true, false] {
+            let (mut seats, mut game, red) = released(now);
+            game.settled = settled;
+            let stale = Refusal::Stale { current: 8 };
+            assert!(matches!(
+                seats.submit(&red, 7, "rally", &mut game),
+                Submitted::Refused(_)
+            ));
+            assert!(!matches!(
+                seats.submit(&red, 8, "rally", &mut game),
+                Submitted::Refused(_)
+            ));
+            assert_eq!(seats.withdraw(&red).is_some(), !settled);
+            if answered {
+                let march = Released {
+                    choice: "march",
+                    why: stale,
+                };
+                assert_eq!(seats.read(&red), [march]);
+            } else {
+                wait(&mut seats, &red, 1, None, now);
+                assert_eq!(
+                    nothing(&mut seats, &red, now),
+                    Some((1, told_released("march", stale, false)))
+                );
+            }
+        }
+    }
+    let (mut seats, mut game, red) = released(now);
+    wait(&mut seats, &red, 1, None, now);
+    assert!(nothing(&mut seats, &red, now).is_some());
+    assert!(matches!(
+        seats.submit(&red, 7, "rally", &mut game),
+        Submitted::Refused(_)
+    ));
+    assert_eq!(seats.read(&red).len(), 1);
+}
+
+/// A choice held here and one the game held in a way of its own: each release is told, in
+/// the order they were released.
+#[test]
+fn each_of_a_sessions_releases_is_told() {
+    let now = Instant::now();
+    let (mut seats, _, red) = released(now);
+    let gone = Refusal::Game("The other player went first.".into());
+    let strike = || Released {
+        choice: "strike",
+        why: gone.clone(),
+    };
+    seats.release(&red, strike());
+    seats.release("nobody", strike());
+    wait(&mut seats, &red, 1, None, now);
+    assert_eq!(
+        nothing(&mut seats, &red, now),
+        Some((
+            1,
+            told_released("march", Refusal::Stale { current: 8 }, false)
+        ))
+    );
+    // Told by a wait and untold alike, an answer that is no wait's tells them all.
+    wait(&mut seats, &red, 2, None, now);
+    let told: Vec<_> = seats.read(&red).into_iter().map(|r| r.choice).collect();
+    assert_eq!(told, ["march", "strike"]);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+    // The decision the game released it from is the session's again, told with the release
+    // by a wait nobody may have read.
+    seats.told_in_answer(&red, 8);
+    seats.release(&red, strike());
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, told_released("strike", gone.clone(), false)))
+    );
+    wait(&mut seats, &red, 2, Some(8), now);
+    assert_eq!(seats.read(&red), [strike()]);
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, Told::Decision { again: true }))
+    );
+    // A wait for the decision that an answer told is refused, and what refuses it tells
+    // the release.
+    seats.release(&red, strike());
+    seats.told_in_answer(&red, 8);
+    assert_eq!(
+        seats.wait(&red, 2, None, pending(Some(8)), now),
+        Waiting::Refused(2)
+    );
+    assert_eq!(seats.read(&red), [strike()]);
+    seats.release(&red, strike());
+    wait(&mut seats, &red, 3, Some(8), now);
+    assert!(nothing(&mut seats, &red, now).is_some());
+    assert_eq!(seats.read(&red).len(), 1);
+}
+
+/// The game's own way of answering a decision ends what a wait told, as a submission does;
+/// a release nobody was told of stays.
+#[test]
+fn a_decision_answered_in_the_games_own_way_ends_what_a_wait_told() {
+    let now = Instant::now();
+    let (mut seats, _, red) = released(now);
+    seats.decided(&red);
+    wait(&mut seats, &red, 1, None, now);
+    assert!(nothing(&mut seats, &red, now).is_some(), "It was untold");
+    seats.decided(&red);
+    assert_eq!(seats.read(&red), []);
+}
+
+/// Two choices held for one position: the first in time is applied, and the other is
+/// released.
+#[test]
+fn held_choices_are_applied_in_the_order_they_were_held() {
+    let now = Instant::now();
+    struct Open(Position);
+    impl Game for Open {
+        type Seat = &'static str;
+        type Choice = &'static str;
+        fn revision(&self) -> u64 {
+            self.0.revision
+        }
+        fn settled(&self) -> bool {
+            self.0.settled
+        }
+        fn check(&self, _: &&'static str, _: &&'static str) -> Result<(), String> {
+            Ok(())
+        }
+        fn commit(&mut self, seat: &&'static str, choice: &&'static str) -> Result<(), String> {
+            self.0.commit(seat, choice)
+        }
+    }
+    let (mut seats, mut game) = (table(), Open(position()));
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    game.0.settled = false;
+    assert_eq!(seats.submit(&blue, 7, "strike", &mut game), Submitted::Held);
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    game.0.settled = true;
+    assert_eq!(
+        seats.settle(&mut game),
+        [
+            Settled {
+                identity: blue,
+                applied: true
+            },
+            Settled {
+                identity: red,
+                applied: false
+            }
+        ]
+    );
+    assert_eq!(game.0.save, ["the opening", "blue: strike"]);
+}
+
+/// Taking back before a choice, with one held, and with the session waiting.
+#[test]
+fn taking_a_seat_back_ends_its_session_and_cancels_its_held_choice() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    wait(&mut seats, &blue, 1, None, now);
+    let other = format!("{:?}", seats.holder(&BLUE));
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    wait(&mut seats, &red, 2, None, now);
+    assert_eq!(
+        seats.take_back(&RED, "The table took red back."),
+        Some(Ended {
+            identity: red.clone(),
+            wait: Some(2),
+            choice: Some("march")
+        })
+    );
+    assert_eq!(seats.holder(&RED), Holder::Human);
+    game.settled = true;
+    assert_eq!(seats.settle(&mut game), []);
+    assert_eq!(game.save, ["the opening"]);
+    // Told again to whatever the session still sends, in case nobody read it.
+    assert_eq!(seats.ended(&red), Some("The table took red back."));
+    assert_eq!(
+        seats.submit(&red, 7, "march", &mut game),
+        Submitted::Refused(Refusal::Unseated)
+    );
+    // The other session is as it was.
+    assert_eq!(format!("{:?}", seats.holder(&BLUE)), other);
+    assert!(seats.waits(&blue));
+    assert_eq!(seats.ended(&blue), None);
+    // Taking back a seat nobody holds ends nothing.
+    assert_eq!(seats.take_back(&RED, "Again."), None);
+}
+
+/// The table closing answers each wait once, and nothing is left to answer.
+#[test]
+fn closing_ends_each_session_once() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    wait(&mut seats, &blue, 1, None, now);
+    assert_eq!(
+        seats.close("The table closed."),
+        [
+            Ended {
+                identity: red.clone(),
+                wait: None,
+                choice: None
+            },
+            Ended {
+                identity: blue,
+                wait: Some(1),
+                choice: None
+            }
+        ]
+    );
+    assert_eq!(seats.close("The table closed."), []);
+    assert_eq!(seats.ended(&red), Some("The table closed."));
+    // The seats are still handed over, as when a table starts again.
+    assert_eq!(seats.holder(&RED), Holder::Unclaimed);
+    join(&mut seats, RED, now);
+}
+
+#[test]
+fn a_wait_has_no_period_unless_the_session_asks_for_one() {
+    let now = Instant::now();
+    let year = now + Duration::from_secs(365 * 24 * 3600);
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, None, now);
+    assert!(!seats.would_tell::<()>(&red, [], year));
+    assert_eq!(nothing(&mut seats, &red, year), None);
+
+    let minute = Duration::from_secs(60);
+    assert_eq!(
+        seats.wait(&red, 2, Some(minute), Pending::Nothing, now),
+        Waiting::Held { replaced: Some(1) }
+    );
+    let before = now + minute - Duration::from_millis(1);
+    assert!(!seats.would_tell::<()>(&red, [], before));
+    assert_eq!(nothing(&mut seats, &red, before), None);
+    assert!(seats.would_tell::<()>(&red, [], now + minute));
+    assert_eq!(
+        nothing(&mut seats, &red, now + minute),
+        Some((2, Told::Elapsed))
+    );
+    assert!(!seats.waits(&red));
+
+    // A period beyond what the clock can count is none.
+    assert_eq!(
+        seats.wait(&red, 3, Some(Duration::MAX), Pending::Nothing, now),
+        Waiting::Held { replaced: None }
+    );
+    assert_eq!(nothing(&mut seats, &red, year), None);
+}
+
+#[test]
+fn a_decision_told_by_the_answer_to_a_submission_is_not_told_by_a_wait() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    // A wait of the session's is held meanwhile, as a background one is.
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert_eq!(
+        seats.submit(&red, 7, "march", &mut game),
+        Submitted::Applied
+    );
+    seats.told_in_answer(&red, 8);
+    assert!(!seats.would_tell::<()>(&red, [Event::Decision(8)], now));
+    assert_eq!(decision(&mut seats, &red, 8, now), None);
+    // Another wait could tell only the same: it is refused, and not held for a move of
+    // the session's own. The first stays.
+    assert_eq!(
+        seats.wait(&red, 2, None, pending(Some(8)), now),
+        Waiting::Refused(2)
+    );
+    assert!(seats.waits(&red));
+    // A wait that something else may end is held, and the decision is not told to it.
+    assert_eq!(
+        seats.wait(&red, 2, None, Pending::Other, now),
+        Waiting::Held { replaced: Some(1) }
+    );
+    assert_eq!(decision(&mut seats, &red, 8, now), None);
+    assert_eq!(
+        news(&mut seats, &red, "a message", now),
+        Some((2, Told::News("a message")))
+    );
+    // A decision after this one is told.
+    assert_eq!(
+        seats.submit(&red, 8, "rally", &mut game),
+        Submitted::Applied
+    );
+    wait(&mut seats, &red, 3, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+    assert_eq!(
+        decision(&mut seats, &red, 11, now),
+        Some((3, Told::Decision { again: false }))
+    );
+}
+
+/// Correction 17: an interrupted tool can leave a wait running that nobody reads.
+#[test]
+fn a_decision_told_only_to_a_wait_is_told_again_to_the_sessions_next_wait() {
+    let now = Instant::now();
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((1, Told::Decision { again: false }))
+    );
+    for reply in [2, 3] {
+        wait(&mut seats, &red, reply, Some(7), now);
+        assert_eq!(
+            decision(&mut seats, &red, 7, now),
+            Some((reply, Told::Decision { again: true }))
+        );
+    }
+    // An answer that is no wait's and shows the session the position settles that it knows.
+    assert_eq!(seats.read(&red), []);
+    assert_eq!(
+        seats.wait(&red, 4, None, pending(Some(7)), now),
+        Waiting::Refused(4)
+    );
+    // As does its own submission, after which a wait is for what comes next.
+    assert_eq!(
+        seats.submit(&red, 7, "march", &mut game),
+        Submitted::Applied
+    );
+    wait(&mut seats, &red, 4, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+}
+
+/// A wait that tells something else shows the position, and so the decision, but nobody
+/// may have read it.
+#[test]
+fn a_decision_that_came_with_other_news_is_still_told_to_the_next_wait() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert_eq!(
+        seats.tell(&red, [Event::News("a message"), Event::Decision(7)], now),
+        Some((1, Told::News("a message")))
+    );
+    wait(&mut seats, &red, 2, Some(7), now);
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((2, Told::Decision { again: true }))
+    );
+    // At another revision it is another decision.
+    wait(&mut seats, &red, 3, Some(8), now);
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((3, Told::Decision { again: false }))
+    );
+}
+
+/// Correction 21: a view in another answer shows a decision and does not tell it. So a
+/// wait that is held tells it, a first time or again.
+#[test]
+fn a_decision_only_shown_is_told_to_a_wait() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    for (reply, again) in [(1, false), (2, true)] {
+        // Before the wait that tells it, and while that wait is held.
+        if !again {
+            let _ = seats.read(&red);
+        }
+        wait(&mut seats, &red, reply, Some(7), now);
+        let _ = seats.read(&red);
+        assert_eq!(
+            decision(&mut seats, &red, 7, now),
+            Some((reply, Told::Decision { again }))
+        );
+    }
+}
+
+/// A decision can leave its seat, and come back, with the position as it was.
+#[test]
+fn a_decision_that_was_over_is_told_when_it_comes_back() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    seats.told_in_answer(&red, 7);
+    wait(&mut seats, &red, 1, None, now);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((1, Told::Decision { again: false }))
+    );
+}
+
+/// A game may end a wait for a reason of its own, and what it would have told is told to
+/// the next.
+#[test]
+fn a_game_may_end_a_sessions_wait() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    assert_eq!(seats.end_wait(&red), None);
+    assert_eq!(seats.end_wait("nobody"), None);
+    wait(&mut seats, &red, 1, None, now);
+    wait(&mut seats, &blue, 2, None, now);
+    assert_eq!(seats.end_wait(&red), Some(1));
+    assert!(!seats.waits(&red));
+    assert!(seats.waits(&blue));
+    wait(&mut seats, &red, 3, Some(7), now);
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((3, Told::Decision { again: false }))
+    );
+}
+
+/// The first thing the game lists is told, and a decision already told does not hide
+/// what follows it.
+#[test]
+fn events_are_told_in_the_games_order() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert_eq!(
+        seats.tell(&red, [Event::Decision(7), Event::News("a message")], now),
+        Some((1, Told::Decision { again: false }))
+    );
+    let _ = seats.read(&red);
+    assert_eq!(
+        seats.wait(&red, 2, None, Pending::Other, now),
+        Waiting::Held { replaced: None }
+    );
+    assert_eq!(
+        seats.tell(&red, [Event::Decision(7), Event::News("a message")], now),
+        Some((2, Told::News("a message")))
+    );
+}
+
+/// While a session's choice is held, the decision it answers is not told to it again.
+#[test]
+fn a_decision_whose_choice_is_held_is_not_told() {
+    let now = Instant::now();
+    for shown in [true, false] {
+        let (mut seats, mut game) = (table(), position());
+        let red = join(&mut seats, RED, now);
+        game.settled = false;
+        assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+        // The answer that said it was held may show the decision still pending.
+        if shown {
+            seats.told_in_answer(&red, 7);
+        }
+        wait(&mut seats, &red, 1, Some(7), now);
+        assert_eq!(decision(&mut seats, &red, 7, now), None);
+    }
+}
+
+/// Correction 17: a session has one wait.
+#[test]
+fn a_newer_wait_replaces_the_older() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    wait(&mut seats, &red, 1, None, now);
+    wait(&mut seats, &blue, 2, None, now);
+    assert_eq!(
+        seats.wait(&red, 3, None, Pending::Nothing, now),
+        Waiting::Held { replaced: Some(1) }
+    );
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((3, Told::Decision { again: false }))
+    );
+    assert!(seats.waits(&blue));
+}
+
+/// Corrections 11 and 19: a killed wait neither holds its seat as thinking nor swallows
+/// its event.
+#[test]
+fn a_wait_whose_client_died_ends() {
+    let now = Instant::now();
+    let later = now + Duration::from_secs(900);
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    let blue = join(&mut seats, BLUE, now);
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    wait(&mut seats, &red, 1, None, now);
+    wait(&mut seats, &blue, 2, None, now);
+    assert_eq!(seats.silence(&RED, None, later), Some(Duration::ZERO));
+
+    let dead = |reply: &u32| *reply == 1;
+    assert!(seats.hung_up(dead));
+    assert_eq!(seats.end_hung_up(dead, later), [red.as_str()]);
+    assert!(!seats.hung_up(dead));
+    assert!(!seats.waits(&red));
+    assert!(seats.waits(&blue));
+    // Its seat and its held choice are still its own.
+    assert_eq!(seats.holder(&RED), Holder::Session(red.clone()));
+    game.settled = true;
+    assert_eq!(seats.settle(&mut game).len(), 1);
+    assert_eq!(game.save, ["the opening", "red: march"]);
+    // Last heard from as its client died, and not while its wait was held.
+    assert_eq!(
+        seats.silence(&RED, None, later + Duration::from_secs(60)),
+        Some(Duration::from_secs(60))
+    );
+    // And what its wait would have told it is told to the next.
+    assert_eq!(decision(&mut seats, &red, 9, later), None);
+    wait(&mut seats, &red, 3, Some(9), later);
+    assert_eq!(
+        decision(&mut seats, &red, 9, later),
+        Some((3, Told::Decision { again: false }))
+    );
+}
+
+#[test]
+fn silence_is_counted_from_the_last_request_or_the_last_answer_to_a_wait() {
+    let now = Instant::now();
+    let after = |seconds| now + Duration::from_secs(seconds);
+    let mut seats = table();
+    assert_eq!(seats.silence(&RED, None, now), None);
+    let red = join(&mut seats, RED, now);
+    assert_eq!(
+        seats.silence(&RED, None, after(90)),
+        Some(Duration::from_secs(90))
+    );
+    seats.heard(&red, after(100));
+    assert_eq!(
+        seats.silence(&RED, None, after(130)),
+        Some(Duration::from_secs(30))
+    );
+    wait(&mut seats, &red, 1, None, after(130));
+    assert_eq!(seats.silence(&RED, None, after(1000)), Some(Duration::ZERO));
+    assert!(decision(&mut seats, &red, 7, after(1000)).is_some());
+    assert_eq!(
+        seats.silence(&RED, None, after(1010)),
+        Some(Duration::from_secs(10))
+    );
+}
+
+/// Nothing is asked of a session whose choice waits for the table.
+#[test]
+fn a_session_whose_choice_is_held_is_not_silent() {
+    let now = Instant::now();
+    let later = now + Duration::from_secs(300);
+    let (mut seats, mut game) = (table(), position());
+    let red = join(&mut seats, RED, now);
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert_eq!(seats.silence(&RED, None, later), Some(Duration::ZERO));
+    // A choice the game takes another way is withdrawn, and not applied here.
+    assert_eq!(seats.withdraw(&red), Some("march"));
+    assert_eq!(
+        seats.silence(&RED, None, later),
+        Some(Duration::from_secs(300))
+    );
+    game.settled = true;
+    assert_eq!(seats.settle(&mut game), []);
+    assert_eq!(game.save, ["the opening"]);
+}
+
+/// A game's own way of answering a decision ends it as a submission does.
+#[test]
+fn a_decision_that_comes_again_after_it_was_answered_is_told_again() {
+    let now = Instant::now();
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, Some(7), now);
+    assert!(decision(&mut seats, &red, 7, now).is_some());
+    let _ = seats.read(&red);
+    wait(&mut seats, &red, 2, None, now);
+    seats.told_in_answer(&red, 7);
+    assert_eq!(decision(&mut seats, &red, 7, now), None);
+    seats.decided(&red);
+    assert_eq!(nothing(&mut seats, &red, now), None);
+    // Another player's change at the same revision asks for it again.
+    assert_eq!(
+        decision(&mut seats, &red, 7, now),
+        Some((2, Told::Decision { again: false }))
+    );
+}
+
+/// A wait by an identity that holds no seat is not held.
+#[test]
+fn a_session_without_a_seat_has_no_wait() {
+    let now = Instant::now();
+    let mut seats = table();
+    assert_eq!(
+        seats.wait("nobody", 1, None, Pending::Nothing, now),
+        Waiting::Refused(1)
+    );
+    assert_eq!(decision(&mut seats, "nobody", 7, now), None);
+}
+
+/// Correction 23: a seat that holds a wait is silent when that wait cannot tell it its
+/// pending decision, and its silence counts from the session's last request.
+#[test]
+fn a_wait_that_cannot_tell_the_decision_does_not_keep_its_session_from_being_silent() {
+    let now = Instant::now();
+    let after = |seconds| now + Duration::from_secs(seconds);
+    let counted = |seconds| Some(Duration::from_secs(seconds));
+    let silent = |seats: &Table, now| seats.silence(&RED, Some(7), now);
+
+    // A wait that can: before the decision, with it, and with it to be told again.
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, None, now);
+    assert_eq!(seats.silence(&RED, None, after(90)), counted(0));
+    assert_eq!(silent(&seats, after(90)), counted(0));
+    assert!(decision(&mut seats, &red, 7, after(90)).is_some());
+    assert_eq!(silent(&seats, after(100)), counted(10));
+    wait(&mut seats, &red, 2, Some(7), after(100));
+    assert_eq!(silent(&seats, after(900)), counted(0));
+
+    // It was told by the answer to a submission, whether the wait began before or after.
+    seats.heard(&red, after(900));
+    seats.told_in_answer(&red, 7);
+    assert_eq!(silent(&seats, after(950)), counted(50));
+    assert!(seats.waits(&red));
+    // Nothing is asked of it without that decision, or at another.
+    assert_eq!(seats.silence(&RED, None, after(950)), counted(0));
+    assert_eq!(seats.silence(&RED, Some(8), after(950)), counted(0));
+    // The wait was held for news that is gone.
+    assert!(matches!(
+        seats.wait(&red, 3, None, Pending::Other, after(1000)),
+        Waiting::Held { .. }
+    ));
+    assert_eq!(silent(&seats, after(1060)), counted(60));
+    // While its choice is held, nothing is asked of it.
+    let mut game = position();
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert_eq!(silent(&seats, after(2000)), counted(0));
+
+    // The wait is for everything but that decision, told or not.
+    for told in [false, true] {
+        let mut seats = table();
+        let red = join(&mut seats, RED, now);
+        if told {
+            seats.told_in_answer(&red, 7);
+        }
+        assert!(matches!(
+            seats.wait(&red, 1, None, Pending::Before(7), after(30)),
+            Waiting::Held { .. }
+        ));
+        assert_eq!(silent(&seats, after(90)), counted(60));
+        assert_eq!(seats.silence(&RED, Some(8), after(90)), counted(0));
+    }
+}
+
+/// A wait may be for everything but the decision its seat has as it begins.
+#[test]
+fn a_wait_before_a_decision_is_told_everything_else_and_does_not_ask_for_it() {
+    let now = Instant::now();
+    let before = |seats: &mut Table, id: &str, reply| {
+        assert!(matches!(
+            seats.wait(id, reply, None, Pending::Before(7), now),
+            Waiting::Held { .. }
+        ));
+    };
+    // Not told: it is not told it, is told news, and the next wait is told it.
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    before(&mut seats, &red, 1);
+    assert!(!seats.would_tell::<()>(&red, [Event::Decision(7)], now));
+    assert_eq!(decision(&mut seats, &red, 7, now), None);
+    assert_eq!(
+        seats.tell(&red, [Event::Decision(7), Event::News("a message")], now),
+        Some((1, Told::News("a message")))
+    );
+    before(&mut seats, &red, 2);
+    // A later decision is told.
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, Told::Decision { again: false }))
+    );
+    // Told by a wait, and shown since by another answer: it is known, though the session
+    // listened meanwhile. Otherwise nobody may have read that wait.
+    for shown in [true, false] {
+        let mut seats = table();
+        let red = join(&mut seats, RED, now);
+        wait(&mut seats, &red, 1, Some(7), now);
+        assert!(decision(&mut seats, &red, 7, now).is_some());
+        before(&mut seats, &red, 2);
+        assert!(news(&mut seats, &red, "a message", now).is_some());
+        if shown {
+            let _ = seats.read(&red);
+            assert_eq!(
+                seats.wait(&red, 3, None, pending(Some(7)), now),
+                Waiting::Refused(3)
+            );
+        } else {
+            wait(&mut seats, &red, 3, Some(7), now);
+            assert_eq!(
+                decision(&mut seats, &red, 7, now),
+                Some((3, Told::Decision { again: true }))
+            );
+        }
+    }
+}
