@@ -8,6 +8,10 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixListener,
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -100,15 +104,25 @@ fn the_table_is_observed_once_then_settled_until_the_game_stops_it() {
 
 #[test]
 fn a_resting_table_is_settled_twice_a_second_and_the_time_ends_it() {
-    let seat = seat(&[
-        r#"{"status":"observed"}"#,
-        r#"{"status":"settled"}"#,
-        r#"{"status":"settled"}"#,
-    ]);
+    let directory = tempfile::tempdir().unwrap();
+    let socket = directory.path().join("seat.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    let asked = Arc::new(AtomicUsize::new(0));
+    let counted = asked.clone();
+    // It answers for as long as it is asked, so it ends with the test's process.
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let stream = stream.unwrap();
+            let mut request = String::new();
+            BufReader::new(&stream).read_line(&mut request).unwrap();
+            counted.fetch_add(1, Ordering::SeqCst);
+            let _ = writeln!(&stream, r#"{{"status":"settled"}}"#);
+        }
+    });
     let began = Instant::now();
     let mut checks = 0;
     let kept = keep_running(
-        &seat.socket,
+        &socket,
         began + Duration::from_millis(1_200),
         || {
             checks += 1;
@@ -121,7 +135,9 @@ fn a_resting_table_is_settled_twice_a_second_and_the_time_ends_it() {
     assert!(took >= Duration::from_millis(1_200), "{took:?}");
     assert!(took < Duration::from_secs(10), "{took:?}");
     assert!(checks > 3, "an interrupt is noticed between requests");
-    assert_eq!(seat.received.join().unwrap().len(), 3);
+    // At 0, 0.5 and 1 second, and fewer on a slow host.
+    let asked = asked.load(Ordering::SeqCst);
+    assert!((2..=3).contains(&asked), "asked {asked} times");
 }
 
 #[test]

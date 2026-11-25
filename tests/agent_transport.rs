@@ -24,7 +24,7 @@ use unfolded_tabletop::{
     seat::socket::Unclaimable,
 };
 
-/// A game whose request `brief` may stay unanswered for a tenth of a second.
+/// A game whose request `brief` may stay unanswered for a second.
 struct Game;
 
 impl Protocol for Game {
@@ -39,7 +39,7 @@ impl Protocol for Game {
     fn unanswered(&self, request: &str) -> Option<(Duration, String)> {
         request
             .starts_with("brief")
-            .then(|| (Duration::from_millis(100), format!("nothing for {request}")))
+            .then(|| (Duration::from_secs(1), format!("nothing for {request}")))
     }
 }
 

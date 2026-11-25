@@ -105,7 +105,9 @@ impl Reply {
     }
 
     /// Whether the client closed its connection, or the transport ended it, so no answer
-    /// can arrive.
+    /// can arrive. A game that ends such a request does so on a frame, so a windowless
+    /// table with one it has not ended yet is not settled, as with
+    /// [`Transport::waiting`].
     pub fn hung_up(&self) -> bool {
         hung_up(&self.stream)
     }
