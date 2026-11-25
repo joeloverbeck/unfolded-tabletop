@@ -15,9 +15,10 @@
 //! releases it with the reason otherwise. Taking the seat back cancels it.
 //!
 //! **Waiting.** A wait has no period unless the session asks for one. A session has one
-//! wait: a newer one replaces it. A game whose client has died ends its wait with
-//! [`Seats::end_hung_up`]. A request that submits and then waits is a submission and
-//! then a wait on the same reply.
+//! wait: a newer one replaces it, and one whose client has died ends
+//! ([`Seats::end_hung_up`]). A request that submits and then waits is a submission and
+//! then a wait on the same reply: one refused for the session's own next decision is
+//! answered as the submission is, at once.
 //!
 //! **Events.** Each is told once. A session's own decision is told by the answer to its
 //! submission ([`Seats::told_in_answer`]) or by its wait ([`Seats::tell`]), whichever
