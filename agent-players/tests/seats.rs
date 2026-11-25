@@ -711,7 +711,7 @@ fn a_wait_whose_client_died_ends() {
 
     let dead = |reply: &u32| *reply == 1;
     assert!(seats.hung_up(dead));
-    assert_eq!(seats.end_hung_up(dead, later), [red.clone()]);
+    assert_eq!(seats.end_hung_up(dead, later), [red.as_str()]);
     assert!(!seats.hung_up(dead));
     assert!(!seats.waits(&red));
     assert!(seats.waits(&blue));
