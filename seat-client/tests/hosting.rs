@@ -147,11 +147,32 @@ fn a_resting_table_is_settled_twice_a_second_and_the_time_ends_it() {
     // At 0, 0.5 and 1 second, and fewer on a slow host.
     let asked = asked.load(Ordering::SeqCst);
     assert!((2..=3).contains(&asked), "asked {asked} times");
-    // A pause of at most half a second after each answer, the last cut at the time.
+    // A pause of at most half a second after each answer.
     let half = Duration::from_millis(500);
     assert_eq!(pauses.len(), asked);
     assert!(pauses.iter().all(|pause| *pause <= half), "{pauses:?}");
-    assert!(*pauses.last().unwrap() < half, "{pauses:?}");
+}
+
+#[test]
+fn a_pause_is_cut_at_the_time() {
+    // However late the answer comes, what is left is at most the whole time.
+    let seat = seat(&[r#"{"status":"observed"}"#]);
+    let time = Duration::from_millis(100);
+    let mut pauses = Vec::new();
+    let kept = keep_running(
+        &seat.socket,
+        Instant::now() + time,
+        || Ok::<(), Infallible>(()),
+        |pause| {
+            pauses.push(pause);
+            paused(pause)
+        },
+        |_| Ok(Next::<()>::Rest),
+    );
+    assert!(matches!(kept, Ok(Kept::TimedOut)), "{kept:?}");
+    assert_eq!(pauses.len(), 1);
+    assert!(pauses[0] <= time, "{pauses:?}");
+    seat.received.join().unwrap();
 }
 
 #[test]

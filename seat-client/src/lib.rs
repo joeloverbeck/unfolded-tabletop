@@ -203,7 +203,7 @@ impl<E: fmt::Debug + fmt::Display> Error for RequestError<E> {
 #[derive(Debug)]
 pub enum AskError<E> {
     /// The line could not be sent.
-    Unsent(io::Error),
+    Unwritable(io::Error),
     /// The caller's check ended the wait, with its error.
     Stopped(E),
     /// Reading the line back failed.
@@ -213,7 +213,7 @@ pub enum AskError<E> {
 impl<E: fmt::Display> fmt::Display for AskError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unsent(error) | Self::Unreadable(error) => error.fmt(formatter),
+            Self::Unwritable(error) | Self::Unreadable(error) => error.fmt(formatter),
             Self::Stopped(error) => error.fmt(formatter),
         }
     }
@@ -223,7 +223,7 @@ impl<E: fmt::Display> fmt::Display for AskError<E> {
 impl<E: fmt::Debug + fmt::Display> Error for AskError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Unsent(error) | Self::Unreadable(error) => error.source(),
+            Self::Unwritable(error) | Self::Unreadable(error) => error.source(),
             Self::Stopped(_) => None,
         }
     }
@@ -283,7 +283,7 @@ impl Connection {
         let line = match self.ask(&request, check) {
             Ok(Some(line)) => line,
             Ok(None) => return Ok(Reply::Ended(Ended::Unanswered)),
-            Err(AskError::Unsent(_)) => return Ok(Reply::Ended(Ended::Closed)),
+            Err(AskError::Unwritable(_)) => return Ok(Reply::Ended(Ended::Closed)),
             Err(AskError::Stopped(error)) => return Err(RequestError::Stopped(error)),
             Err(AskError::Unreadable(error)) if error.kind() == ErrorKind::ConnectionReset => {
                 return Ok(Reply::Ended(Ended::Reset(error)));
@@ -323,7 +323,7 @@ impl Connection {
             .map_err(AskError::Unreadable)?;
         (&self.stream)
             .write_all(format!("{request}\n").as_bytes())
-            .map_err(AskError::Unsent)?;
+            .map_err(AskError::Unwritable)?;
         let _ = self.stream.shutdown(Shutdown::Write);
         let mut line = Vec::new();
         match wait_for_line(&mut BufReader::new(&self.stream), &mut line, &mut check) {

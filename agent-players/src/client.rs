@@ -31,7 +31,7 @@ pub fn request<E>(
         .ask(request, check)
         .map_err(|failed| match failed {
             AskError::Stopped(error) => Unanswered::Stopped(error),
-            AskError::Unsent(error) => Unanswered::Unsent(error),
+            AskError::Unwritable(error) => Unanswered::Unsent(error),
             AskError::Unreadable(error) => Unanswered::Unreadable(error),
         })?;
     line.map(|line| Answer { line }).ok_or(Unanswered::Closed)
