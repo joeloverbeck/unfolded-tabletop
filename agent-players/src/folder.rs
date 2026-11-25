@@ -15,15 +15,25 @@
 //! but `.codex`, and so would write Claude Code's settings beside its own. A session may
 //! keep notes in its folder's `notes`.
 //!
-//! **What was measured,** in Cuba Libre #198 and #202; no test here runs a tool. Codex
-//! 0.172.0's sandbox, which needs no model, let a command write the Codex folder but
-//! `.codex`, and nothing else on the machine: the temporary directories are excluded.
-//! Claude Code 2.1.332's permission rules refused its file tools and a copy the program's
-//! directory and what configures a session. Its sandbox, which these settings ask for,
-//! is not measured to hold a limit: on the one machine it was tried on it could start no
-//! command, so every command but the client program's failed. It needs `bubblewrap` and
-//! `socat`, and without them these settings have Claude Code refuse to start, saying so.
-//! Tell your player's human.
+//! **What was measured,** in Cuba Libre #198 and #202, on one machine; no test here runs a
+//! tool, and no Codex session has run in such a folder since it was one for each tool.
+//!
+//! - Codex 0.172.0's sandbox, tried without a model, let a command write the Codex folder
+//!   but `.codex`, and no other file that the rest of the machine sees.
+//! - Claude Code 2.1.332, in its `default` and `auto` modes, ran the client program by the
+//!   rule, with no prompt and no approval model, in the background too. Its deny rules
+//!   refused its file tools and a copy. In `auto` mode its file tools wrote the folder's
+//!   other files unasked, and files elsewhere that no rule denies, with the approval
+//!   model's consent. In `default` mode a note was asked for.
+//! - Claude Code's sandbox, with these settings, could start no command on that machine, an
+//!   Ubuntu that restricts user namespaces. So every command but the client program's
+//!   failed, whatever it was. With its sockets allowed, which these settings do not, it
+//!   started, and then kept a command's own writes from everything outside the folder and
+//!   from what the deny rules spell out inside it; a command that asked the session bus to
+//!   write outside had it done. Claude Code's sandbox needs `bubblewrap` and `socat`;
+//!   without `bubblewrap`, Claude Code ended at its start with the reason.
+//!
+//! Tell your player's human what of this they meet.
 
 use serde_json::json;
 use std::{
@@ -76,21 +86,22 @@ impl Folders<'_> {
     /// `AGENTS.md`, and `.codex/config.toml` and `.codex/rules/player.rules`. Files of
     /// those names are replaced.
     ///
-    /// Anything else in a folder is refused, since a session could have put it there to
+    /// Any other file in a folder is refused, since a session could have put it there to
     /// change what a later one may do; but for plain files directly in `notes`, whose names
-    /// begin with neither a dot, `CLAUDE` nor `AGENTS`. A link is refused everywhere. A refusal comes before
-    /// anything is written; a file that could not be written may leave the folders written
-    /// in part.
+    /// begin with neither a dot, `claude` nor `agents`, in any case. A link is refused
+    /// everywhere. A refusal comes before anything is written; a file that could not be
+    /// written may leave the folders written in part.
     ///
     /// In Codex the client program's commands are allowed and run outside its sandbox,
     /// which lets other commands write the folder and nothing else, and one poll may last
     /// as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
-    /// allowed, and excluded from its sandbox, which every other command is to run in, by
-    /// no permission of its own; its file tools are denied the program's directory,
-    /// Codex's folder, both tools' settings in the home directory, and what configures a
-    /// session in its own folder; and its connectors and artifacts are off, whose
+    /// allowed, and excluded from its sandbox, which every other command is to run in, without
+    /// a permission of its own; its file tools are denied the program's directory,
+    /// Codex's folder, and what configures a session of either tool, wherever it lies: the
+    /// files of instructions, `.claude`, `.codex`, `.git`, `.mcp.json` and `.claude.json`;
+    /// and its connectors and artifacts are off, whose
     /// descriptions each model call would carry. The client program's is the only
-    /// permission either tool is given.
+    /// permission either tool is given; what else a tool does unasked is its own.
     pub fn write(&self) -> Result<(), Unwritten> {
         let client = plain(self.client)?;
         let codex = plain(self.codex)?;
@@ -122,14 +133,23 @@ impl Folders<'_> {
             "permissions": {
                 "allow": [format!("Bash({client}:*)")],
                 "deny": [
+                    // In the folder, spelled out: the sandbox reads no pattern.
                     "Edit(/CLAUDE.md)",
                     "Edit(/CLAUDE.local.md)",
                     "Edit(/AGENTS.md)",
                     "Edit(/.mcp.json)",
                     "Edit(/.claude/**)",
-                    "Edit(~/.claude/**)",
-                    "Edit(~/.codex/**)",
-                    // Two slashes begin a path that is not the folder's own.
+                    // Two slashes begin a path that is not the folder's own: these
+                    // configure a session of either tool wherever they lie.
+                    "Edit(//**/CLAUDE.md)",
+                    "Edit(//**/CLAUDE.local.md)",
+                    "Edit(//**/AGENTS.md)",
+                    "Edit(//**/AGENTS.override.md)",
+                    "Edit(//**/.claude.json)",
+                    "Edit(//**/.mcp.json)",
+                    "Edit(//**/.claude/**)",
+                    "Edit(//**/.codex/**)",
+                    "Edit(//**/.git/**)",
                     format!("Edit(/{beside}/**)"),
                     format!("Edit(/{codex}/**)"),
                 ],
@@ -168,7 +188,8 @@ impl Folders<'_> {
     }
 }
 
-/// That `folder`, where there is one, holds nothing but `files` and notes.
+/// That `folder`, where there is one, holds no file but `files` and notes. An empty
+/// directory configures nothing, and Claude Code leaves one in `.claude`.
 fn own(folder: &Path, files: &[(&str, String)]) -> Result<(), Unwritten> {
     match fs::symlink_metadata(folder) {
         Ok(found) if found.is_dir() => {}
@@ -185,21 +206,15 @@ fn own(folder: &Path, files: &[(&str, String)]) -> Result<(), Unwritten> {
             let kind = entry
                 .file_type()
                 .map_err(|error| failed(&entry.path(), error))?;
-            let ours = if kind.is_dir() {
-                path == Path::new(NOTES)
-                    || files
-                        .iter()
-                        .any(|(name, _)| Path::new(name).starts_with(&path))
-            } else {
-                kind.is_file()
-                    && (within == Path::new(NOTES) && note(&entry.file_name())
-                        || files.iter().any(|(name, _)| Path::new(name) == path))
-            };
-            if !ours {
-                return Err(Unwritten::Foreign(entry.path()));
-            }
             if kind.is_dir() {
                 left.push(path);
+                continue;
+            }
+            let ours = kind.is_file()
+                && (within == Path::new(NOTES) && note(&entry.file_name())
+                    || files.iter().any(|(name, _)| Path::new(name) == path));
+            if !ours {
+                return Err(Unwritten::Foreign(entry.path()));
             }
         }
     }

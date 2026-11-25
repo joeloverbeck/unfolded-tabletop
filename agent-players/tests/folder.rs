@@ -101,8 +101,15 @@ fn each_tools_folder_holds_the_instructions_and_its_own_permission_for_the_clien
                     "Edit(/AGENTS.md)",
                     "Edit(/.mcp.json)",
                     "Edit(/.claude/**)",
-                    "Edit(~/.claude/**)",
-                    "Edit(~/.codex/**)",
+                    "Edit(//**/CLAUDE.md)",
+                    "Edit(//**/CLAUDE.local.md)",
+                    "Edit(//**/AGENTS.md)",
+                    "Edit(//**/AGENTS.override.md)",
+                    "Edit(//**/.claude.json)",
+                    "Edit(//**/.mcp.json)",
+                    "Edit(//**/.claude/**)",
+                    "Edit(//**/.codex/**)",
+                    "Edit(//**/.git/**)",
                     format!("Edit(/{}/client/**)", places.directory.path().display()),
                     format!("Edit(/{}/**)", places.codex.display()),
                 ],
@@ -202,6 +209,8 @@ fn writing_again_keeps_notes_replaces_its_own_files_and_refuses_the_rest() {
             fs::remove_dir(parent).unwrap();
         }
     }
+    // What Claude Code leaves: a directory with no file in it.
+    fs::create_dir(places.claude_code.join(".claude/.cc-writes")).unwrap();
     places.folders().write().unwrap();
 
     // Links, one of them in the place of a file written here.

@@ -48,6 +48,7 @@ is not interrupted. Waits longer than 16 minutes were not measured.
   event. The owner had accepted the background wait, and it stays.
 - **Claude Code's sandbox with its sockets allowed, and the client program inside it.** A
   command asked the user's session bus to write outside the folder, and it did. So the
-  client program is excluded by name, and the sockets of every other command stay blocked.
+  client program is excluded by name, and every other command is to stay inside, its
+  sockets blocked.
 - **Claude Code's Monitor.** It ends after 30 minutes at most, so it would wake a session
   for nothing.
