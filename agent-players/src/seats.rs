@@ -27,8 +27,11 @@
 //! session's next wait, unless the session has been answered since with a view of it
 //! ([`Seats::read`]) or has submitted. Once a decision was told in an answer, a wait
 //! that could tell only it is refused ([`Waiting::Refused`]) rather than held for the
-//! session's own move. The end of a session is told to its held wait, and to each later
-//! request of its identity ([`Seats::ended`]).
+//! session's own move. The end of a session is for the game to tell its held wait
+//! ([`Ended`]), and each later request of its identity ([`Seats::ended`]).
+//!
+//! What no test here holds is a real tool: that its interrupted wait runs on, and that its
+//! commands are given its identifiers. Cuba Libre #198 found both.
 //!
 //! Not here: what the seats are, who decides, what is hidden from whom, how a choice is
 //! made and committed ([`Game`]), the requests, the answers and their words.
@@ -78,7 +81,7 @@ pub struct Joining<'a> {
 /// Why a claim was refused. Nothing changed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Unclaimed<S> {
+pub enum ClaimRefused<S> {
     /// The joining session gave the identity of the session that holds this seat.
     Holds(S),
     /// The joining session's tool identifiers are those of the session that holds this
@@ -92,7 +95,6 @@ pub enum Unclaimed<S> {
 
 /// What became of a submission, at once.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum Submitted {
     Applied,
     /// It waits for the table to settle, in place of any choice the session had held.
@@ -102,7 +104,6 @@ pub enum Submitted {
 
 /// Why a submission was refused, or a held choice released. Nothing changed.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum Refusal {
     /// No session has that identity.
     Unseated,
@@ -296,11 +297,11 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
         seat: &S,
         joining: Joining,
         now: Instant,
-    ) -> Result<String, Unclaimed<S>> {
+    ) -> Result<String, ClaimRefused<S>> {
         self.recognise(joining)?;
         match self.holder(seat) {
-            Holder::Human => return Err(Unclaimed::Humans),
-            Holder::Session(_) => return Err(Unclaimed::Held),
+            Holder::Human => return Err(ClaimRefused::Humans),
+            Holder::Session(_) => return Err(ClaimRefused::Held),
             Holder::Unclaimed => {}
         }
         let id = token();
@@ -319,9 +320,9 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
 
     /// Whether a joining session already holds a seat, whichever it would claim: an
     /// error if it does, as [`claim`](Self::claim) gives.
-    pub fn recognise(&self, joining: Joining) -> Result<(), Unclaimed<S>> {
+    pub fn recognise(&self, joining: Joining) -> Result<(), ClaimRefused<S>> {
         if let Some(seat) = joining.identity.and_then(|id| self.seat(id)) {
-            return Err(Unclaimed::Holds(seat.clone()));
+            return Err(ClaimRefused::Holds(seat.clone()));
         }
         let same = joining.session.and_then(|tool| {
             self.sessions
@@ -329,7 +330,7 @@ impl<S: Clone + PartialEq, C, R> Seats<S, C, R> {
                 .find(|session| session.tool.as_deref() == Some(tool))
         });
         match same {
-            Some(session) => Err(Unclaimed::SameSession(session.seat.clone())),
+            Some(session) => Err(ClaimRefused::SameSession(session.seat.clone())),
             None => Ok(()),
         }
     }

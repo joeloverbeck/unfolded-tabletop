@@ -4,8 +4,8 @@
 
 use std::time::{Duration, Instant};
 use unfolded_agent_players::seats::{
-    Ended, Event, Game, Holder, Joining, Refusal, Released, Seats, Settled, Submitted, Told,
-    Unclaimed, Waiting,
+    ClaimRefused, Ended, Event, Game, Holder, Joining, Refusal, Released, Seats, Settled,
+    Submitted, Told, Waiting,
 };
 
 const RED: &str = "red";
@@ -154,16 +154,16 @@ fn a_claim_is_refused_with_nothing_changed() {
     // Two sessions claim one seat: the second is refused.
     assert_eq!(
         seats.claim(&RED, Joining::default(), now),
-        Err(Unclaimed::Held)
+        Err(ClaimRefused::Held)
     );
     // A seat not handed over, and one the game does not have.
     assert_eq!(
         seats.claim(&GREEN, Joining::default(), now),
-        Err(Unclaimed::Humans)
+        Err(ClaimRefused::Humans)
     );
     assert_eq!(
         seats.claim(&"no such seat", Joining::default(), now),
-        Err(Unclaimed::Humans)
+        Err(ClaimRefused::Humans)
     );
     // The holder's identity, whichever seat it claims.
     for seat in [BLUE, RED, GREEN] {
@@ -176,7 +176,7 @@ fn a_claim_is_refused_with_nothing_changed() {
                 },
                 now
             ),
-            Err(Unclaimed::Holds(RED))
+            Err(ClaimRefused::Holds(RED))
         );
     }
     assert_eq!(format!("{seats:?}"), before);
@@ -194,7 +194,7 @@ fn one_session_holds_one_seat_by_its_tools_identifiers() {
     let before = format!("{seats:?}");
     assert_eq!(
         seats.claim(&BLUE, joining("thread 1"), now),
-        Err(Unclaimed::SameSession(RED))
+        Err(ClaimRefused::SameSession(RED))
     );
     assert_eq!(format!("{seats:?}"), before);
     // It is recognised at a join and nowhere else: the identity is what holds the seat.
