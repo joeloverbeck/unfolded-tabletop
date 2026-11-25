@@ -38,6 +38,7 @@ fn main() -> ExitCode {
     }
     for (name, test) in [
         ("one_wake_for_each_event_and_none_besides", events as fn()),
+        ("a_wait_does_not_tell_what_an_answer_told", told),
         ("a_wait_ends_with_the_session_its_seat_or_the_table", ends),
     ] {
         test();
@@ -360,6 +361,21 @@ fn events() {
     codex.turn.join().unwrap();
     table.serving.join().unwrap();
     table.directory.close().unwrap();
+}
+
+/// A session that waits although the answer to its choice told it its decision is answered
+/// so at once, and is not woken by that decision.
+fn told() {
+    let table = table(&[RED, RED]);
+    let id = table.join();
+    let wait = json!({"op": "wait", "player": id});
+    assert_eq!(table.ask(&wait)["status"], "decision");
+    let chosen = table.ask(&json!({"op": "choose", "player": id, "revision": 0}));
+    assert_eq!(chosen["status"], "applied");
+    assert_eq!(chosen["yours"], true);
+    assert_eq!(table.ask(&wait)["status"], "refused");
+    table.act(Act::Close);
+    table.serving.join().unwrap();
 }
 
 /// The wait ends, in one wake, when its session leaves, its seat is taken back, the table
