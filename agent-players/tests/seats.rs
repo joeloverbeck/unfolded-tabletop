@@ -341,6 +341,8 @@ fn a_held_choice_is_released_with_the_reason() {
         let red = join(&mut seats, RED, now);
         game.settled = false;
         assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+        // The answer showed the decision it was made in.
+        seats.told_in_answer(&red, 7);
         wait(&mut seats, &red, 1, None, now);
         (seats, game, red)
     };
@@ -658,14 +660,18 @@ fn events_are_told_in_the_games_order() {
 #[test]
 fn a_decision_whose_choice_is_held_is_not_told() {
     let now = Instant::now();
-    let (mut seats, mut game) = (table(), position());
-    let red = join(&mut seats, RED, now);
-    game.settled = false;
-    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
-    // The answer that said it was held showed the decision still pending.
-    seats.told_in_answer(&red, 7);
-    wait(&mut seats, &red, 1, Some(7), now);
-    assert_eq!(decision(&mut seats, &red, 7, now), None);
+    for shown in [true, false] {
+        let (mut seats, mut game) = (table(), position());
+        let red = join(&mut seats, RED, now);
+        game.settled = false;
+        assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+        // The answer that said it was held may show the decision still pending.
+        if shown {
+            seats.told_in_answer(&red, 7);
+        }
+        wait(&mut seats, &red, 1, Some(7), now);
+        assert_eq!(decision(&mut seats, &red, 7, now), None);
+    }
 }
 
 /// Correction 17: a session has one wait.
@@ -779,6 +785,7 @@ fn a_decision_that_comes_again_after_it_was_answered_is_told_again() {
     let red = join(&mut seats, RED, now);
     wait(&mut seats, &red, 1, Some(7), now);
     assert!(decision(&mut seats, &red, 7, now).is_some());
+    seats.read(&red);
     seats.decided(&red);
     wait(&mut seats, &red, 2, None, now);
     assert_eq!(nothing(&mut seats, &red, now), None);
