@@ -1,12 +1,13 @@
 //! Unix socket client for the held agent seat, extracted from Arkham's tools.
-//! No renderer is required. A [`Connection`] answers the two questions its callers
-//! ask: "send these requests and tell me how it went" ([`Connection::send`]) and
-//! "send one request and give me its answer" ([`Connection::request`]). Both wake
-//! regularly while the seat says nothing, to run the caller's check of its own
-//! deadline or interrupt. Consumers own launch diagnostics, signal handling,
+//! No renderer is required. A [`Connection`] answers the questions its callers ask:
+//! "send these requests and tell me how it went" ([`Connection::send`]), "send one
+//! request and give me its answer" ([`Connection::request`]) and, for a protocol that is
+//! not the seat's, "send one line and give me the line back" ([`Connection::ask`]). Each
+//! wakes regularly while nothing arrives, to run the caller's check of its own deadline
+//! or interrupt. Consumers own launch diagnostics, signal handling,
 //! deadlines, wording and exit statuses: a caller's check returns its own error, which
 //! comes back as it is, and every other failure is a cause to match ([`Unsent`],
-//! [`RequestError`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
+//! [`RequestError`], [`Unasked`], [`Unrequested`], [`Unreached`]). Response lines have no size limit, and
 //! nothing bounds a write; a final line without a newline is accepted as it arrived.
 //! The protocol's statuses and requests are `unfolded-seat-protocol`'s.
 //!

@@ -21,7 +21,7 @@ terms used here.
 | `unfolded-record-replacement` | A game's save record, on a locked, staged replacement that keeps the previous record | never |
 | `unfolded-assets` | Bounded and SHA-256-verified reads, bounded PNG crops, and publication of a prepared directory | never |
 | `unfolded-seat-protocol` | The agent seat's wire vocabulary: requests, statuses and the `refused` start line | never |
-| `unfolded-seat-client` | A client for a held agent seat, on Unix, and the `held-start` tool | never |
+| `unfolded-seat-client` | A client for a held agent seat, on Unix, the keeping of its table running, and the `held-start` tool | never |
 | `unfolded-agent-players` | The player's side of a game's socket for agent players, on Unix: one request, one answer | never |
 | `unfolded-dev-tools` | Bounded context readers, a recorder for checks, and the `compare-captures` tool | never |
 | `unfolded-tabletop::camera`, feature `render` | Table camera orbit, pan, wheel, scene-drag capture and follow, gathering its own input | Bevy 0.20.0 |

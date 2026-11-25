@@ -14,8 +14,8 @@
 //! blocks: a held request holds only its own connection's thread.
 //!
 //! **A dead client.** A client that closes its connection while a request of its is held
-//! has hung up. The transport notices within a quarter of a second, runs the waker and
-//! ends the connection, and [`Reply::hung_up`] is true from the moment the client closed.
+//! has hung up. [`Reply::hung_up`] is true from then on. The transport looks for it about
+//! five times a second; when it finds it, it ends the connection and runs the waker.
 //! What that ends is the game's decision: a game that goes on holding the request may
 //! still answer it, and the answer goes nowhere. A client that only ended its input, as
 //! `unfolded-agent-players` does after each request, has not hung up.
