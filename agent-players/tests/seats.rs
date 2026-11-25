@@ -1,6 +1,6 @@
 //! Seam: who holds a seat and how its session waits, against a stand-in game with no
 //! window, no socket and no model. Expectations come from Cuba Libre #197 ("The shared
-//! mechanism") and #201, with its corrections 17 to 21.
+//! mechanism") and #201, with its corrections 17 to 23.
 
 use std::time::{Duration, Instant};
 use unfolded_agent_players::seats::{
@@ -163,7 +163,7 @@ fn a_seat_is_the_humans_handed_over_or_held() {
     assert_eq!(
         seats.leave(&red),
         Some(Ended {
-            session: red.clone(),
+            identity: red.clone(),
             wait: None,
             choice: None
         })
@@ -329,7 +329,7 @@ fn a_choice_at_an_unsettled_table_is_held_until_it_settles() {
     assert_eq!(
         seats.settle(&mut game),
         [Settled {
-            session: red.clone(),
+            identity: red.clone(),
             applied: true
         }]
     );
@@ -381,7 +381,7 @@ fn a_held_choice_is_released_with_the_reason() {
     assert_eq!(
         seats.settle(&mut game),
         [Settled {
-            session: red.clone(),
+            identity: red.clone(),
             applied: false
         }]
     );
@@ -610,11 +610,11 @@ fn held_choices_are_applied_in_the_order_they_were_held() {
         seats.settle(&mut game),
         [
             Settled {
-                session: blue,
+                identity: blue,
                 applied: true
             },
             Settled {
-                session: red,
+                identity: red,
                 applied: false
             }
         ]
@@ -637,7 +637,7 @@ fn taking_a_seat_back_ends_its_session_and_cancels_its_held_choice() {
     assert_eq!(
         seats.take_back(&RED, "The table took red back."),
         Some(Ended {
-            session: red.clone(),
+            identity: red.clone(),
             wait: Some(2),
             choice: Some("march")
         })
@@ -672,12 +672,12 @@ fn closing_ends_each_session_once() {
         seats.close("The table closed."),
         [
             Ended {
-                session: red.clone(),
+                identity: red.clone(),
                 wait: None,
                 choice: None
             },
             Ended {
-                session: blue,
+                identity: blue,
                 wait: Some(1),
                 choice: None
             }
@@ -957,7 +957,7 @@ fn a_wait_whose_client_died_ends() {
     assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
     wait(&mut seats, &red, 1, None, now);
     wait(&mut seats, &blue, 2, None, now);
-    assert_eq!(seats.silence(&RED, later), Some(Duration::ZERO));
+    assert_eq!(seats.silence(&RED, None, later), Some(Duration::ZERO));
 
     let dead = |reply: &u32| *reply == 1;
     assert!(seats.hung_up(dead));
@@ -972,7 +972,7 @@ fn a_wait_whose_client_died_ends() {
     assert_eq!(game.save, ["the opening", "red: march"]);
     // Last heard from as its client died, and not while its wait was held.
     assert_eq!(
-        seats.silence(&RED, later + Duration::from_secs(60)),
+        seats.silence(&RED, None, later + Duration::from_secs(60)),
         Some(Duration::from_secs(60))
     );
     // And what its wait would have told it is told to the next.
@@ -989,22 +989,22 @@ fn silence_is_counted_from_the_last_request_or_the_last_answer_to_a_wait() {
     let now = Instant::now();
     let after = |seconds| now + Duration::from_secs(seconds);
     let mut seats = table();
-    assert_eq!(seats.silence(&RED, now), None);
+    assert_eq!(seats.silence(&RED, None, now), None);
     let red = join(&mut seats, RED, now);
     assert_eq!(
-        seats.silence(&RED, after(90)),
+        seats.silence(&RED, None, after(90)),
         Some(Duration::from_secs(90))
     );
     seats.heard(&red, after(100));
     assert_eq!(
-        seats.silence(&RED, after(130)),
+        seats.silence(&RED, None, after(130)),
         Some(Duration::from_secs(30))
     );
     wait(&mut seats, &red, 1, None, after(130));
-    assert_eq!(seats.silence(&RED, after(1000)), Some(Duration::ZERO));
+    assert_eq!(seats.silence(&RED, None, after(1000)), Some(Duration::ZERO));
     assert!(decision(&mut seats, &red, 7, after(1000)).is_some());
     assert_eq!(
-        seats.silence(&RED, after(1010)),
+        seats.silence(&RED, None, after(1010)),
         Some(Duration::from_secs(10))
     );
 }
@@ -1018,10 +1018,13 @@ fn a_session_whose_choice_is_held_is_not_silent() {
     let red = join(&mut seats, RED, now);
     game.settled = false;
     assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
-    assert_eq!(seats.silence(&RED, later), Some(Duration::ZERO));
+    assert_eq!(seats.silence(&RED, None, later), Some(Duration::ZERO));
     // A choice the game takes another way is withdrawn, and not applied here.
     assert_eq!(seats.withdraw(&red), Some("march"));
-    assert_eq!(seats.silence(&RED, later), Some(Duration::from_secs(300)));
+    assert_eq!(
+        seats.silence(&RED, None, later),
+        Some(Duration::from_secs(300))
+    );
     game.settled = true;
     assert_eq!(seats.settle(&mut game), []);
     assert_eq!(game.save, ["the opening"]);
@@ -1058,4 +1061,111 @@ fn a_session_without_a_seat_has_no_wait() {
         Waiting::Refused(1)
     );
     assert_eq!(decision(&mut seats, "nobody", 7, now), None);
+}
+
+/// Correction 23: a seat that holds a wait is silent when that wait cannot tell it its
+/// pending decision, and its silence counts from the session's last request.
+#[test]
+fn a_wait_that_cannot_tell_the_decision_does_not_keep_its_session_from_being_silent() {
+    let now = Instant::now();
+    let after = |seconds| now + Duration::from_secs(seconds);
+    let counted = |seconds| Some(Duration::from_secs(seconds));
+    let silent = |seats: &Table, now| seats.silence(&RED, Some(7), now);
+
+    // A wait that can: before the decision, with it, and with it to be told again.
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    wait(&mut seats, &red, 1, None, now);
+    assert_eq!(seats.silence(&RED, None, after(90)), counted(0));
+    assert_eq!(silent(&seats, after(90)), counted(0));
+    assert!(decision(&mut seats, &red, 7, after(90)).is_some());
+    assert_eq!(silent(&seats, after(100)), counted(10));
+    wait(&mut seats, &red, 2, Some(7), after(100));
+    assert_eq!(silent(&seats, after(900)), counted(0));
+
+    // It was told by the answer to a submission, whether the wait began before or after.
+    seats.heard(&red, after(900));
+    seats.told_in_answer(&red, 7);
+    assert_eq!(silent(&seats, after(950)), counted(50));
+    assert!(seats.waits(&red));
+    // Nothing is asked of it without that decision, or at another.
+    assert_eq!(seats.silence(&RED, None, after(950)), counted(0));
+    assert_eq!(seats.silence(&RED, Some(8), after(950)), counted(0));
+    // The wait was held for news that is gone.
+    assert!(matches!(
+        seats.wait(&red, 3, None, Pending::Other, after(1000)),
+        Waiting::Held { .. }
+    ));
+    assert_eq!(silent(&seats, after(1060)), counted(60));
+    // While its choice is held, nothing is asked of it.
+    let mut game = position();
+    game.settled = false;
+    assert_eq!(seats.submit(&red, 7, "march", &mut game), Submitted::Held);
+    assert_eq!(silent(&seats, after(2000)), counted(0));
+
+    // The wait is for everything but that decision, told or not.
+    for told in [false, true] {
+        let mut seats = table();
+        let red = join(&mut seats, RED, now);
+        if told {
+            seats.told_in_answer(&red, 7);
+        }
+        assert!(matches!(
+            seats.wait(&red, 1, None, Pending::Before(7), after(30)),
+            Waiting::Held { .. }
+        ));
+        assert_eq!(silent(&seats, after(90)), counted(60));
+        assert_eq!(seats.silence(&RED, Some(8), after(90)), counted(0));
+    }
+}
+
+/// A wait may be for everything but the decision its seat has as it begins.
+#[test]
+fn a_wait_before_a_decision_is_told_everything_else_and_does_not_ask_for_it() {
+    let now = Instant::now();
+    let before = |seats: &mut Table, id: &str, reply| {
+        assert!(matches!(
+            seats.wait(id, reply, None, Pending::Before(7), now),
+            Waiting::Held { .. }
+        ));
+    };
+    // Not told: it is not told it, is told news, and the next wait is told it.
+    let mut seats = table();
+    let red = join(&mut seats, RED, now);
+    before(&mut seats, &red, 1);
+    assert!(!seats.would_tell::<()>(&red, [Event::Decision(7)], now));
+    assert_eq!(decision(&mut seats, &red, 7, now), None);
+    assert_eq!(
+        seats.tell(&red, [Event::Decision(7), Event::News("a message")], now),
+        Some((1, Told::News("a message")))
+    );
+    before(&mut seats, &red, 2);
+    // A later decision is told.
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, Told::Decision { again: false }))
+    );
+    // Told by a wait, and shown since by another answer: it is known, though the session
+    // listened meanwhile. Otherwise nobody may have read that wait.
+    for shown in [true, false] {
+        let mut seats = table();
+        let red = join(&mut seats, RED, now);
+        wait(&mut seats, &red, 1, Some(7), now);
+        assert!(decision(&mut seats, &red, 7, now).is_some());
+        before(&mut seats, &red, 2);
+        assert!(news(&mut seats, &red, "a message", now).is_some());
+        if shown {
+            let _ = seats.read(&red);
+            assert_eq!(
+                seats.wait(&red, 3, None, pending(Some(7)), now),
+                Waiting::Refused(3)
+            );
+        } else {
+            wait(&mut seats, &red, 3, Some(7), now);
+            assert_eq!(
+                decision(&mut seats, &red, 7, now),
+                Some((3, Told::Decision { again: true }))
+            );
+        }
+    }
 }

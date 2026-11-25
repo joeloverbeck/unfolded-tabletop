@@ -17,13 +17,16 @@
 //!
 //! **Waiting.** A wait has no period unless the session asks for one. A session has one
 //! wait: a newer one replaces it, and one whose client has died ends
-//! ([`Seats::end_hung_up`]). Another request of the session's leaves it as it is, unless
+//! ([`Seats::end_hung_up`]). A wait may be for everything but the decision its seat has as
+//! it begins ([`Pending::Before`]). A session that waits is not silent, unless its wait
+//! cannot tell it the decision its seat has ([`Seats::silence`]). Another request of the session's leaves it as it is, unless
 //! the game ends it ([`Seats::end_wait`]). For a request that submits and then waits, a
 //! game submits and then gives the wait the same reply.
 //!
 //! **Events.** Each is told once. A session's own decision is told by the answer to its
 //! submission ([`Seats::told_in_answer`]) or by its wait ([`Seats::tell`]), whichever
-//! comes first; a view in another answer shows it and does not tell it. A wait may be one
+//! comes first; a view in another answer shows it and does not tell it, but for one to a
+//! wait that tells something else. A wait may be one
 //! nobody reads any more, whose tool was interrupted and left its client running. So a
 //! decision told only by a wait is told again to the session's next wait, unless since
 //! then an answer other than a wait's has shown it ([`Seats::read`]) or the session has
@@ -134,7 +137,7 @@ pub struct Released<C> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settled {
     /// The identity of the session that made it.
-    pub session: String,
+    pub identity: String,
     /// Whether it was applied. One that was not is released, and the session is told.
     pub applied: bool,
 }
@@ -142,7 +145,7 @@ pub struct Settled {
 /// A session that ended, with what it had in hand.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Ended<C, R> {
-    pub session: String,
+    pub identity: String,
     /// Its held wait, to be answered that it ended.
     pub wait: Option<R>,
     /// Its held choice, which is cancelled.
@@ -183,8 +186,12 @@ pub enum Pending {
     /// the game would tell it now.
     Decision(u64),
     /// Whether or not its seat has a decision, something else may end this wait: the game
-    /// has news to tell it now, or the wait is not for the decision.
+    /// has news to tell it now.
     Other,
+    /// Its seat's decision at this revision, which the wait is not for: the session asked
+    /// to hear the table before it decides. The wait is told everything but that decision,
+    /// a later one of its seat's included.
+    Before(u64),
 }
 
 /// What became of a wait as it arrived.
@@ -194,9 +201,9 @@ pub enum Waiting<R> {
     Held { replaced: Option<R> },
     /// It is not held, and any older wait of the session's stays. Either no session has
     /// that identity, or the wait came with [`Pending::Decision`] for the decision the
-    /// session was told of, and by more than a wait nobody may have read: held, it would
-    /// wait for the session's own move. Its answer is not a wait's, so it tells what
-    /// [`Seats::read`] gives.
+    /// session was told of, by more than a wait nobody may have read, and no choice of the
+    /// session's is held in it: held, it would wait for the session's own move. Its answer
+    /// is not a wait's, so it tells what [`Seats::read`] gives.
     Refused(R),
 }
 
@@ -204,6 +211,8 @@ pub enum Waiting<R> {
 struct Wait<R> {
     reply: R,
     deadline: Option<Instant>,
+    /// The revision of the decision it is not for.
+    before: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -432,7 +441,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         let index = self.sessions.iter().position(|session| session.id == id)?;
         let session = self.sessions.remove(index);
         Some(Ended {
-            session: session.id,
+            identity: session.id,
             wait: session.wait.map(|wait| wait.reply),
             choice: session.held.map(|held| held.choice),
         })
@@ -445,12 +454,16 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         }
     }
 
-    /// How long since the session that holds `seat` was last heard from: zero while it
-    /// waits, and while its choice is held, when nothing is asked of it. `None` when no
-    /// session holds it.
-    pub fn silence(&self, seat: &S, now: Instant) -> Option<Duration> {
+    /// How long since the session that holds `seat` was last heard from, or its last wait
+    /// answered. Zero while its choice is held, when nothing is asked of it, and while it
+    /// waits, unless that wait cannot tell it the decision its seat has now, at the
+    /// revision `decision`, told or not told yet: because it was told already, or the wait
+    /// is not for it. `None` when no session holds the seat.
+    pub fn silence(&self, seat: &S, decision: Option<u64>, now: Instant) -> Option<Duration> {
         let session = self.sessions.iter().find(|session| session.seat == *seat)?;
-        Some(if session.wait.is_some() || session.held.is_some() {
+        let waits = session.wait.is_some()
+            && decision.is_none_or(|revision| session.untold::<()>(&Event::Decision(revision)));
+        Some(if waits || session.held.is_some() {
             Duration::ZERO
         } else {
             now.saturating_duration_since(session.heard)
@@ -564,7 +577,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
                 });
             }
             settled.push(Settled {
-                session: id,
+                identity: id,
                 applied,
             });
         }
@@ -592,8 +605,15 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         if pending == Pending::Nothing {
             session.told = None;
         }
+        let before = match pending {
+            Pending::Before(revision) => Some(revision),
+            _ => None,
+        };
         if let Some(told) = &mut session.told {
-            told.telling.waited();
+            // A wait that is not for it does not ask for it.
+            if before != Some(told.revision) {
+                told.telling.waited();
+            }
             if pending == Pending::Decision(told.revision)
                 && told.telling == Telling::Read
                 && session.held.is_none()
@@ -604,6 +624,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         let wait = Wait {
             reply,
             deadline: period.and_then(|period| now.checked_add(period)),
+            before,
         };
         Waiting::Held {
             replaced: session.wait.replace(wait).map(|older| older.reply),
@@ -695,10 +716,11 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         }
     }
 
-    /// The session `id` is answered something other than a wait that shows it its
-    /// position whole, so what its last wait told it is known. The releases it has been
-    /// told of by no answer, or only by a wait, for this answer to tell: they are not told
-    /// again.
+    /// The session `id` is answered something, other than a wait, that shows it its
+    /// position. So it knows the decision its last wait told it, which no wait tells
+    /// again, unless it has asked to wait since, for that. A decision no wait told it is
+    /// still to be told. Returns the releases it has been told of by no answer, or only by
+    /// a wait, for this answer to tell: they are not told again.
     #[must_use = "The answer is to tell them"]
     pub fn read(&mut self, id: &str) -> Vec<Released<C>> {
         let Some(session) = self.session_mut(id) else {
@@ -763,8 +785,8 @@ impl<S, C, R> Session<S, C, R> {
         (deadline.is_some_and(|deadline| now >= deadline)).then_some(Due::Elapsed)
     }
 
-    /// Whether `event` is still to be told. A decision is not while the session's choice
-    /// in it is held.
+    /// Whether `event` is still to be told to its wait. A decision is not while the
+    /// session's choice in it is held, or to a wait that is not for it.
     fn untold<N>(&self, event: &Event<N>) -> bool {
         match event {
             Event::Decision(revision) => {
@@ -774,6 +796,10 @@ impl<S, C, R> Session<S, C, R> {
                         .held
                         .as_ref()
                         .is_none_or(|held| held.revision != *revision)
+                    && self
+                        .wait
+                        .as_ref()
+                        .is_none_or(|wait| wait.before != Some(*revision))
             }
             Event::News(_) => true,
         }
