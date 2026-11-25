@@ -32,6 +32,10 @@ _Avoid_: agent seat (the windowless table an agent sits at alone), bot
 A side or character of a game that one player plays, as Cuba Libre has factions and Arkham has investigators. It is the human's, handed over and unclaimed, or held by one session, the agent player that joined for it.
 _Avoid_: agent seat (the windowless table an agent sits at alone)
 
+**Player's folder**:
+The folder outside a game's checkout where one tool's sessions of an agent player run. It holds the player's instructions, that tool's permission for the one client program, and the session's notes.
+_Avoid_: checkout, workspace
+
 **Held start**:
 A start of the agent seat whose session is kept open on a local socket across shell commands, rather than answered on standard input and output.
 _Avoid_: daemon, server mode
