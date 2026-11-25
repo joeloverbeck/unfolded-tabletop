@@ -27,9 +27,9 @@
 //! nobody reads any more, whose tool was interrupted and left its client running. So a
 //! decision told only by a wait is told again to the session's next wait, unless since
 //! then an answer other than a wait's has shown it ([`Seats::read`]) or the session has
-//! submitted. A wait whose session was told its decision, and which neither tells it
-//! again nor has anything else to tell, is refused ([`Waiting::Refused`]) rather than
-//! held for the session's own move.
+//! submitted. A wait whose session was told its decision, and which the game says nothing
+//! else may end ([`Pending`]), is refused ([`Waiting::Refused`]) rather than held for the
+//! session's own move, unless it is to tell that decision again.
 //!
 //! A held choice's release is told by a wait or by an answer that is not a wait's,
 //! whichever comes first. While only waits have told it, the next of either tells it
@@ -195,7 +195,8 @@ pub enum Waiting<R> {
     /// It is not held, and any older wait of the session's stays. Either no session has
     /// that identity, or the wait came with [`Pending::Decision`] for the decision the
     /// session was told of, and by more than a wait nobody may have read: held, it would
-    /// wait for the session's own move.
+    /// wait for the session's own move. Its answer is not a wait's, so it tells what
+    /// [`Seats::read`] gives.
     Refused(R),
 }
 
@@ -596,7 +597,6 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
             if pending == Pending::Decision(told.revision)
                 && told.telling == Telling::Read
                 && session.held.is_none()
-                && session.released.is_empty()
             {
                 return Waiting::Refused(reply);
             }

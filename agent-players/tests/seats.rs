@@ -535,14 +535,29 @@ fn each_of_a_sessions_releases_is_told() {
     let told: Vec<_> = seats.read(&red).into_iter().map(|r| r.choice).collect();
     assert_eq!(told, ["march", "strike"]);
     assert_eq!(nothing(&mut seats, &red, now), None);
-    // The decision the game released it from is the session's again.
+    // The decision the game released it from is the session's again, told with the release
+    // by a wait nobody may have read.
     seats.told_in_answer(&red, 8);
     seats.release(&red, strike());
     assert_eq!(
         decision(&mut seats, &red, 8, now),
         Some((2, told_released("strike", gone.clone(), false)))
     );
-    let _ = seats.read(&red);
+    wait(&mut seats, &red, 2, Some(8), now);
+    assert_eq!(seats.read(&red), [strike()]);
+    assert_eq!(
+        decision(&mut seats, &red, 8, now),
+        Some((2, Told::Decision { again: true }))
+    );
+    // A wait for the decision that an answer told is refused, and what refuses it tells
+    // the release.
+    seats.release(&red, strike());
+    seats.told_in_answer(&red, 8);
+    assert_eq!(
+        seats.wait(&red, 2, None, pending(Some(8)), now),
+        Waiting::Refused(2)
+    );
+    assert_eq!(seats.read(&red), [strike()]);
     seats.release(&red, strike());
     wait(&mut seats, &red, 3, Some(8), now);
     assert!(nothing(&mut seats, &red, now).is_some());
@@ -1021,8 +1036,10 @@ fn a_decision_that_comes_again_after_it_was_answered_is_told_again() {
     wait(&mut seats, &red, 1, Some(7), now);
     assert!(decision(&mut seats, &red, 7, now).is_some());
     let _ = seats.read(&red);
-    seats.decided(&red);
     wait(&mut seats, &red, 2, None, now);
+    seats.told_in_answer(&red, 7);
+    assert_eq!(decision(&mut seats, &red, 7, now), None);
+    seats.decided(&red);
     assert_eq!(nothing(&mut seats, &red, now), None);
     // Another player's change at the same revision asks for it again.
     assert_eq!(
