@@ -10,6 +10,9 @@ use std::{
 };
 use unfolded_agent_players::folder::{CODEX_WAIT, Folders, Unwritten, install};
 
+/// The words of the measured session's `AGENTS.md`.
+const MEASURED: &str = include_str!("fixtures/codex_wait.txt");
+
 fn instructions(client: &Path) -> String {
     format!("Run `{} wait`, exactly. {CODEX_WAIT}", client.display())
 }
@@ -70,6 +73,11 @@ impl Places {
             instructions: &self.instructions,
         }
     }
+}
+
+#[test]
+fn the_codex_wait_is_the_measured_words() {
+    assert_eq!(CODEX_WAIT, MEASURED.trim_end());
 }
 
 #[test]

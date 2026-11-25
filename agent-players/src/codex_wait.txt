@@ -1,8 +1,0 @@
-This replaces your usual limit of 60 seconds for a blocking wait and your usual progress updates: I ask for one blocking wait of up to two hours, I need no communication from you while it runs, and I can interrupt it by typing. This session's background_terminal_max_timeout is 7200000 ms, so the long poll is allowed. Every extra check costs me money. Make each of them this one exec call, with the command in place of COMMAND:
-
-// @exec: {"yield_time_ms": 7200000}
-let r = await tools.exec_command({cmd:"COMMAND",yield_time_ms:30000});
-while (r.session_id !== undefined) r = await tools.write_stdin({session_id:r.session_id,chars:"",yield_time_ms:7200000});
-text(r);
-
-If that cell yields anyway, wait on it with yield_time_ms 7200000.

@@ -19,10 +19,11 @@ can think for an hour. How each tool does it is measured, not accepted one by on
 - **Codex** waits in one long poll, which #197's own rule takes from
   [Cuba Libre #198](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7157575553).
   Its own instructions hold a blocking wait to 60 seconds. The player's instructions lift
-  that and give a call to make, and the folder's settings raise the limit. With these, a
-  wait of 15 minutes took no model call, in both sessions that tried. Whether the words do
-  it without the call was not tried and is being measured; `folder::CODEX_WAIT` is the one
-  place that holds them.
+  that and say in words how to poll, and the folder's settings raise the limit. One session
+  given the words of `folder::CODEX_WAIT` waited 15 minutes without a
+  [model call](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7173116900),
+  as two had that were given code to run. Cuba Libre #205 and Arkham #297 measure the words
+  in play; a limit missed there goes to the owner.
 - **Claude Code** runs the wait in the background and ends its turn. It is woken when
   the command ends, at three calls for each decision.
 

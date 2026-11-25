@@ -3,8 +3,8 @@
 //! reads a folder `Folders` wrote for the limit of one poll and the one program its rules
 //! allow, runs that program with requests of this test's own, one process at a time, and
 //! counts what would call Codex's model: each time a command ends. Expectations come from
-//! Cuba Libre #202. Nothing here runs Codex. What it does with the wording and the
-//! rule was measured in Cuba Libre #198, in folders with fewer settings.
+//! Cuba Libre #202. Nothing here runs Codex. What it does with the words and with
+//! the rule was measured in Cuba Libre #198, in folders with fewer settings.
 
 use serde_json::{Value, json};
 use std::{
@@ -287,6 +287,7 @@ impl Codex {
             .unwrap();
         let limit: u64 = limit.lines().next().unwrap().parse().unwrap();
         assert!(limit >= 2 * 60 * 60 * 1000, "Two hours");
+        assert!(CODEX_WAIT.contains(&format!("a yield time of {limit} ms")));
         let rules = read(".codex/rules/player.rules");
         let (_, pattern) = rules.split_once("pattern = [\"").unwrap();
         let permitted = PathBuf::from(pattern.split_once("\"]").unwrap().0);

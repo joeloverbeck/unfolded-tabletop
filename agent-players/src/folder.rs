@@ -58,14 +58,14 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-/// How a Codex session waits without a model call. Say which of your commands wait and
+/// How a Codex session waits without a model call, in words that Cuba Libre #198 measured
+/// in one session: 15 minutes without a model call. Say which of your commands wait and
 /// how to run them, "exactly", then this as it stands. The folder's settings raise the
 /// limit it names.
-///
-/// These words, with the code in them, are what Cuba Libre #198 measured. It did not try
-/// the words without the code, which is being measured, so this text may change: quote it
-/// nowhere else, and write your folders from it.
-pub const CODEX_WAIT: &str = include_str!("codex_wait.txt");
+pub const CODEX_WAIT: &str = "\
+This replaces your usual limit of 60 seconds for a blocking wait and your usual progress updates: I ask for one blocking wait of up to two hours, I need no communication from you while it runs, and I can interrupt it by typing. This session's background_terminal_max_timeout is 7200000 ms, so the long poll is allowed. Every extra check costs me money. Make each of them one exec call. Set that call's own yield time, in its first-line exec setting, to 7200000 ms. Start the command, and while it is still running poll its session, inside the same call, with write_stdin, empty chars and a yield time of 7200000 ms. Return the output when the command ends.
+
+If that cell yields anyway, wait on it with yield_time_ms 7200000.";
 
 /// The longest poll, in milliseconds, that [`CODEX_WAIT`] asks for.
 const CODEX_LIMIT: u32 = 7_200_000;
