@@ -109,6 +109,7 @@ fn each_tools_folder_holds_the_instructions_and_its_own_permission_for_the_clien
                     "Edit(//**/.mcp.json)",
                     "Edit(//**/.claude/**)",
                     "Edit(//**/.codex/**)",
+                    "Edit(//**/.agents/**)",
                     "Edit(//**/.git/**)",
                     format!("Edit(/{}/client/**)", places.directory.path().display()),
                     format!("Edit(/{}/**)", places.codex.display()),
@@ -136,7 +137,7 @@ fn each_tools_folder_holds_the_instructions_and_its_own_permission_for_the_clien
     );
     assert_eq!(
         codex[0].1,
-        "background_terminal_max_timeout = 7200000\nsandbox_mode = \"workspace-write\"\n\n[sandbox_workspace_write]\nwritable_roots = []\nexclude_slash_tmp = true\nexclude_tmpdir_env_var = true\n"
+        "approval_policy = \"never\"\napprovals_reviewer = \"user\"\nbackground_terminal_max_timeout = 7200000\nsandbox_mode = \"workspace-write\"\n\n[sandbox_workspace_write]\nwritable_roots = []\nexclude_slash_tmp = true\nexclude_tmpdir_env_var = true\n"
     );
     assert_eq!(
         codex[1].1,

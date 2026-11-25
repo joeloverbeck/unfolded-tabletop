@@ -19,19 +19,32 @@
 //! tool, and no Codex session has run in such a folder since it was one for each tool.
 //!
 //! - Codex 0.172.0's sandbox, tried without a model, let a command write the Codex folder
-//!   but `.codex`, and no other file that the rest of the machine sees.
-//! - Claude Code 2.1.332, in its `default` and `auto` modes, ran the client program by the
-//!   rule, with no prompt and no approval model, in the background too. Its deny rules
-//!   refused its file tools and a copy. In `auto` mode its file tools wrote the folder's
-//!   other files unasked, and files elsewhere that no rule denies, with the approval
-//!   model's consent. In `default` mode a note was asked for.
+//!   but `.codex`, and no other file that the rest of the machine sees. The folder's
+//!   approval policy, `never`, stands over a user's own: the session is told that a
+//!   command which asks to leave the sandbox is rejected, whoever reviews the user's. That
+//!   the rule then still runs the client program outside the sandbox was read in Codex's
+//!   source at that version, not run.
+//! - Claude Code 2.1.332 in `auto` mode, with these settings but for `.agents`, ran the
+//!   client program by the rule, with no approval model, in the background too, and earlier
+//!   settings' interactive session showed no prompt. Its deny rules refused its file tools
+//!   and a copy what they name. Its file tools wrote the folder's other files unasked, and
+//!   files elsewhere that no rule denies, with the approval model's consent. In `default`
+//!   mode the client program ran by the rule with the sockets of its sandbox allowed, and
+//!   in an earlier folder of both tools; a note was asked for.
 //! - Claude Code's sandbox, with these settings, could start no command on that machine, an
 //!   Ubuntu that restricts user namespaces. So every command but the client program's
 //!   failed, whatever it was. With its sockets allowed, which these settings do not, it
-//!   started, and then kept a command's own writes from everything outside the folder and
-//!   from what the deny rules spell out inside it; a command that asked the session bus to
-//!   write outside had it done. Claude Code's sandbox needs `bubblewrap` and `socat`;
-//!   without `bubblewrap`, Claude Code ended at its start with the reason.
+//!   started, and refused each write that was tried to a place outside the folder that is
+//!   not a temporary directory, and to what the deny rules spell out inside it. A pattern,
+//!   `**`, does not bind a command there: one that is approved could write
+//!   `notes/CLAUDE.md` or `AGENTS.override.md`, until the folder is written again. One that
+//!   asked the session bus to write outside had it done. Claude Code's sandbox needs
+//!   `bubblewrap` and `socat`; without `bubblewrap`, Claude Code ended at its start with
+//!   the reason, and without `socat` it was not tried.
+//!
+//! The sessions of one tool share its folder: until it is written again, one Codex session
+//! may leave another an `AGENTS.override.md`. The MCP servers of a user's own settings
+//! stay with the tool in any folder.
 //!
 //! Tell your player's human what of this they meet.
 
@@ -92,13 +105,14 @@ impl Folders<'_> {
     /// everywhere. A refusal comes before anything is written; a file that could not be
     /// written may leave the folders written in part.
     ///
-    /// In Codex the client program's commands are allowed and run outside its sandbox,
-    /// which lets other commands write the folder and nothing else, and one poll may last
-    /// as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
+    /// In Codex the client program's commands are allowed and to run outside its sandbox.
+    /// That lets other commands write the folder but `.codex` and nothing else, and none
+    /// may ask to leave it. One poll may last as long as [`CODEX_WAIT`] asks. In Claude Code the client program's commands are
     /// allowed, and excluded from its sandbox, which every other command is to run in, without
     /// a permission of its own; its file tools are denied the program's directory,
-    /// Codex's folder, and what configures a session of either tool, wherever it lies: the
-    /// files of instructions, `.claude`, `.codex`, `.git`, `.mcp.json` and `.claude.json`;
+    /// Codex's folder and, wherever they lie, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
+    /// `AGENTS.override.md`, `.mcp.json`, `.claude.json`, `.claude`, `.codex`, `.agents` and
+    /// `.git`;
     /// and its connectors and artifacts are off, whose
     /// descriptions each model call would carry. The client program's is the only
     /// permission either tool is given; what else a tool does unasked is its own.
@@ -139,8 +153,8 @@ impl Folders<'_> {
                     "Edit(/AGENTS.md)",
                     "Edit(/.mcp.json)",
                     "Edit(/.claude/**)",
-                    // Two slashes begin a path that is not the folder's own: these
-                    // configure a session of either tool wherever they lie.
+                    // Two slashes begin a path that is not the folder's own: what
+                    // instructs or configures a session of either tool, anywhere.
                     "Edit(//**/CLAUDE.md)",
                     "Edit(//**/CLAUDE.local.md)",
                     "Edit(//**/AGENTS.md)",
@@ -149,6 +163,7 @@ impl Folders<'_> {
                     "Edit(//**/.mcp.json)",
                     "Edit(//**/.claude/**)",
                     "Edit(//**/.codex/**)",
+                    "Edit(//**/.agents/**)",
                     "Edit(//**/.git/**)",
                     format!("Edit(/{beside}/**)"),
                     format!("Edit(/{codex}/**)"),
@@ -171,7 +186,7 @@ impl Folders<'_> {
             (
                 ".codex/config.toml",
                 format!(
-                    "background_terminal_max_timeout = {CODEX_LIMIT}\nsandbox_mode = \"workspace-write\"\n\n[sandbox_workspace_write]\nwritable_roots = []\nexclude_slash_tmp = true\nexclude_tmpdir_env_var = true\n"
+                    "approval_policy = \"never\"\napprovals_reviewer = \"user\"\nbackground_terminal_max_timeout = {CODEX_LIMIT}\nsandbox_mode = \"workspace-write\"\n\n[sandbox_workspace_write]\nwritable_roots = []\nexclude_slash_tmp = true\nexclude_tmpdir_env_var = true\n"
                 ),
             ),
             (
