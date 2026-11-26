@@ -265,6 +265,9 @@ fn closing_writes_the_answers_already_sent_then_ends_every_connection_and_the_pa
     look.reply.send("seen".into());
     assert_eq!(idle.answer(), "seen\n");
 
+    let mut untaken = Client::connect(&open.socket);
+    untaken.send("late");
+    open.woken(3);
     held.reply.send("the table closed".into());
     let Open {
         transport, socket, ..
@@ -280,6 +283,11 @@ fn closing_writes_the_answers_already_sent_then_ends_every_connection_and_the_pa
     assert_eq!(answered.answer(), "the table closed\n");
     assert_eq!(answered.answer(), "");
     assert_eq!(idle.answer(), "", "a connection left open is cut");
+    assert_eq!(
+        untaken.answer(),
+        "",
+        "ordinary drop cuts an untaken request"
+    );
 }
 
 #[test]

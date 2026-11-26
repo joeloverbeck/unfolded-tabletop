@@ -41,9 +41,9 @@ use std::{
     os::unix::net::UnixStream,
     path::Path,
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc::{self, RecvTimeoutError},
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, RecvTimeoutError, TryRecvError},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -173,19 +173,26 @@ pub struct Transport {
     stop: Arc<AtomicBool>,
     accepting: Option<JoinHandle<()>>,
     connections: Connections,
-    queued: Arc<AtomicUsize>,
-    inbox: Option<Mutex<mpsc::Receiver<Incoming>>>,
+    inbox: Arc<Inbox>,
 }
 
 /// The connections being served, by number, kept to cut them when the transport closes.
 type Connections = Arc<Mutex<Vec<(u64, Arc<UnixStream>)>>>;
 
+/// Requests available to frames. `None` is the orderly-close cutoff.
+struct Inbox(Mutex<Option<Vec<Incoming>>>);
+
+impl Inbox {
+    fn lock(&self) -> MutexGuard<'_, Option<Vec<Incoming>>> {
+        self.0.lock().expect("no thread panics holding the inbox")
+    }
+}
+
 /// What every connection's thread needs of the transport.
 #[derive(Clone)]
 struct Shared {
     connections: Connections,
-    outbox: mpsc::Sender<Incoming>,
-    queued: Arc<AtomicUsize>,
+    inbox: Arc<Inbox>,
     protocol: Arc<dyn Protocol>,
     waker: Option<Waker>,
 }
@@ -203,16 +210,15 @@ impl Transport {
             .unix_listener()
             .set_nonblocking(true)
             .map_err(Unopened::Unaccepting)?;
-        let (outbox, inbox) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let shared = Shared {
             connections: Connections::default(),
-            outbox,
-            queued: Arc::new(AtomicUsize::new(0)),
+            inbox: Arc::new(Inbox(Mutex::new(Some(Vec::new())))),
             protocol: Arc::new(protocol),
             waker,
         };
-        let (connections, queued) = (shared.connections.clone(), shared.queued.clone());
+        let connections = shared.connections.clone();
+        let inbox = shared.inbox.clone();
         let accepting = {
             let stop = stop.clone();
             thread::Builder::new()
@@ -225,28 +231,23 @@ impl Transport {
             stop,
             accepting: Some(accepting),
             connections,
-            queued,
-            inbox: Some(Mutex::new(inbox)),
+            inbox,
         })
     }
 
     /// Whether a request has arrived that [`take`](Self::take) has not returned. A
     /// windowless table with one is not settled.
     pub fn waiting(&self) -> bool {
-        self.queued.load(Ordering::Acquire) > 0
+        self.inbox
+            .lock()
+            .as_ref()
+            .is_some_and(|requests| !requests.is_empty())
     }
 
     /// Every request that arrived since the last call, in arrival order.
     pub fn take(&self) -> Vec<Incoming> {
-        let inbox = self
-            .inbox
-            .as_ref()
-            .expect("the transport is still open")
-            .lock()
-            .expect("no thread panics holding it");
-        let incoming: Vec<_> = inbox.try_iter().collect();
-        self.queued.fetch_sub(incoming.len(), Ordering::AcqRel);
-        incoming
+        let mut inbox = self.inbox.lock();
+        std::mem::take(inbox.as_mut().expect("the transport is still open"))
     }
 
     /// Stop admitting requests to the frame queue and let go of those still in it.
@@ -257,10 +258,12 @@ impl Transport {
     /// Stop accepting connections, remove the socket path and end socket reads so an
     /// idle connection can finish. Give in-flight answers the same bounded write
     /// grace as on drop.
-    pub fn close(mut self) {
-        // Disconnect the queue before ending socket reads. Dropping the queued
-        // replies wakes their workers through the usual unsent-reply path.
-        drop(self.inbox.take());
+    pub fn close(self) {
+        // Dropping a queued reply disconnects its answer channel. Keep the lock
+        // until all those channels are disconnected so a worker deciding a timeout
+        // sees the cutoff and the closure together.
+        let mut inbox = self.inbox.lock();
+        drop(inbox.take());
     }
 }
 
@@ -331,13 +334,15 @@ fn converse(stream: &Arc<UnixStream>, shared: &Shared) {
             answer,
             stream: stream.clone(),
         };
-        shared.queued.fetch_add(1, Ordering::AcqRel);
-        if shared.outbox.send(Incoming { line, reply }).is_err() {
-            shared.queued.fetch_sub(1, Ordering::AcqRel);
-            return;
+        {
+            let mut inbox = shared.inbox.lock();
+            let Some(requests) = inbox.as_mut() else {
+                return;
+            };
+            requests.push(Incoming { line, reply });
         }
         wake(shared);
-        let (answer, last) = match held(stream, &answered, limit) {
+        let (answer, last) = match held(stream, &answered, limit, &shared.inbox) {
             Held::Answered(answer) => (answer, false),
             Held::LetGo => (shared.protocol.closed(), true),
             Held::HungUp => {
@@ -376,6 +381,7 @@ fn held(
     stream: &UnixStream,
     answered: &mpsc::Receiver<String>,
     limit: Option<(Duration, String)>,
+    inbox: &Inbox,
 ) -> Held {
     let limit =
         limit.and_then(|(within, answer)| Some((Instant::now().checked_add(within)?, answer)));
@@ -395,6 +401,16 @@ fn held(
         if let Some((end, answer)) = &limit
             && Instant::now() >= *end
         {
+            // If close won, a queued request's reply has already been dropped.
+            // Preserve an answer the game already sent to a taken request too.
+            let requests = inbox.lock();
+            if requests.is_none() {
+                match answered.try_recv() {
+                    Ok(answer) => return Held::Answered(answer),
+                    Err(TryRecvError::Disconnected) => return Held::LetGo,
+                    Err(TryRecvError::Empty) => {}
+                }
+            }
             return Held::Answered(answer.clone());
         }
     }
@@ -406,7 +422,8 @@ impl Drop for Transport {
         if let Some(accepting) = self.accepting.take() {
             let _ = accepting.join();
         }
-        if self.inbox.is_none() {
+        let orderly = self.inbox.lock().is_none();
+        if orderly {
             for (_, stream) in open_connections(&self.connections).iter() {
                 let _ = stream.shutdown(Shutdown::Read);
             }
