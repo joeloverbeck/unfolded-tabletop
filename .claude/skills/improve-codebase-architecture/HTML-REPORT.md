@@ -45,7 +45,8 @@ Each candidate is one `<article>`:
 
 - **Title**: short, names the deepening (e.g. "Collapse the Order intake pipeline").
 - **Badge row**: recommendation strength (`Strong` = emerald, `Worth exploring` = amber, `Speculative` = slate), plus a tag for the dependency category (`in-process`, `local-substitutable`, `ports & adapters`, `mock`).
-- **Files**: monospaced list, `font-mono text-sm`.
+- **Files**: revision-pinned source links, `font-mono text-sm`.
+- **Probe evidence**: when a finding relies on a short disposable probe, embed its HTML-escaped source in a `<details>` block with a `<summary>Probe source</summary>` and `<pre><code>`. Open a copy of the HTML from a directory containing only that file and check that the source is readable there.
 - **Before / After diagram**: the centrepiece. Two columns, side by side. See patterns below.
 - **Problem**: one sentence. What hurts.
 - **Solution**: one sentence. What changes.

@@ -6,6 +6,36 @@ Run `scripts/check` from a clean clone before publication. CI runs the same entr
 
 These checks do not replace any consumer's own: assets, GPU, native acceptance, a real render through the seat, and saved-game continuity stay with each consumer (`docs/agents/consumers.md`).
 
+## Run a disposable probe with a game's dependencies
+
+Add a Cargo example in a temporary copy of the consumer at the revision under review. Building there uses the game's lockfile, workspace patches and features. For example, run this from the root of a Cuba Libre checkout to exercise the mesh-picking dependency its table enables.
+
+```bash
+(
+  set -e
+  probe_dir=$(mktemp -d)
+  revision=$(git rev-parse HEAD)
+  git clone --quiet --no-checkout . "$probe_dir/game"
+  cd "$probe_dir/game"
+  git switch --quiet --detach "$revision"
+  git rev-parse HEAD
+  mkdir -p examples
+  cat > examples/mesh_probe.rs <<'RS'
+use bevy::picking::mesh_picking::ray_cast::{MeshRayCastSettings, RayCastVisibility};
+
+fn main() -> std::io::Result<()> {
+    let settings = MeshRayCastSettings::default();
+    assert!(matches!(settings.visibility, RayCastVisibility::VisibleInView));
+    eprintln!("Executable: {}", std::env::current_exe()?.display());
+    Ok(())
+}
+RS
+  cargo run --locked --features tabletop --example mesh_probe
+)
+```
+
+Replace the body with the operation under investigation. The example prints the executable that actually ran. Use `sha256sum` on that path when recording a binary comparison. For a warm build, set `CARGO_TARGET_DIR` to a suitable absolute cache path before the run. The temporary clone can be discarded after inspecting the result.
+
 ## What the host needs
 
 The tests need no graphics adapter, desktop, game assets or sibling checkout. Rustup selects the compiler and components in `rust-toolchain.toml`, and the committed lockfile fixes the dependencies. Beyond that:

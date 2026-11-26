@@ -36,14 +36,16 @@ Apply the **deletion test** to anything you suspect is shallow: would deleting i
 
 ### 2. Present candidates as an HTML report
 
-Write a self-contained HTML file to the OS temp directory so nothing lands in the repo. Resolve the temp dir from `$TMPDIR`, falling back to `/tmp` (or `%TEMP%` on Windows), and write to `<tmpdir>/architecture-review-<timestamp>.html` so each run gets a fresh file. Open it for the user (`xdg-open <path>` on Linux, `open <path>` on macOS, `start <path>` on Windows) and tell them the absolute path.
+Write a self-contained HTML file to the OS temp directory so nothing lands in the repo. Resolve the temp dir from `$TMPDIR`, falling back to `/tmp` (or `%TEMP%` on Windows), and write to `<tmpdir>/architecture-review-<timestamp>.html` so each run gets a fresh file.
+
+Request a desktop launch. In the first reply, link the file by its absolute path and include the exact command to open it again, with that path quoted for the user's shell (`xdg-open` on Linux, `open` on macOS, `Start-Process -FilePath` in PowerShell). A successful launcher exit confirms the request. Say the report is visible only if that was observed.
 
 The report uses **Tailwind via CDN** for layout and styling, and **Mermaid via CDN** for diagrams where a graph/flow/sequence reliably communicates the structure. Mix Mermaid with hand-crafted CSS/SVG visuals: use Mermaid when relationships are graph-shaped (call graphs, dependencies, sequences), and hand-built divs/SVG when you want something more editorial (mass diagrams, cross-sections, collapse animations). Each candidate gets a **before/after visualisation**. Be visual.
 
 For each candidate, render a card with:
 
-- **Files**: which files/modules are involved
-- **Problem**: why the current architecture is causing friction
+- **Files**: link the relevant symbols or lines at the reviewed commit in each repository
+- **Problem**: why the current architecture is causing friction and, if the evidence is incomplete, what question would decide the recommendation
 - **Solution**: plain English description of what would change
 - **Benefits**: explained in terms of locality and leverage, and how tests would improve
 - **Before / After diagram**: side-by-side, custom-drawn, illustrating the shallowness and the deepening
@@ -60,6 +62,8 @@ See [HTML-REPORT.md](HTML-REPORT.md) for the full HTML scaffold, diagram pattern
 Do NOT propose interfaces yet. After the file is written, ask the user: "Which of these would you like to explore?"
 
 ### 3. Grilling loop
+
+When the user picks a candidate, resume from its report card. Compare the linked commits with the revisions now under review. If a revision moved, inspect the diff around the cited symbols and update the evidence. Read the source, callers and tests needed to answer the card's open question. Carry forward applicable rule readings within the repository's reuse conditions. For newly triggered rules, read the full text in batches small enough to see it before recording the IDs as consulted.
 
 Once the user picks a candidate, call the Skill tool with "grilling" to walk the decision tree with them: constraints, dependencies, the shape of the deepened module, what sits behind the seam, what tests survive.
 
