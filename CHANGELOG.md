@@ -6,6 +6,8 @@ What a consumer needs to know when it moves its pin. Each entry names the issue 
 
 ## Unreleased
 
+- Use `card::TurningCard` to make matching print and paper meshes from one rounded footprint and place them around the existing front print or paper center. The game supplies the materials and attaches the meshes using the returned poses (#102).
+
 - Call `agent_transport::Transport::close` after sending replies to held requests to end the socket and answer queued, untaken requests with the game's `Protocol::closed` reply. The transport stops admitting requests at the queue and gives pending writes the usual bounded grace. Ordinary drop keeps its existing behavior (#101).
 
 - `held-start --require-success` writes its evidence record and exits 1 when the launch, exchange, capture or socket removal fails. By default, exit 0 still means the record was written (#99).
