@@ -18,8 +18,6 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 **Moving a pin.** Run `move-pin <game checkout> <full commit hash>` from this repository (`move-pin --help`): it moves every manifest's pin together, Arkham's two included, and refreshes the lockfiles that the game's `--locked` checks read. Run it again with the same hash to refresh a lockfile that drifted. When a manifest was left behind at an earlier move, it refuses and names each pin; `--align` moves them all.
 
-**A change no game uses.** When a change here, such as removing a deprecated item, needs nothing of any game, check each game without a pull request there: move the pins of a throwaway worktree of its `origin/main` to the pushed branch's head, run its Verify command, and record each game's main revision, command and result in this repository's pull request. Each game adopts the change at its next pin move (#68).
-
 **Native inspection.** The seat presses keys (`key`), drags a mouse button (`drag`) and turns the wheel (`scroll`) through Bevy's own input messages, so a seat test can drive a game's table camera through its real table: pan and Home by keys, orbit by a right drag and zoom by the wheel (#63). Cuba Libre's `native_right_drag_orbits_and_the_wheel_zooms_the_table_camera` drives a right drag, the wheel and Home through its real table. The seat cannot show that a real window delivers that input. That stays a person's inspection at a window: name it the owner's in a game's issue, and record in its pull request whether it was done.
 
 **Held capture and comparison.** Each game's "Held capture" below is run from that game's checkout through `held-start` (`held-start --help`), so the picture sits beside a record of the game's revision, whether its tree is clean, and the SHA-256 of the executable that ran. `compare-captures` reads both records and says when the two captures came from one executable, which cannot show a change:
@@ -32,6 +30,20 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools
 ```
 
 Record the "before" case with `--clean` from `main`, then the "after" case from the branch. For launch and capture verification, pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
+
+## Compatibility checks
+
+For each consumer in scope that needs no adoption PR, move the pins in a throwaway worktree of its `origin/main` to the pushed producer head. Run its Verify command and record the producer head, consumer base, command and result in this repository's pull request. Use this route for every game when a change needs nothing of any game, as with the deprecated items in #68. These consumers take the change at their next production pin move.
+
+## Adopting the merged pin
+
+Move each adopting consumer's pins to the producer's merge commit with `move-pin`. Exact-head consumer CI suffices for this recheck when all three conditions hold.
+
+- The producer trees match, as checked with `git diff --quiet <verified-producer-head> <producer-merge-commit>`.
+- The consumer's current base is the base used for its previous verification.
+- The diff from the verified consumer head changes only the shared revision in its manifests and lockfiles.
+
+Otherwise, bring in the current consumer base, review the delta, and rerun the affected consumer checks on the merged producer pin before merging the consumer PR.
 
 ## Arkham Unfolded
 
