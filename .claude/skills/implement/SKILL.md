@@ -16,7 +16,9 @@ When the work spans repositories, read each game's row in `docs/agents/consumers
 
 Choose evidence before editing. Exercise the changed behavior on its production path. Use the held capture procedure in `docs/agents/consumers.md` when the change can affect rendering, input, admission or behavior at the held seat. Otherwise use focused tests at the normal entry point alongside the full repository checks.
 
-When the work changes a producer interface that consumers adopt, pin each consumer to the pushed producer branch's head and pass its own checks there before merging the producer. Take each producer commit through, in order: commit, its check, push, `move-pin` the consumer to it, the consumer's checks. Cargo fetches a pin from GitHub, so a revision moves only once it is pushed. Each consumer's tests encode rules its code does not show. Then move every pin to the producer's merge commit and check again. When `git diff --quiet <pinned head> <merge commit>` holds, the pin and lockfile are the only change: the consumer's CI on the moved pin is that check. Move each pin with `move-pin` (`docs/agents/consumers.md`, "Moving a pin").
+When changing queue admission, deadlines or shutdown in concurrent code, run the focused regression and review the ordering before starting full consumer checks. Trace when a request is admitted, when an observer can see it and which outcome wins when operations race. Resolve findings that could invalidate consumer evidence before running the full checks.
+
+When a producer change affects consumers, commit and check the producer, then push the candidate so Cargo can fetch its revision. Before merging the producer, use `move-pin` to pin each affected consumer's worktree to that revision and pass its checks there. Follow [Compatibility checks](../../../docs/agents/consumers.md#compatibility-checks) for consumers that need no adoption PR. After the producer merges, follow [Adopting the merged pin](../../../docs/agents/consumers.md#adopting-the-merged-pin) for consumer PRs.
 
 Call the Skill tool with "tdd" where possible, at pre-agreed seams.
 
@@ -24,7 +26,7 @@ Run typechecking regularly, single test files regularly, and the full test suite
 
 Before writing a pull request's Evidence section, confirm each test it cites: it shows as `ok`, not `ignored`, in the log it cites, and it constructs the component the change touches (grep the test for it). A test that passes without reaching the changed path is not evidence for it; name what does reach the path, or write a test that does.
 
-Once done, call the Skill tool with "code-review" to review the work. When the work spans repositories, review each repository's pull request before it merges, and check its Evidence section against the logs it cites.
+Once done, call the Skill tool with "code-review" to review the work. Reuse earlier review for the parts of the final diff it still covers. When the work spans repositories, review each repository's pull request before it merges, and check its Evidence section against the logs it cites.
 
 Commit your work to the current branch.
 
