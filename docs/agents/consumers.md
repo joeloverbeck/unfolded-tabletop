@@ -26,22 +26,22 @@ Commit messages and pull requests in a game say `For #N`. Closing an issue is th
 
 ```sh
 cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-seat-client --bin held-start -- \
-  <requests> <short out-dir> <case> -- <game command>
+  --require-success <requests> <short out-dir> <case> -- <game command>
 cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools --bin compare-captures -- \
   <out-dir>/<before case>.table.png <out-dir>/<after case>.table.png [--threshold 3]
 ```
 
-Record the "before" case with `--clean` from `main`, then the "after" case from the branch. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
+Record the "before" case with `--clean` from `main`, then the "after" case from the branch. For launch and capture verification, pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
 
 ## Arkham Unfolded
 
 - **Seat host:** keeps Bevy's pipelined rendering. A change to the render world is exercised only here.
-- **Verify:** `scripts/check`. It starts its own memory scope and checkout lock through `scripts/dev`, so run it bare: under another `systemd-run --scope` it fails at once with "Unit run-p… was already loaded", since `exec` keeps the process ID that names both scopes. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
-- **Held capture:** requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/arkham-tabletop --experiment gathering --agent-seat --save <fresh path>`. Two starts of the unchanged table differed in about 200 pixels by at most 3 levels, so compare with `--threshold 3`. Batch form, with `capture` and `quit` requests on standard input, still works.
+- **Verify:** `scripts/check`. It starts its own memory scope and checkout lock through `scripts/dev`, so run it bare: under another `systemd-run --scope` it fails at once with "Unit run-p… was already loaded", since `exec` keeps the process ID that names both scopes. For cache maintenance, Arkham’s explicit `scripts/tools target-prune --delete` acts on the owner's target even in a worktree with a private `CARGO_TARGET_DIR`. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
+- **Held capture:** requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/arkham-tabletop --experiment gathering --agent-seat --save <fresh path>`. Compare with `--threshold 3`. If the comparison exceeds it, repeat with the same baseline executable and record the pixel count, maximum difference and bounds before attributing the change to the code. Batch form, with `capture` and `quit` requests on standard input, still works.
 - **One-shot capture:** the ignored art test captures the pouch through `capture::when_ready`. Name the test after `--`, not before it, and set `ARKHAM_POUCH_RENDER_DIR` to a directory that does not exist yet, which the test creates: `ARKHAM_GATHERING_TEST_ASSETS=<collection> ARKHAM_POUCH_RENDER_DIR=<new dir> scripts/dev cargo test --locked --features tabletop --lib -- --ignored --exact gathering_tabletop::art::tests::real_collection_loads_every_verified_image_font_and_pouch`.
 - **Merge:** after CI's "Rust checks" passes, use `scripts/tools merge-reviewed --pr <n> --head <sha> --base <main sha>`. Auto-close is off. Close an accepted issue with `scripts/tools publish comment --issue <n> --body-file <f> --close` (`docs/agents/github-administration.md`).
 - **Public text:** issues, comments and PR bodies go through `scripts/tools publish` (`issue`, `comment`, `pr-body`), whose preflight refuses private path forms. Name an evidence file by its case or file name, never by a `local/…` path.
-- **Tools in a new worktree:** the first `scripts/tools` call builds `arkham-tools` into `target/agent-tools`, which takes about two minutes. Run it after `scripts/build-slot`.
+- **Tools in a new worktree:** the first `scripts/tools` call builds `arkham-tools` into `target/agent-tools`, which takes about two minutes. Use the shared checkout's `scripts/build-slot -- scripts/tools <arguments>` from Arkham.
 - **Work-item limit:** none of its own.
 - **Pins a whole response:** `gathering_tabletop::seat::tests::nothing_hidden_appears_in_what_the_seat_reports` pins the response's top-level keys. A new response field changes it.
 - **Motion captures:** the seat alone advances its presentation clock, so `settle` with a step count stops a card's motion at the same presentation time on every run. Its `gathering_draw_review` example writes saves whose first choice starts the opening draws, a mulligan, an action draw and an encounter draw; take that choice in `held-start`, then alternate `{"op":"settle","steps":13}` and `capture` to compare a motion before and after (Cuba Libre #141).

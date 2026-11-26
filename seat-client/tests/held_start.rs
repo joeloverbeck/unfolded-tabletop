@@ -37,12 +37,12 @@ fn game(arguments: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     }
     match case.as_str() {
-        "ready" => {
+        "ready" | "ready-without-capture" | "ready-with-directory" | "unsettled" => {
             let log = std::fs::File::create(log_of(socket)).unwrap();
             // The seat outlives this launching command, as a launched seat does.
             #[expect(clippy::zombie_processes, reason = "the seat outlives its launcher")]
             Command::new(std::env::current_exe().unwrap())
-                .args(["serve", socket.to_str().unwrap()])
+                .args(["serve", socket.to_str().unwrap(), case])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(log)
@@ -64,6 +64,10 @@ fn game(arguments: &[String]) -> ExitCode {
             println!("{REFUSED}");
             ExitCode::FAILURE
         }
+        "invalid-stdout" => {
+            std::io::stdout().write_all(&[0xff]).unwrap();
+            ExitCode::SUCCESS
+        }
         _ => panic!("no case {case}"),
     }
 }
@@ -71,7 +75,7 @@ fn game(arguments: &[String]) -> ExitCode {
 /// The stand-in seat: one connection, `observed` for `observe`, `settled` for
 /// `settle`, `captured` for `capture` after writing a small file at its path, and `bye`
 /// for `quit`. A `key` request ends the session unanswered, as a seat that fails would.
-fn serve(socket: &Path) -> ExitCode {
+fn serve(socket: &Path, case: &str) -> ExitCode {
     let listener = UnixListener::bind(socket).unwrap();
     eprintln!("listening");
     let (mut stream, _) = listener.accept().unwrap();
@@ -79,16 +83,23 @@ fn serve(socket: &Path) -> ExitCode {
         let request: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
         let status = match request["op"].as_str() {
             Some("observe") => "observed",
+            Some("settle") if case == "unsettled" => "unsettled",
             Some("settle") => "settled",
             Some("capture") => {
-                std::fs::write(request["path"].as_str().unwrap(), b"stand-in picture").unwrap();
+                let path = request["path"].as_str().unwrap();
+                match case {
+                    "ready-without-capture" => {}
+                    "ready-with-directory" => std::fs::create_dir(path).unwrap(),
+                    _ => std::fs::write(path, b"stand-in picture").unwrap(),
+                }
                 "captured"
             }
             Some("quit") => "bye",
             Some("key") => break,
             _ => "refused",
         };
-        writeln!(stream, r#"{{"ok":true,"mode":"seat","status":"{status}"}}"#).unwrap();
+        let ok = status != "unsettled";
+        writeln!(stream, r#"{{"ok":{ok},"mode":"seat","status":"{status}"}}"#).unwrap();
         if status == "bye" {
             break;
         }
@@ -337,6 +348,87 @@ fn a_session_that_ends_early_records_the_unanswered_requests(scratch: &Path) {
     assert!(record.contains("socket after: removed\n"), "{record}");
 }
 
+fn require_success_checks_the_launch_exchange_and_picture_after_recording(scratch: &Path) {
+    let capture = r#"{"op":"capture","path":"proof.png"}"#;
+    let capture_only = [capture];
+    let settle_then_capture = [r#"{"op":"settle"}"#, capture];
+    let cut = [r#"{"op":"key","key":"Enter","revision":0}"#];
+    for (case, game, requests, exit, evidence) in [
+        ("strict-ready", "ready", &capture_only[..], 0, "(written)"),
+        (
+            "strict-refused",
+            "refused",
+            &capture_only,
+            1,
+            "first status: refused",
+        ),
+        ("strict-cut", "ready", &cut, 1, "quit: unanswered"),
+        (
+            "strict-miss",
+            "ready-without-capture",
+            &capture_only,
+            1,
+            "(absent)",
+        ),
+        (
+            "strict-directory",
+            "ready-with-directory",
+            &capture_only,
+            1,
+            "(not a file)",
+        ),
+        (
+            "strict-unsettled",
+            "unsettled",
+            &settle_then_capture,
+            1,
+            "status: unsettled",
+        ),
+        (
+            "strict-invalid",
+            "invalid-stdout",
+            &capture_only,
+            1,
+            "launcher output error:",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_held-start"))
+            .arg("--require-success")
+            .args(requests.iter().flat_map(|request| ["--request", request]))
+            .arg(scratch)
+            .args([case, "--"])
+            .arg(std::env::current_exe().unwrap())
+            .args(["game", game])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(exit), "{case}: {output:?}");
+        let record = read(scratch.join(format!("{case}.record")));
+        assert!(record.contains(evidence), "{record}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), record);
+    }
+}
+
+fn require_success_records_a_game_that_cannot_be_launched(scratch: &Path) {
+    let run = |flags: &[&str], case: &str| {
+        Command::new(env!("CARGO_BIN_EXE_held-start"))
+            .args(flags)
+            .arg(scratch)
+            .args([case, "--"])
+            .arg(scratch.join("missing-game"))
+            .output()
+            .unwrap()
+    };
+    let output = run(&["--require-success"], "strict-spawn");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let record = read(scratch.join("strict-spawn.record"));
+    assert!(record.contains("launcher exit: not started\nlauncher error: cannot start "));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), record);
+
+    let output = run(&[], "default-spawn");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(!scratch.join("default-spawn.record").exists());
+}
+
 fn clean_refuses_an_absent_or_changed_tree_before_launch(scratch: &Path) {
     let out = scratch.join("clean");
     let unlaunched = |case: &str| {
@@ -405,7 +497,7 @@ fn help_prints_the_usage_and_writes_nothing(scratch: &Path) {
     let text = String::from_utf8(help.stdout).unwrap();
     assert!(
         text.starts_with(
-            "usage: held-start [--clean] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]\n"
+            "usage: held-start [--clean] [--require-success] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]\n"
         ),
         "{text}"
     );
@@ -424,11 +516,11 @@ fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     match arguments.first().map(String::as_str) {
         Some("game") => return game(&arguments[1..]),
-        Some("serve") => return serve(Path::new(&arguments[1])),
+        Some("serve") => return serve(Path::new(&arguments[1]), &arguments[2]),
         _ => {}
     }
     // In order: the third reads the record the second wrote.
-    let tests: [Test; 11] = [
+    let tests: [Test; 13] = [
         (
             "a_record_names_the_executable_by_its_sha256",
             a_record_names_the_executable_by_its_sha256,
@@ -464,6 +556,14 @@ fn main() -> ExitCode {
         (
             "a_session_that_ends_early_records_the_unanswered_requests",
             a_session_that_ends_early_records_the_unanswered_requests,
+        ),
+        (
+            "require_success_checks_the_launch_exchange_and_picture_after_recording",
+            require_success_checks_the_launch_exchange_and_picture_after_recording,
+        ),
+        (
+            "require_success_records_a_game_that_cannot_be_launched",
+            require_success_records_a_game_that_cannot_be_launched,
         ),
         (
             "clean_refuses_an_absent_or_changed_tree_before_launch",
