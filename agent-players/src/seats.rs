@@ -623,7 +623,8 @@ impl<S: Clone + PartialEq, C: Clone, R, F> Seats<S, C, R, F> {
         self.hold_wait(id, (reply, Some(submission)), period, pending, now)
     }
 
-    /// Record an accepted submission, before deciding whether its request also waits.
+    /// Record an accepted submission before polling or answering the held wait and
+    /// before deciding whether the new request also waits.
     /// Only an existing wait that follows a submission changes what it follows.
     pub fn accepted_submission(&mut self, id: &str, submission: &F)
     where
