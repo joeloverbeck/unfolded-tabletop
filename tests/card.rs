@@ -499,7 +499,7 @@ fn turning_card_matches_both_consumers_at_their_existing_pivots() {
         ),
     ];
     let close = |actual: f32, expected: f32| {
-        // A half-turn used to close the paper mesh contributes sub-micrometre drift.
+        // Allow the small floating-point drift from closing the mesh with a rotated face.
         assert!((actual - expected).abs() < 2e-7, "{actual} != {expected}");
     };
     let eps = 1e-6;
@@ -529,6 +529,8 @@ fn turning_card_matches_both_consumers_at_their_existing_pivots() {
         let uv = uvs(&mesh);
         let normal = normals(&mesh)[0];
         let indices: Vec<_> = mesh.indices().unwrap().iter().collect();
+        let (triangles, remainder) = indices.as_chunks::<3>();
+        assert!(remainder.is_empty());
         assert!(
             print
                 .iter()
@@ -536,9 +538,8 @@ fn turning_card_matches_both_consumers_at_their_existing_pivots() {
         );
         for (pose, outward) in [(poses.front, Vec3::Y), (poses.back, Vec3::NEG_Y)] {
             assert!((pose.rotation * normal).abs_diff_eq(outward, eps));
-            for triangle in indices.chunks_exact(3) {
-                let [a, b, c] =
-                    [triangle[0], triangle[1], triangle[2]].map(|i| pose.transform_point(print[i]));
+            for triangle in triangles {
+                let [a, b, c] = triangle.map(|i| pose.transform_point(print[i]));
                 assert!((b - a).cross(c - a).dot(outward) > 0.);
             }
             let paper_surface = if outward.y > 0. { top } else { bottom };
