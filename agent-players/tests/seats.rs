@@ -81,6 +81,41 @@ fn join(seats: &mut Table, seat: &'static str, now: Instant) -> String {
     seats.claim(&seat, Joining::default(), now).unwrap()
 }
 
+#[test]
+fn a_wait_follows_an_accepted_replacement_until_the_wait_itself_is_replaced() {
+    let mut seats = Seats::<_, &'static str, _, _>::with_following([RED]);
+    seats.hand_over(&RED);
+    let now = Instant::now();
+    let id = seats.claim(&RED, Joining::default(), now).unwrap();
+    let period = Duration::from_secs(10);
+    assert_eq!(
+        seats.wait_following(
+            &id,
+            (1, "first choice"),
+            Some(period),
+            Pending::Nothing,
+            now
+        ),
+        Waiting::Held { replaced: None }
+    );
+    seats.accepted_submission(&id, &"replacement");
+    assert_eq!(
+        seats.tell_following(&id, [] as [Event<()>; 0], now + period),
+        Some((1, Told::Elapsed, Some("replacement")))
+    );
+
+    seats.wait_following(&id, (2, "another choice"), None, Pending::Nothing, now);
+    assert_eq!(
+        seats.wait(&id, 3, Some(period), Pending::Nothing, now),
+        Waiting::Held { replaced: Some(2) }
+    );
+    seats.accepted_submission(&id, &"later choice");
+    assert_eq!(
+        seats.tell_following(&id, [] as [Event<()>; 0], now + period),
+        Some((3, Told::Elapsed, None))
+    );
+}
+
 fn wait(seats: &mut Table, id: &str, reply: u32, decision: Option<u64>, now: Instant) {
     assert_eq!(
         seats.wait(id, reply, None, pending(decision), now),
