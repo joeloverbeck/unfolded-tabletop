@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # Wait for this machine's build slot: for 30 seconds, no `cargo` process whose tree
 # (cargo, rustc, linkers, test executables) holds 512 MB or more, and no check's scope
-# (`run-*.scope`) holding 2 GB or more. One Bevy build runs at a time across every
-# session on the machine, since a build, its linkers and its GPU tests can exhaust a
-# session's memory scope. A run of small builds, such as one short non-Bevy test
+# (`run-*.scope`) holding 2 GB or more. A build, its linkers and its GPU tests can
+# exhaust a session's memory scope. A run of small builds, such as one short non-Bevy test
 # after another, holds less and does not hold the slot (#83 retro). Run it before
-# each heavy command: `scripts/build-slot && <command>`. On standard error it names
-# what holds the slot when it starts waiting, and again every five minutes.
+# each heavy command: `scripts/build-slot -- <command>`. It reports queue and command
+# time separately and returns the command's exit status. It reports the holder when
+# it starts waiting and again every five minutes. Without arguments it only waits.
 set -euo pipefail
+
+if (($#)); then
+  if [[ $1 != -- ]] || (($# < 2)); then
+    echo 'usage: scripts/build-slot [-- <command> [<argument>...]]' >&2
+    exit 2
+  fi
+  shift
+fi
 
 scopes=/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice
 holder=
@@ -47,9 +55,10 @@ busy() {
 }
 
 quiet=0
-waited=0
 told=-300
+queued_at=$SECONDS
 while ((quiet < 3)); do
+  waited=$((SECONDS - queued_at))
   if busy; then
     quiet=0
     if ((waited - told >= 300)); then
@@ -60,5 +69,13 @@ while ((quiet < 3)); do
     quiet=$((quiet + 1))
   fi
   sleep 10
-  waited=$((waited + 10))
 done
+
+printf 'build-slot: queue %ss\n' "$((SECONDS - queued_at))" >&2
+if (($#)); then
+  started_at=$SECONDS
+  status=0
+  "$@" || status=$?
+  printf 'build-slot: command %ss, exit %s\n' "$((SECONDS - started_at))" "$status" >&2
+  exit "$status"
+fi

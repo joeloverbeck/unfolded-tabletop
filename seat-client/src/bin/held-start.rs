@@ -18,7 +18,7 @@ use unfolded_seat_protocol::{Request, Status};
 const SOCKET_REMOVAL: Duration = Duration::from_secs(10);
 /// How long one response may take once the seat has been admitted.
 const RESPONSE: Duration = Duration::from_secs(180);
-const USAGE: &str = "usage: held-start [--clean] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
+const USAGE: &str = "usage: held-start [--clean] [--require-success] [--request <json>]... <out-dir> <case> -- <command> [<argument>...]";
 /// What `--help` prints after the usage: everything a caller needs to read a record.
 const HELP: &str = "\
 Record one held start of a game's agent seat as evidence for a pull request. Run it
@@ -59,8 +59,10 @@ a Git working tree, or whose tracked files differ from its revision.
 Record a \"before\" case with --clean, from the game's `main`, before changing the
 game, and compare the captures with `compare-captures`.
 
-Exit status: 0 once the record is written, whatever the start did; 2 when no record
-could be made.
+Exit status: 0 once the record is written, whatever the start did. With
+--require-success, exit 1 after writing the record if the launcher failed, the seat
+did not answer successfully through quit, a capture file is missing, or the socket
+remains. Exit 2 when no record could be made.
 ";
 /// The files `held-start` itself writes for a case, which no capture may name.
 const OWN_FILES: [&str; 6] = ["record", "stdout", "stderr", "seat.log", "sock", "sock.log"];
@@ -80,9 +82,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     match run(&arguments) {
-        Ok(record) => {
+        Ok((record, status)) => {
             print!("{record}");
-            ExitCode::SUCCESS
+            status
         }
         Err(error) => {
             eprintln!("held-start: {error:#}");
@@ -91,13 +93,18 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(mut arguments: &[String]) -> Result<String> {
+fn run(mut arguments: &[String]) -> Result<(String, ExitCode)> {
     let mut lines = Vec::new();
     let mut clean = false;
+    let mut require_success = false;
     loop {
         match arguments {
             [flag, rest @ ..] if flag == "--clean" => {
                 clean = true;
+                arguments = rest;
+            }
+            [flag, rest @ ..] if flag == "--require-success" => {
+                require_success = true;
                 arguments = rest;
             }
             [flag, line, rest @ ..] if flag == "--request" => {
@@ -156,7 +163,7 @@ fn run(mut arguments: &[String]) -> Result<String> {
     line(&mut record, "working directory", &directory.display());
     line(&mut record, "revision", &revision);
 
-    let status = Command::new(program)
+    let launch = Command::new(program)
         .args(rest)
         .arg("--socket")
         .arg(&socket)
@@ -164,15 +171,36 @@ fn run(mut arguments: &[String]) -> Result<String> {
         .stdout(fs::File::create(file(".stdout"))?)
         .stderr(fs::File::create(file(".stderr"))?)
         .status()
-        .with_context(|| format!("cannot start {program}"))?;
-    line(
-        &mut record,
-        "launcher exit",
-        &status
-            .code()
-            .map_or_else(|| status.to_string(), |code| code.to_string()),
-    );
-    let stdout = fs::read_to_string(file(".stdout"))?;
+        .with_context(|| format!("cannot start {program}"));
+    let launched = match launch {
+        Ok(status) => {
+            line(
+                &mut record,
+                "launcher exit",
+                &status
+                    .code()
+                    .map_or_else(|| status.to_string(), |code| code.to_string()),
+            );
+            status.success()
+        }
+        Err(error) if require_success => {
+            line(&mut record, "launcher exit", &"not started");
+            line(&mut record, "launcher error", &format!("{error:#}"));
+            false
+        }
+        Err(error) => return Err(error),
+    };
+    let (stdout, valid_output) = match String::from_utf8(fs::read(file(".stdout"))?) {
+        Ok(stdout) => (stdout, true),
+        Err(error) if require_success => {
+            line(&mut record, "launcher output error", &error);
+            (
+                String::from_utf8_lossy(error.as_bytes()).into_owned(),
+                false,
+            )
+        }
+        Err(error) => return Err(error.into()),
+    };
     line(
         &mut record,
         "launcher stdout lines",
@@ -191,21 +219,29 @@ fn run(mut arguments: &[String]) -> Result<String> {
         line(&mut record, "first error", &error);
     }
     let ready = first_status == Status::Ready.name();
-    record.push_str(&converse(&socket, &extras, ready));
+    let (conversation, exchanged) = converse(&socket, &extras, ready);
+    record.push_str(&conversation);
     let deadline = Instant::now() + SOCKET_REMOVAL;
     while socket.exists() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(50));
     }
-    let removed = if socket.exists() {
-        "present"
-    } else {
-        "removed"
-    };
-    line(&mut record, "socket after", &removed);
+    let removed = !socket.exists();
+    line(
+        &mut record,
+        "socket after",
+        &if removed { "removed" } else { "present" },
+    );
     record.push_str(&seat_log(&socket, &file(".seat.log")));
     fs::write(&record_path, &record)
         .with_context(|| format!("cannot write {}", record_path.display()))?;
-    Ok(record)
+    let admitted = first.is_some_and(|answer| answer["ok"].as_bool() == Some(true));
+    let exit = if require_success && !(launched && valid_output && admitted && exchanged && removed)
+    {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    };
+    Ok((record, exit))
 }
 
 /// The executable `program` names, as the launch finds it, and its SHA-256: a path
@@ -332,7 +368,7 @@ fn extras(lines: &[&String], case: &str, out: &Path) -> Result<Vec<Extra>> {
 /// When the start was `ready`, send `observe`, each extra request and `quit` on one
 /// connection, and say what each answered, or why none did. Otherwise say that the
 /// extra requests were not sent. With no extra request, one line holds both statuses.
-fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
+fn converse(socket: &Path, extras: &[Extra], ready: bool) -> (String, bool) {
     let answered = ready.then(|| {
         let requests: Vec<String> = std::iter::once(Request::Observe {})
             .chain(extras.iter().map(|extra| extra.request.clone()))
@@ -341,9 +377,25 @@ fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
             .collect();
         exchange(socket, &requests)
     });
+    let complete = answered.as_ref().is_some_and(|(statuses, _, successful)| {
+        *successful
+            && statuses.len() == extras.len() + 2
+            && statuses[0] == Status::Observed.name()
+            && statuses[extras.len() + 1] == Status::Bye.name()
+            && extras.iter().zip(&statuses[1..]).all(|(extra, answer)| {
+                Status::named(answer).is_some_and(|status| {
+                    !status.failed()
+                        && !status.ends_session()
+                        && extra
+                            .capture
+                            .as_ref()
+                            .is_none_or(|capture| status == Status::Captured && capture.is_file())
+                })
+            })
+    });
     let mut text = String::new();
     if extras.is_empty() {
-        if let Some((statuses, error)) = answered {
+        if let Some((statuses, error, _)) = answered {
             let _ = write!(text, "observe, quit: {}", statuses.join(", "));
             match error {
                 Some(error) if statuses.is_empty() => text = format!("observe, quit: {error}"),
@@ -354,9 +406,9 @@ fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
             }
             text.push('\n');
         }
-        return text;
+        return (text, complete);
     }
-    let (statuses, error) = answered.unwrap_or_default();
+    let (statuses, error, _) = answered.unwrap_or_default();
     let status = |index: usize| {
         if !ready {
             "not sent"
@@ -371,8 +423,10 @@ fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
         let _ = writeln!(text, "request {}: {}", index + 1, extra.request);
         let _ = writeln!(text, "  status: {}", status(index + 1));
         if let Some(capture) = &extra.capture {
-            let written = if capture.exists() {
+            let written = if capture.is_file() {
                 "written"
+            } else if capture.exists() {
+                "not a file"
             } else {
                 "absent"
             };
@@ -385,16 +439,16 @@ fn converse(socket: &Path, extras: &[Extra], ready: bool) -> String {
     if let Some(error) = error {
         let _ = writeln!(text, "exchange: {error}");
     }
-    text
+    (text, complete)
 }
 
 /// Send `requests` on one connection: the status each answer carried, in order, and
 /// why the exchange ended early, if it did: an error, or a session that ended with
-/// requests unanswered.
-fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>) {
+/// requests unanswered. The last value says whether every answer succeeded.
+fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>, bool) {
     let connection = match seat_client::Connection::open(socket) {
         Ok(connection) => connection,
-        Err(error) => return (Vec::new(), Some(format!("cannot connect: {error}"))),
+        Err(error) => return (Vec::new(), Some(format!("cannot connect: {error}")), false),
     };
     let deadline = Instant::now() + RESPONSE;
     let mut answers = Vec::new();
@@ -404,12 +458,18 @@ fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>)
         }
         Ok(())
     });
-    let statuses = String::from_utf8_lossy(&answers)
+    let decoded = String::from_utf8_lossy(&answers);
+    let mut successful = matches!(&exchanged, Ok(seat_client::Outcome::Answered))
+        && matches!(&decoded, std::borrow::Cow::Borrowed(_));
+    let statuses = decoded
         .lines()
         .map(|answer| {
             serde_json::from_str::<serde_json::Value>(answer)
                 .ok()
-                .and_then(|answer| answer["status"].as_str().map(str::to_owned))
+                .and_then(|answer| {
+                    successful &= answer["ok"].as_bool() == Some(true);
+                    answer["status"].as_str().map(str::to_owned)
+                })
                 .unwrap_or_else(|| "malformed".to_owned())
         })
         .collect();
@@ -421,7 +481,7 @@ fn exchange(socket: &Path, requests: &[String]) -> (Vec<String>, Option<String>)
         Ok(_) => None,
         Err(error) => Some(format!("{error:#}")),
     };
-    (statuses, ended)
+    (statuses, ended, successful)
 }
 
 /// Copy the seat's log, which the launcher writes at the socket's path with `.log`
