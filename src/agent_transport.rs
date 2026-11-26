@@ -24,7 +24,9 @@
 //! up to a second for the connections to write the answers already sent and end, and cuts
 //! those still open. A request that is untaken or still held by then is cut with its
 //! connection: its client reads an end and no line. So take and answer what has arrived
-//! before dropping the transport.
+//! before dropping the transport, or use [`Transport::close`] to answer untaken
+//! requests without another frame. In either case, send the game's replies to held
+//! requests first.
 //!
 //! Not here: the requests, who may send them, what they are answered, where the socket
 //! is and what the player is told. The transport reads no request. The answers it sends
@@ -72,8 +74,9 @@ pub trait Protocol: Send + Sync + 'static {
     /// as `Agent partners`.
     fn players(&self) -> &str;
 
-    /// The answer to a request whose [`Reply`] the game dropped unsent while its
-    /// connection was open, after which the connection ends.
+    /// The answer to a request whose [`Reply`] was dropped unsent while its connection
+    /// was open, as when the game drops it or [`Transport::close`] lets it go. The
+    /// connection ends after this answer.
     fn closed(&self) -> String;
 
     /// How long `request` may stay unanswered, and its answer then, after which the
@@ -171,7 +174,7 @@ pub struct Transport {
     accepting: Option<JoinHandle<()>>,
     connections: Connections,
     queued: Arc<AtomicUsize>,
-    inbox: Mutex<mpsc::Receiver<Incoming>>,
+    inbox: Option<Mutex<mpsc::Receiver<Incoming>>>,
 }
 
 /// The connections being served, by number, kept to cut them when the transport closes.
@@ -223,7 +226,7 @@ impl Transport {
             accepting: Some(accepting),
             connections,
             queued,
-            inbox: Mutex::new(inbox),
+            inbox: Some(Mutex::new(inbox)),
         })
     }
 
@@ -235,10 +238,29 @@ impl Transport {
 
     /// Every request that arrived since the last call, in arrival order.
     pub fn take(&self) -> Vec<Incoming> {
-        let inbox = self.inbox.lock().expect("no thread panics holding it");
+        let inbox = self
+            .inbox
+            .as_ref()
+            .expect("the transport is still open")
+            .lock()
+            .expect("no thread panics holding it");
         let incoming: Vec<_> = inbox.try_iter().collect();
         self.queued.fetch_sub(incoming.len(), Ordering::AcqRel);
         incoming
+    }
+
+    /// Stop admitting requests to the frame queue and let go of those still in it.
+    /// Their connection threads write [`Protocol::closed`] and end. A request already
+    /// answered by its timeout gets only that answer. A request the game took remains
+    /// the game's to answer before calling this.
+    ///
+    /// Stop accepting connections, remove the socket path and end socket reads so an
+    /// idle connection can finish. Give in-flight answers the same bounded write
+    /// grace as on drop.
+    pub fn close(mut self) {
+        // Disconnect the queue before ending socket reads. Dropping the queued
+        // replies wakes their workers through the usual unsent-reply path.
+        drop(self.inbox.take());
     }
 }
 
@@ -312,7 +334,6 @@ fn converse(stream: &Arc<UnixStream>, shared: &Shared) {
         shared.queued.fetch_add(1, Ordering::AcqRel);
         if shared.outbox.send(Incoming { line, reply }).is_err() {
             shared.queued.fetch_sub(1, Ordering::AcqRel);
-            let _ = writeln!(writer, "{}", shared.protocol.closed());
             return;
         }
         wake(shared);
@@ -384,6 +405,11 @@ impl Drop for Transport {
         self.stop.store(true, Ordering::Release);
         if let Some(accepting) = self.accepting.take() {
             let _ = accepting.join();
+        }
+        if self.inbox.is_none() {
+            for (_, stream) in open_connections(&self.connections).iter() {
+                let _ = stream.shutdown(Shutdown::Read);
+            }
         }
         // Connections write the answers already sent to them, then end when their client
         // closes its side; a connection still open after a second is cut.

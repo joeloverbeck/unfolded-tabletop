@@ -6,6 +6,8 @@ What a consumer needs to know when it moves its pin. Each entry names the issue 
 
 ## Unreleased
 
+- Call `agent_transport::Transport::close` after sending replies to held requests to end the socket and answer queued, untaken requests with the game's `Protocol::closed` reply. The transport stops admitting requests at the queue and gives pending writes the usual bounded grace. Ordinary drop keeps its existing behavior (#101).
+
 - `held-start --require-success` writes its evidence record and exits 1 when the launch, exchange, capture or socket removal fails. By default, exit 0 still means the record was written (#99).
 
 - A player's wait can carry the submission it follows. When you construct `Seats::with_following`, call `accepted_submission` for each accepted submission before polling or answering the held wait. Call `wait_following` when the new request also waits, and `tell_following` to read the latest submission with the answer. Plain waits carry no submission. The game still supplies the submission's meaning and standing (#99).

@@ -283,6 +283,46 @@ fn closing_writes_the_answers_already_sent_then_ends_every_connection_and_the_pa
 }
 
 #[test]
+fn orderly_close_answers_queued_requests_and_ends_idle_connections() {
+    let open = open();
+    let mut returning = Client::connect(&open.socket);
+    returning.send("look");
+    open.next().reply.send("seen".into());
+    assert_eq!(returning.answer(), "seen\n");
+
+    let mut held = Client::connect(&open.socket);
+    held.send("wait");
+    let wait = open.next();
+    assert_eq!(wait.line, "wait");
+    wait.reply.send("the game ended your wait".into());
+
+    let mut idle = Client::connect(&open.socket);
+    idle.send("brief look");
+    open.woken(3);
+    assert_eq!(idle.answer(), "nothing for brief look\n");
+
+    let mut one_request = Client::connect(&open.socket);
+    one_request.send("look");
+    one_request.half_close();
+    returning.send("again");
+    open.woken(5);
+    assert!(open.transport.waiting());
+
+    let Open {
+        transport, socket, ..
+    } = open;
+    transport.close();
+    assert_eq!(one_request.answer(), "closed\n");
+    assert_eq!(one_request.answer(), "");
+    assert_eq!(returning.answer(), "closed\n");
+    assert_eq!(returning.answer(), "");
+    assert_eq!(held.answer(), "the game ended your wait\n");
+    assert_eq!(held.answer(), "");
+    assert_eq!(idle.answer(), "", "no second answer follows the timeout");
+    assert!(!socket.exists());
+}
+
+#[test]
 fn only_its_owner_reaches_the_socket_a_dead_one_is_replaced_and_an_answering_one_is_left() {
     let directory = tempfile::tempdir().unwrap();
     let socket = directory.path().join("players.sock");
