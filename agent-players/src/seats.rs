@@ -20,9 +20,12 @@
 //! ([`Seats::end_hung_up`]). A wait may be for everything but the decision its seat has as
 //! it begins ([`Pending::Before`]). A session that waits is not silent, unless its wait
 //! cannot tell it the decision its seat has ([`Seats::silence`]). Another request of the
-//! session's leaves its wait as it is, unless the game ends it ([`Seats::end_wait`]). For
-//! a request that submits and then waits, a game submits and then gives the wait the same
-//! reply.
+//! session's leaves the wait's reply and deadline in place, unless the game ends it
+//! ([`Seats::end_wait`]). For
+//! a request that submits and then waits, the game can [hold its reply with the
+//! submission](Seats::wait_following). A later [accepted submission](Seats::accepted_submission)
+//! of the same session becomes what that wait follows, even when the later request
+//! answers at once. The game supplies the submission and its standing.
 //!
 //! **Events.** Each is told once. A session's own decision is told by the answer to its
 //! submission ([`Seats::told_in_answer`]) or by its wait ([`Seats::tell`]), whichever
@@ -209,11 +212,12 @@ pub enum Waiting<R> {
 }
 
 #[derive(Debug)]
-struct Wait<R> {
+struct Wait<R, F> {
     reply: R,
     deadline: Option<Instant>,
     /// The revision of the decision it is not for.
     before: Option<u64>,
+    following: Option<F>,
 }
 
 #[derive(Debug)]
@@ -275,7 +279,7 @@ enum Due {
 }
 
 #[derive(Debug)]
-struct Session<S, C, R> {
+struct Session<S, C, R, F> {
     id: String,
     seat: S,
     /// The tool's identifiers of it.
@@ -284,17 +288,18 @@ struct Session<S, C, R> {
     told: Option<ToldDecision>,
     held: Option<HeldChoice<C>>,
     released: Vec<Release<C>>,
-    wait: Option<Wait<R>>,
+    wait: Option<Wait<R, F>>,
 }
 
 /// The player seats of one game, the sessions that hold them, and what those sessions
-/// have in hand. `S` is the game's seat, `C` its choice, and `R` how it answers a wait. It is
-/// runtime state of the table, and no part of a save.
+/// have in hand. `S` is the game's seat, `C` its choice, `R` how it answers a wait, and
+/// `F` the game's account of a submission one follows. It is runtime state of the table,
+/// and no part of a save.
 #[derive(Debug)]
-pub struct Seats<S, C, R> {
+pub struct Seats<S, C, R, F = ()> {
     /// Each seat, and whether the human handed it over.
     seats: Vec<(S, bool)>,
-    sessions: Vec<Session<S, C, R>>,
+    sessions: Vec<Session<S, C, R, F>>,
     /// Each ended identity and why its session ended.
     ended: Vec<(String, String)>,
     order: u64,
@@ -303,6 +308,13 @@ pub struct Seats<S, C, R> {
 impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
     /// A game's seats, every one the human's.
     pub fn new(seats: impl IntoIterator<Item = S>) -> Self {
+        Self::with_following(seats)
+    }
+}
+
+impl<S: Clone + PartialEq, C: Clone, R, F> Seats<S, C, R, F> {
+    /// A game's seats with waits that can follow its submissions of type `F`.
+    pub fn with_following(seats: impl IntoIterator<Item = S>) -> Self {
         Self {
             seats: seats.into_iter().map(|seat| (seat, false)).collect(),
             sessions: Vec::new(),
@@ -311,11 +323,11 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         }
     }
 
-    fn session(&self, id: &str) -> Option<&Session<S, C, R>> {
+    fn session(&self, id: &str) -> Option<&Session<S, C, R, F>> {
         self.sessions.iter().find(|session| session.id == id)
     }
 
-    fn session_mut(&mut self, id: &str) -> Option<&mut Session<S, C, R>> {
+    fn session_mut(&mut self, id: &str) -> Option<&mut Session<S, C, R, F>> {
         self.sessions.iter_mut().find(|session| session.id == id)
     }
 
@@ -596,6 +608,45 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         pending: Pending,
         now: Instant,
     ) -> Waiting<R> {
+        self.hold_wait(id, (reply, None), period, pending, now)
+    }
+
+    /// Like [`wait`](Self::wait), with the accepted submission from the same request.
+    pub fn wait_following(
+        &mut self,
+        id: &str,
+        (reply, submission): (R, F),
+        period: Option<Duration>,
+        pending: Pending,
+        now: Instant,
+    ) -> Waiting<R> {
+        self.hold_wait(id, (reply, Some(submission)), period, pending, now)
+    }
+
+    /// Record an accepted submission, before deciding whether its request also waits.
+    /// Only an existing wait that follows a submission changes what it follows.
+    pub fn accepted_submission(&mut self, id: &str, submission: &F)
+    where
+        F: Clone,
+    {
+        if let Some(following) = self.following_mut(id) {
+            following.clone_from(submission);
+        }
+    }
+
+    /// The submission the held wait follows, if any, for the game to update its standing.
+    pub fn following_mut(&mut self, id: &str) -> Option<&mut F> {
+        self.session_mut(id)?.wait.as_mut()?.following.as_mut()
+    }
+
+    fn hold_wait(
+        &mut self,
+        id: &str,
+        (reply, following): (R, Option<F>),
+        period: Option<Duration>,
+        pending: Pending,
+        now: Instant,
+    ) -> Waiting<R> {
         let Some(session) = self.session_mut(id) else {
             return Waiting::Refused(reply);
         };
@@ -626,6 +677,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
             reply,
             deadline: period.and_then(|period| now.checked_add(period)),
             before,
+            following,
         };
         Waiting::Held {
             replaced: session.wait.replace(wait).map(|older| older.reply),
@@ -653,6 +705,17 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         events: impl IntoIterator<Item = Event<N>>,
         now: Instant,
     ) -> Option<(R, Told<C, N>)> {
+        self.tell_following(id, events, now)
+            .map(|(reply, told, _)| (reply, told))
+    }
+
+    /// Like [`tell`](Self::tell), with the submission its answered wait followed, if any.
+    pub fn tell_following<N>(
+        &mut self,
+        id: &str,
+        events: impl IntoIterator<Item = Event<N>>,
+        now: Instant,
+    ) -> Option<(R, Told<C, N>, Option<F>)> {
         let session = self.session_mut(id)?;
         let mut events: Vec<Event<N>> = events.into_iter().collect();
         let due = session.due(&events, now)?;
@@ -691,7 +754,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
         }
         session.heard = now;
         let wait = session.wait.take().expect("Due");
-        Some((wait.reply, told))
+        Some((wait.reply, told, wait.following))
     }
 
     /// Whether [`tell`](Self::tell) would answer the wait of the session `id`.
@@ -762,7 +825,7 @@ impl<S: Clone + PartialEq, C: Clone, R> Seats<S, C, R> {
     }
 }
 
-impl<S, C, R> Session<S, C, R> {
+impl<S, C, R, F> Session<S, C, R, F> {
     /// A choice of its own that was held is not applied, and its decision is its own
     /// again.
     fn release(&mut self, released: Released<C>) {
