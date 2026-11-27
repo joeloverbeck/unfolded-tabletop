@@ -22,6 +22,7 @@ To withdraw a change here, first revert each adopting consumer's adapter and its
 | `random::fresh_seed` | Arkham `9f4bbf6050df9dc4f675ab42c0f5fcb879c1a827`: `Session::new` in `src/gathering.rs` | #21, [Netrunner #22](https://github.com/joeloverbeck/netrunner-unfolded/issues/22) |
 | `unfolded-random`'s generator, index and shuffle | Arkham `4e7a014541ef46d8dc8185e2759a139480ea60e3`: `src/gathering.rs`, `src/gathering/runtime.rs` | `docs/governance.md`, third-consumer waiver |
 | `capture` | Arkham `617904319a7b260e496af61cc5390458c2b1ff6b`: `write_image` of `src/tabletop_capture.rs`, and the windowless surface and capture loop of `src/agent_seat.rs` | #38: the plugins without a window, from the four games' own; `OnSurface`, from the second-camera systems of Netrunner `df604944d3c7ad96b786df5edf6c0959e79733f2` (`src/tabletop/seat.rs`), Cuba Libre `c5f9cb8720e0f0e9068faea09d5579671be77e38` (`src/tabletop/seat.rs`) and mudsong (private); `when_ready`, from the seat's own wait (#33) |
+| `pipeline::is_ready` | Shared capture's finding, Arkham `856c8bce09ee535d247f06c04d1de03dae30f5b2` (`observe_image`, `observe_surface`), and Cuba Libre `53fa8f221b00961f5bbf5fb4862c46e27ed1bf5f` (`render_ready`) | #103 |
 | `seat` | Arkham `0b8e6fb3425174110446d6956cfa9bc38008e279`: `src/agent_seat.rs`, `src/agent_seat/socket.rs` | `scroll` #23; `start` #32; defaults #33 |
 | `seat::ui_target` | Arkham `71281007a41905bf25a95a29486e10fb11b0a83f`: `src/gathering_tabletop/seat.rs` | #15 |
 | `unfolded-seat-protocol` | Split from `seat` here | #34 |

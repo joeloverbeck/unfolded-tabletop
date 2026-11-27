@@ -31,6 +31,7 @@ terms used here.
 | `unfolded-tabletop::token`, feature `render` | Solid token bodies with a textured face | Bevy 0.20.0 |
 | `unfolded-tabletop::slab`, feature `render` | Solid slabs with an outward picture face on each side | Bevy 0.20.0 |
 | `unfolded-tabletop::loading`, feature `render` | Whether every required asset and its dependencies loaded | Bevy 0.20.0 |
+| `unfolded-tabletop::pipeline`, feature `render` | Whether the render pipeline cache is ready when sampled | Bevy 0.20.0 |
 | `unfolded-tabletop::printed`, feature `render` | Text rows printed as ink on flat planes in the world | Bevy 0.20.0 |
 | `unfolded-tabletop::label_anchor`, feature `render` | Keeping a UI node of your own over a world point or entity | Bevy 0.20.0 |
 | `unfolded-tabletop::window_size`, feature `render` | A log line for each size the primary window settles at | Bevy 0.20.0 |

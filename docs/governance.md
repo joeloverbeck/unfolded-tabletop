@@ -51,6 +51,7 @@ Two items of that spec's ticket [#199](https://github.com/joeloverbeck/cuba-libr
 | `unfolded-dev-tools` | Two-consumer specialization; `compare-captures` does not widen it, since Cuba Libre and mudsong run it from a checkout of this repository and neither pins nor depends on it | #27, #52 |
 | `unfolded-random`'s generator, index and shuffle | Third-consumer waiver | this file |
 | `capture` | Third-consumer waiver | this file |
+| `pipeline::is_ready` | [Cuba Libre extension accepted 2026-11-14](https://github.com/joeloverbeck/cuba-libre-unfolded/blob/38e988442dfa6ac287baf0a373e77fde5ac77764/docs/foundation/03-engineering-and-reuse.md#accepted-evid-6-waiver), for the render-cache checks in Arkham and Cuba Libre | #103 |
 | `slab` | Third-consumer waiver | #89 |
 | `seat`, `unfolded-seat-protocol` | Third-consumer waiver, read on 2026-11-13 as covering the seat as one mechanism | this file, #34 |
 | `unfolded-hover` | Cuba Libre extension | #18 |

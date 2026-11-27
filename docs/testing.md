@@ -38,7 +38,13 @@ Replace the body with the operation under investigation. The example prints the 
 
 ## What the host needs
 
-The tests need no graphics adapter, desktop, game assets or sibling checkout. Rustup selects the compiler and components in `rust-toolchain.toml`, and the committed lockfile fixes the dependencies. Beyond that:
+The default tests need no graphics adapter, desktop, game assets or sibling checkout. The ignored `tests/pipeline.rs` check requires a Vulkan render device and exercises Bevy's cache through an empty cache, successful compilation, outstanding work and terminal shader failure. Run it explicitly.
+
+```bash
+cargo test --locked --features render --test pipeline -- --ignored
+```
+
+Rustup selects the compiler and components in `rust-toolchain.toml`, and the committed lockfile fixes the dependencies. Beyond that:
 
 - **Network** on a cold Cargo cache, to fetch the locked dependencies.
 - **Bounded builds.** `.cargo/config.toml` sets four jobs and no debug info for every Cargo command run here, since unbounded parallel links of the Bevy test executables can exhaust a session's memory. The environment may override them; CI sets two jobs. Where several sessions share a machine, use `scripts/build-slot -- <command>` for heavy commands. It waits for a quiet window and reports queue and command durations separately (its header describes the thresholds).

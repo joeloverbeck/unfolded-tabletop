@@ -20,6 +20,8 @@ pub mod label_anchor;
 #[cfg(feature = "render")]
 pub mod loading;
 #[cfg(feature = "render")]
+pub mod pipeline;
+#[cfg(feature = "render")]
 pub mod printed;
 #[cfg(feature = "seat")]
 pub mod seat;
