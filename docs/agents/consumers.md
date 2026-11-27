@@ -29,7 +29,7 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools
   <out-dir>/<before case>.table.png <out-dir>/<after case>.table.png [--threshold 3]
 ```
 
-Record the "before" case with `--clean` from `main`, then the "after" case from the branch. For launch and capture verification, pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
+Record the "before" case with `--clean` from `main`, then the "after" case from the branch. Reuse the executable from the full check when it built the game at the captured revision. Keep its build log and preserve the baseline executable before rebuilding in the same target directory. For launch and capture verification, pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
 
 ## Compatibility checks
 
@@ -56,7 +56,7 @@ Otherwise, bring in the current consumer base, review the delta, and rerun the a
 - **Tools in a new worktree:** the first `scripts/tools` call builds `arkham-tools` into `target/agent-tools`, which takes about two minutes. Use the shared checkout's `scripts/build-slot -- scripts/tools <arguments>` from Arkham.
 - **Work-item limit:** none of its own.
 - **Pins a whole response:** `gathering_tabletop::seat::tests::nothing_hidden_appears_in_what_the_seat_reports` pins the response's top-level keys. A new response field changes it.
-- **Motion captures:** the seat alone advances its presentation clock, so `settle` with a step count stops a card's motion at the same presentation time on every run. Its `gathering_draw_review` example writes saves whose first choice starts the opening draws, a mulligan, an action draw and an encounter draw; take that choice in `held-start`, then alternate `{"op":"settle","steps":13}` and `capture` to compare a motion before and after (Cuba Libre #141).
+- **Motion captures.** Start from a `gathering_draw_review` save with its recorded revision, view and choice. For the action draw, activate `deck:tony` at that revision to open its menu, then activate the recorded draw choice. Capture during the turn after `{"op":"advance","steps":13}`. Advance by another fixed count long enough to land, then use `{"op":"settle","steps":0}` to confirm the table is settled before capturing the landing. Send the same requests in both runs. A short `settle` can return `unsettled` during motion, which makes `held-start --require-success` fail. [Draw review saves and routes](https://github.com/joeloverbeck/arkham-unfolded/blob/main/docs/experiments/gathering-setup.md#card-draw-review-preparation)
 
 ## Netrunner Unfolded
 
@@ -74,7 +74,7 @@ Otherwise, bring in the current consumer base, review the delta, and rerun the a
 - **Hover dwell:** resting on a map space starts its status dwell, and the seat refuses input as busy until it settles. `point` and `settle` before a `drag`, `scroll` or `activate` there.
 - **Kidnap die skip:** the die holds the table unsettled until it lands. While it is in the air, its adapter's `Game::interrupts` lets through an activation of the tray, `kidnap-die`, and Enter or Space naming `kidnap-die` in `"focused"`. All other input is refused as busy. `native_seat_skips_the_die_by_enter_space_or_a_click_on_the_tray` sends each of the three (#77).
 - **Loops:** `native_controls_hover_camera_finish_and_process_restarts` and `native_terror_bells_loop_seamlessly_out_of_step_and_hover_their_space` cross the water and Terror loops with `advance`, two steps a request, and check that each reply took its steps on a settled table (#62).
-- **Native capture:** the ignored native regression, `CUBA_TEST_CARDS=<cards> cargo test --locked --features tabletop --test native -- --ignored --test-threads=1`, captures through the seat. Set `CUBA_NATIVE_EVIDENCE` to a new directory.
+- **Native capture.** Run `CUBA_TEST_CARDS=<cards> scripts/heavy scripts/native --test-threads=1 <name-filter>` for a focused capture. The runner fails when the filter selects no regression. Set `CUBA_NATIVE_EVIDENCE` to a new directory and verify that the named regression ran and passed.
 - **Merge:** `gh pr merge --merge --match-head-commit <sha>`, after CI passes. `main` requires the branch to be up to date: when `main` moves, merge it in, run `scripts/check` again and wait for CI.
 - **Record:** each issue or pull request names the revisions of Arkham, mudsong, Netrunner and this repository that it inspected, the source locations, and a disposition (its foundation 3, "Before every feature"). Its pull request also names the constitution rules consulted.
 - **Work-item limit:** none of its own.

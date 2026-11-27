@@ -18,7 +18,7 @@ Choose evidence before editing. Exercise the changed behavior on its production 
 
 When changing queue admission, deadlines or shutdown in concurrent code, run the focused regression and review the ordering before starting full consumer checks. Trace when a request is admitted, when an observer can see it and which outcome wins when operations race. Resolve findings that could invalidate consumer evidence before running the full checks.
 
-When a producer change affects consumers, commit and check the producer, then push the candidate so Cargo can fetch its revision. Before merging the producer, use `move-pin` to pin each affected consumer's worktree to that revision and pass its checks there. Follow [Compatibility checks](../../../docs/agents/consumers.md#compatibility-checks) for consumers that need no adoption PR. After the producer merges, follow [Adopting the merged pin](../../../docs/agents/consumers.md#adopting-the-merged-pin) for consumer PRs.
+When a producer change affects consumers, commit and check the producer, then push the candidate so Cargo can fetch its revision. Wait for that check to pass before moving consumer pins, including when Cargo can fetch the candidate locally. Before merging the producer, use `move-pin` to pin each affected consumer's worktree to that revision and pass its checks there. Follow [Compatibility checks](../../../docs/agents/consumers.md#compatibility-checks) for consumers that need no adoption PR. After the producer merges, follow [Adopting the merged pin](../../../docs/agents/consumers.md#adopting-the-merged-pin) for consumer PRs.
 
 Call the Skill tool with "tdd" where possible, at pre-agreed seams.
 
