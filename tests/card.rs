@@ -473,3 +473,108 @@ fn a_seam_turns_its_faces_toward_and_away_from_the_light() {
         "unit normals"
     );
 }
+
+#[test]
+fn turning_card_matches_both_consumers_at_their_existing_pivots() {
+    use unfolded_tabletop::card::{CardPivot, TurningCard};
+
+    let cases = [
+        (
+            TurningCard::new(1.35, 1.89, 0.045, 0.005, 0.001),
+            CardPivot::Front,
+            [0., -0.0035, -0.007],
+            0.001,
+            1.35 * 0.045,
+            1.35,
+            1.89,
+        ),
+        (
+            TurningCard::new(0.063, 0.0903, 0.056, 0.0003, 0.00002),
+            CardPivot::Center,
+            [0.00017, 0., -0.00017],
+            0.00002,
+            0.063 * 0.056,
+            0.063,
+            0.0903,
+        ),
+    ];
+    let close = |actual: f32, expected: f32| {
+        // Allow the small floating-point drift from closing the mesh with a rotated face.
+        assert!((actual - expected).abs() < 2e-7, "{actual} != {expected}");
+    };
+    let eps = 1e-6;
+    for (card, pivot, offsets, clearance, radius, width, length) in cases {
+        let poses = card.poses(pivot);
+        for (pose, y) in [poses.front, poses.paper, poses.back]
+            .into_iter()
+            .zip(offsets)
+        {
+            assert!(pose.translation.abs_diff_eq(Vec3::Y * y, 1e-8));
+        }
+
+        let paper = positions(&card.paper_mesh());
+        let top = paper.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+        let bottom = paper.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+        close(
+            poses.front.translation.y - poses.paper.translation.y - top,
+            clearance,
+        );
+        close(
+            poses.paper.translation.y + bottom - poses.back.translation.y,
+            clearance,
+        );
+
+        let mesh = card.face_mesh();
+        let print = positions(&mesh);
+        let uv = uvs(&mesh);
+        let normal = normals(&mesh)[0];
+        let indices: Vec<_> = mesh.indices().unwrap().iter().collect();
+        let (triangles, remainder) = indices.as_chunks::<3>();
+        assert!(remainder.is_empty());
+        assert!(
+            print
+                .iter()
+                .any(|p| { p.abs_diff_eq(Vec3::new(width / 2., 0., length / 2. - radius), eps) })
+        );
+        for (pose, outward) in [(poses.front, Vec3::Y), (poses.back, Vec3::NEG_Y)] {
+            assert!((pose.rotation * normal).abs_diff_eq(outward, eps));
+            for triangle in triangles {
+                let [a, b, c] = triangle.map(|i| pose.transform_point(print[i]));
+                assert!((b - a).cross(c - a).dot(outward) > 0.);
+            }
+            let paper_surface = if outward.y > 0. { top } else { bottom };
+            let outline = &print[1..];
+            for point in outline {
+                let turned = pose.transform_point(*point);
+                assert!(
+                    paper.iter().any(|p| {
+                        p.abs_diff_eq(Vec3::new(turned.x, paper_surface, turned.z), eps)
+                    })
+                );
+            }
+        }
+
+        // When each print is up, a top-left mark stays left and a distinct bottom-right
+        // mark stays right. A half-turn about the length maps X and Y to their negatives.
+        for (marker, right, bottom) in [
+            (Vec2::new(0.11, 0.07), false, false),
+            (Vec2::new(0.76, 0.91), true, true),
+        ] {
+            let index = uv
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    a.distance_squared(marker)
+                        .total_cmp(&b.distance_squared(marker))
+                })
+                .unwrap()
+                .0;
+            let front = poses.front.transform_point(print[index]);
+            let back = poses.back.transform_point(print[index]);
+            assert_eq!(front.x > 0., right);
+            assert_eq!(front.z > 0., bottom);
+            assert_eq!(-back.x > 0., right);
+            assert_eq!(back.z > 0., bottom);
+        }
+    }
+}

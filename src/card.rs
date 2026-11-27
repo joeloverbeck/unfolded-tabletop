@@ -1,4 +1,8 @@
-//! Shared physical-card silhouette. UVs retain the entire original image scale.
+//! Shared physical-card geometry. UVs retain the entire original image scale.
+//!
+//! A [`TurningCard`] gives two outward prints and the paper between them the
+//! same rounded footprint. The game supplies the materials, attaches the
+//! parts to its own entities, and moves the card.
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -62,10 +66,14 @@ pub fn face_with_corners(width: f32, length: f32, corner_fraction: f32) -> Mesh 
 /// One card's solid: a flat side between its two faces, centered on the
 /// origin with its thickness `height` along Y.
 pub fn body(width: f32, height: f32, length: f32) -> Mesh {
+    body_with_corners(width, length, CORNER_FRACTION, height)
+}
+
+fn body_with_corners(width: f32, length: f32, corner_fraction: f32, height: f32) -> Mesh {
     solid(
         width,
         length,
-        CORNER_FRACTION,
+        corner_fraction,
         &[
             SidePoint {
                 inset: 0.,
@@ -77,6 +85,89 @@ pub fn body(width: f32, height: f32, length: f32) -> Mesh {
             },
         ],
     )
+}
+
+/// Which part of the card lies at the local origin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CardPivot {
+    /// The existing front print.
+    Front,
+    /// The center of the paper.
+    Center,
+}
+
+/// Where to put the paper and each print in the pivot's coordinates.
+pub struct TurningCardPoses {
+    /// Outward pose for the front print.
+    pub front: Transform,
+    /// Pose of the paper body.
+    pub paper: Transform,
+    /// Outward pose for the back print.
+    pub back: Transform,
+}
+
+/// One rounded footprint and the spacing of a card printed on both sides.
+///
+/// The prints share a mesh in XZ, with the image's top toward -Z. The back
+/// turns around Z so each image reads upright and left to right when it faces
+/// up after a turn around the card's length.
+pub struct TurningCard {
+    width: f32,
+    length: f32,
+    corner_fraction: f32,
+    paper_thickness: f32,
+    print_clearance: f32,
+}
+
+impl TurningCard {
+    /// Give positive finite dimensions, a corner fraction between zero and
+    /// one half, and positive clearance from each paper surface to its print.
+    /// These inputs are used as supplied.
+    pub const fn new(
+        width: f32,
+        length: f32,
+        corner_fraction: f32,
+        paper_thickness: f32,
+        print_clearance: f32,
+    ) -> Self {
+        Self {
+            width,
+            length,
+            corner_fraction,
+            paper_thickness,
+            print_clearance,
+        }
+    }
+
+    /// Mesh used by either print with its respective pose and material.
+    pub fn face_mesh(&self) -> Mesh {
+        face_with_corners(self.width, self.length, self.corner_fraction)
+    }
+
+    /// Solid paper mesh centered about its own origin.
+    pub fn paper_mesh(&self) -> Mesh {
+        body_with_corners(
+            self.width,
+            self.length,
+            self.corner_fraction,
+            self.paper_thickness,
+        )
+    }
+
+    /// Positions the prints just beyond the paper, relative to the pivot.
+    pub fn poses(&self, pivot: CardPivot) -> TurningCardPoses {
+        let offset = self.paper_thickness / 2. + self.print_clearance;
+        let center = match pivot {
+            CardPivot::Front => -offset,
+            CardPivot::Center => 0.,
+        };
+        TurningCardPoses {
+            front: Transform::from_xyz(0., center + offset, 0.),
+            paper: Transform::from_xyz(0., center, 0.),
+            back: Transform::from_xyz(0., center - offset, 0.)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::PI)),
+        }
+    }
 }
 
 /// How far above and below a seam the side starts to slope into its groove,
