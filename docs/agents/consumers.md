@@ -29,11 +29,23 @@ cargo run --manifest-path …/unfolded-tabletop/Cargo.toml -p unfolded-dev-tools
   <out-dir>/<before case>.table.png <out-dir>/<after case>.table.png [--threshold 3]
 ```
 
-Record the "before" case with `--clean` from `main`, then the "after" case from the branch. Reuse the executable from the full check when it built the game at the captured revision. Keep its build log and preserve the baseline executable before rebuilding in the same target directory. For launch and capture verification, pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep `<out-dir>` short: the socket path inside it holds at most 107 bytes. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
+Record the "before" case with `--clean` from `main`, then the "after" case from the branch. For each case, use the executable from the full check when its build log ties that executable to the captured revision. If the check did not build the game, build it in the same checkout and keep that build log.
+
+Before rebuilding in the same target directory, copy the baseline executable and verify its SHA-256 against the held-start record. Use that copy for baseline repeats. Set `baseline_executable` to the path that ran and `out_dir` and `baseline_case` to the output directory and case name passed to `held-start`.
+
+```sh
+baseline_copy="$out_dir/$baseline_case.executable"
+test ! -e "$baseline_copy" && test ! -L "$baseline_copy" &&
+  cp -p -- "$baseline_executable" "$baseline_copy" &&
+  baseline_sha=$(sed -n 's/^executable: .* sha256 //p' "$out_dir/$baseline_case.record") &&
+  printf '%s  %s\n' "$baseline_sha" "$baseline_copy" | sha256sum --check --status
+```
+
+Continue after the hash check passes. Pass `--require-success` so a failed exchange still leaves a record and fails the command. Keep the output directory short to fit the 107-byte socket path limit. Each game's held capture below was run on its real inputs on 2026-11-16 (#52).
 
 ## Compatibility checks
 
-For each consumer in scope that needs no adoption PR, move the pins in a throwaway worktree of its `origin/main` to the pushed producer head. Run its Verify command and record the producer head, consumer base, command and result in this repository's pull request. Use this route for every game when a change needs nothing of any game, as with the deprecated items in #68. These consumers take the change at their next production pin move.
+For each consumer in scope that needs no adoption PR, move the pins in a throwaway worktree of its `origin/main` to the pushed producer head. Run each Verify command in its own recorded session, one consumer at a time. Keep the producer head, consumer base, command, log and terminal result. Record the results in this repository's pull request. After an interruption, resume with the first incomplete command. Use this route for every game when a change needs nothing of any game, as with the deprecated items in #68. These consumers take the change at their next production pin move.
 
 ## Adopting the merged pin
 
@@ -48,7 +60,7 @@ Otherwise, bring in the current consumer base, review the delta, and rerun the a
 ## Arkham Unfolded
 
 - **Seat host:** keeps Bevy's pipelined rendering. A change to the render world is exercised only here.
-- **Verify:** `scripts/check`. It starts its own memory scope and checkout lock through `scripts/dev`, so run it bare: under another `systemd-run --scope` it fails at once with "Unit run-p… was already loaded", since `exec` keeps the process ID that names both scopes. For cache maintenance, Arkham’s explicit `scripts/tools target-prune --delete` acts on the owner's target even in a worktree with a private `CARGO_TARGET_DIR`. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands).
+- **Verify:** Record `scripts/check` with `scripts/tools record-check --output-dir <fresh-dir> -- scripts/check` and retain `run.json` and `check.log`. The check starts its own memory scope and checkout lock through `scripts/dev`. Run it outside another `systemd-run --scope` to avoid a duplicate unit name. For cache maintenance, Arkham’s explicit `scripts/tools target-prune --delete` acts on the owner's target even in a worktree with a private `CARGO_TARGET_DIR`. Its root manifest and `tools/Cargo.toml` both pin unfolded-tabletop; move them together. The real-table seat tests are ignored by default. Run them with `ARKHAM_GATHERING_TEST_ASSETS` set to the `asset_root` in `~/.config/arkham-unfolded/gathering.toml` (README, "Evidence limits", lists the commands). [Recorded checks](https://github.com/joeloverbeck/arkham-unfolded/blob/main/docs/agents/local-builds-and-checks.md)
 - **Held capture:** requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/arkham-tabletop --experiment gathering --agent-seat --save <fresh path>`. Compare with `--threshold 3`. If the comparison exceeds it, repeat with the same baseline executable and record the pixel count, maximum difference and bounds before attributing the change to the code. Batch form, with `capture` and `quit` requests on standard input, still works.
 - **One-shot capture:** the ignored art test captures the pouch through `capture::when_ready`. Name the test after `--`, not before it, and set `ARKHAM_POUCH_RENDER_DIR` to a directory that does not exist yet, which the test creates: `ARKHAM_GATHERING_TEST_ASSETS=<collection> ARKHAM_POUCH_RENDER_DIR=<new dir> scripts/dev cargo test --locked --features tabletop --lib -- --ignored --exact gathering_tabletop::art::tests::real_collection_loads_every_verified_image_font_and_pouch`.
 - **Merge:** after CI's "Rust checks" passes, use `scripts/tools merge-reviewed --pr <n> --head <sha> --base <main sha>`. Auto-close is off. Close an accepted issue with `scripts/tools publish comment --issue <n> --body-file <f> --close` (`docs/agents/github-administration.md`).
@@ -69,7 +81,7 @@ Otherwise, bring in the current consumer base, review the delta, and rerun the a
 ## Cuba Libre Unfolded
 
 - **Seat host:** pipelined rendering disabled at the seat. Its own admission waits on its render-world pipeline flag.
-- **Verify:** `scripts/check`. CI runs it on every pull request, and `main` requires it.
+- **Verify:** Run `scripts/heavy scripts/check` and retain the log and exit status. CI runs `scripts/check` on every pull request, and `main` requires it.
 - **Held capture:** run from its checkout, since its art resolves against the working directory: requests `--request '{"op":"settle"}' --request '{"op":"capture","path":"table.png"}'`, game command `target/debug/cuba-libre --cards <cards> --save <fresh path> --agent-seat`. Two starts of the unchanged table were identical.
 - **Hover dwell:** resting on a map space starts its status dwell, and the seat refuses input as busy until it settles. `point` and `settle` before a `drag`, `scroll` or `activate` there.
 - **Kidnap die skip:** the die holds the table unsettled until it lands. While it is in the air, its adapter's `Game::interrupts` lets through an activation of the tray, `kidnap-die`, and Enter or Space naming `kidnap-die` in `"focused"`. All other input is refused as busy. `native_seat_skips_the_die_by_enter_space_or_a_click_on_the_tray` sends each of the three (#77).
