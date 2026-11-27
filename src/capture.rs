@@ -138,12 +138,12 @@ impl Surface {
 #[derive(Component, Default, Clone, Copy, Debug)]
 pub struct OnSurface;
 
-/// Whether the render pipelines are ready, as the render world found them after its
-/// last frame through [`crate::pipeline::is_ready`]. [`install`] adds the finding
-/// while the host is built, before pipelined rendering can move the render world to a
-/// thread of its own, and [`when_ready`] waits on it before a capture, for the agent
-/// seat as for a capture with no seat, so that the capture omits nothing. A host with no render world compiles nothing: it is ready
-/// unless something reports otherwise, as a renderer that is a stand-in does.
+/// The render world's pipeline readiness after its last render step, sampled
+/// with [`crate::pipeline::is_ready`]. [`install`] sets up reporting while the
+/// host is built, before pipelined rendering can move the render world to
+/// another thread. [`when_ready`] checks the reported readiness and the
+/// caller's own condition before requesting a capture. A host without a render
+/// world starts ready. A stand-in renderer can report a different finding.
 #[derive(Resource, Clone)]
 pub struct Pipelines(Arc<AtomicBool>);
 
