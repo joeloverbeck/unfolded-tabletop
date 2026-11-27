@@ -38,7 +38,7 @@ Replace the body with the operation under investigation. The example prints the 
 
 ## What the host needs
 
-The default tests need no graphics adapter, desktop, game assets or sibling checkout. The ignored `tests/pipeline.rs` check requires a Vulkan render device and exercises Bevy's cache through an empty cache, successful compilation, outstanding work and terminal shader failure:
+The default tests need no graphics adapter, desktop, game assets or sibling checkout. The ignored `tests/pipeline.rs` check requires a Vulkan render device and exercises Bevy's cache through an empty cache, successful compilation, outstanding work and terminal shader failure. Run it explicitly.
 
 ```bash
 cargo test --locked --features render --test pipeline -- --ignored
