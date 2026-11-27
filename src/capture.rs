@@ -14,7 +14,7 @@ use bevy::{
     prelude::*,
     render::{
         Render, RenderApp,
-        render_resource::{CachedPipelineState, PipelineCache, TextureFormat},
+        render_resource::{PipelineCache, TextureFormat},
         renderer::render_system,
         view::screenshot::{Screenshot, ScreenshotCaptured},
     },
@@ -139,7 +139,7 @@ impl Surface {
 pub struct OnSurface;
 
 /// Whether the render pipelines are ready, as the render world found them after its
-/// last frame: none is queued and every one compiled. [`install`] adds the finding
+/// last frame through [`crate::pipeline::is_ready`]. [`install`] adds the finding
 /// while the host is built, before pipelined rendering can move the render world to a
 /// thread of its own, and [`when_ready`] waits on it before a capture, for the agent
 /// seat as for a capture with no seat, so that the capture omits nothing. A host with no render world compiles nothing: it is ready
@@ -169,12 +169,7 @@ impl Pipelines {
 
 /// The render world's finding after each frame it renders.
 fn find_pipelines(pipelines: Res<Pipelines>, cache: Res<PipelineCache>) {
-    pipelines.report(
-        cache.waiting_pipelines().next().is_none()
-            && cache
-                .pipelines()
-                .all(|pipeline| matches!(pipeline.state, CachedPipelineState::Ok(_))),
-    );
+    pipelines.report(crate::pipeline::is_ready(&cache));
 }
 
 /// Give the host a logical primary window with nothing behind it and an image for
