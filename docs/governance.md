@@ -36,6 +36,12 @@ On 2026-11-25 the owner [activated](https://github.com/joeloverbeck/cuba-libre-u
 
 Two items of that spec's ticket [#199](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/199) are in the agents' corrections and not in what the owner activated: `unfolded_seat_client::hosting` (item 3) and `agent_transport::Reply::hung_up` (item 11). The extension, as read on 2026-11-22, covers both under the [owner's decision of 2026-11-25](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/197#issuecomment-7161227757), recorded on cuba-libre-unfolded #197. Their rows say what each is and when it ends.
 
+## Baseball Highlights extension
+
+On 2026-11-27 the owner accepted an EVID-6 extension for Baseball Highlights Unfolded as the fifth game. It covers a concrete shared mechanism used by Baseball and at least one existing Unfolded game. Two real consumers let the games share an existing mechanism while preserving their own rules. They can still miss an incompatible assumption. [Baseball’s accepted foundation](https://github.com/joeloverbeck/baseball-highlights-unfolded/blob/9fde8a9ab796eb5da93dfb4902818729e3552a8a/docs/foundation/engineering.md#evid-6-extension-accepted-2026-11-27)
+
+For each extraction, identify the actual consuming paths, keep each game's policy in its adapter, verify every affected application and preserve a coordinated rollback. Merge the shared and affected consumer PRs and pull their main branches before dependent Baseball implementation. Reassess after two active hours per extraction, when another game adopts the mechanism, if the second real consumer disappears, or before general publication. Each migration still needs its own evidence and acceptance.
+
 ## Which boundary covers each mechanism
 
 | Mechanism | Boundary | Record |
