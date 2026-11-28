@@ -67,3 +67,46 @@ fn eligibility_changes_keep_time_already_rested_on_the_same_target() {
     hover.update(Some(1), false, Duration::ZERO, dwell);
     assert_eq!(hover.visible(), None);
 }
+
+#[test]
+fn a_dismissed_target_stays_closed_until_the_target_changes() {
+    let mut hover = Hover::default();
+    let dwell = Duration::from_millis(100);
+    hover.update(Some(1), true, Duration::ZERO, dwell);
+    hover.update(Some(1), true, dwell, dwell);
+    assert_eq!(hover.visible(), Some(&1));
+
+    hover.dismiss();
+    assert_eq!(hover.visible(), None);
+    assert!(!hover.waiting());
+    hover.update(Some(1), false, dwell, dwell);
+    hover.update(Some(1), true, dwell, dwell);
+    assert_eq!(hover.visible(), None);
+    assert!(!hover.waiting());
+
+    hover.update(Some(2), true, dwell, dwell);
+    assert_eq!(hover.visible(), None);
+    assert!(hover.waiting());
+    hover.update(Some(2), true, dwell, dwell);
+    assert_eq!(hover.visible(), Some(&2));
+}
+
+#[test]
+fn explicit_activation_can_rearm_a_dismissed_target() {
+    let mut hover = Hover::default();
+    let dwell = Duration::from_millis(400);
+    hover.update(Some(1), true, Duration::ZERO, dwell);
+    hover.update(Some(1), true, dwell, dwell);
+    hover.dismiss();
+
+    hover.rearm();
+    hover.update(Some(1), true, dwell, dwell);
+    assert_eq!(hover.visible(), None);
+    assert!(hover.waiting());
+    hover.update(Some(1), true, dwell, dwell);
+    assert_eq!(hover.visible(), Some(&1));
+
+    hover.rearm();
+    hover.update(Some(2), true, Duration::ZERO, dwell);
+    assert_eq!(hover.visible(), Some(&2));
+}
