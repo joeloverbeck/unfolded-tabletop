@@ -15,6 +15,7 @@ pub struct Hover<T> {
     rested: Duration,
     visible: Option<T>,
     waiting: bool,
+    dismissed: bool,
 }
 
 impl<T> Default for Hover<T> {
@@ -24,6 +25,7 @@ impl<T> Default for Hover<T> {
             rested: Duration::ZERO,
             visible: None,
             waiting: false,
+            dismissed: false,
         }
     }
 }
@@ -41,10 +43,14 @@ impl<T: Clone + PartialEq> Hover<T> {
         dwell: Duration,
     ) {
         if target == self.pointed_at {
+            if self.dismissed {
+                return;
+            }
             self.rested += elapsed;
         } else {
             self.pointed_at = target;
             self.rested = Duration::ZERO;
+            self.dismissed = false;
         }
         let over = self.pointed_at.clone().filter(|_| eligible);
         let ready = over
@@ -52,6 +58,22 @@ impl<T: Clone + PartialEq> Hover<T> {
             .filter(|_| self.visible.is_some() || self.rested >= dwell);
         self.waiting = over.is_some() && ready.is_none();
         self.visible = ready;
+    }
+
+    /// Closes the reading view and cancels pending dwell. The current target
+    /// stays closed until an update observes a different target or no target.
+    pub fn dismiss(&mut self) {
+        self.dismissed = self.pointed_at.is_some();
+        self.visible = None;
+        self.waiting = false;
+    }
+
+    /// Allows an explicitly activated target to start a fresh dwell after
+    /// dismissal. Does nothing while the lifecycle is already active.
+    pub fn rearm(&mut self) {
+        if self.dismissed {
+            *self = Self::default();
+        }
     }
 
     /// Identity whose reading view should be displayed, if any.

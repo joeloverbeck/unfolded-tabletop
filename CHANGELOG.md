@@ -6,6 +6,8 @@ What a consumer needs to know when it moves its pin. Each entry names the issue 
 
 ## Unreleased
 
+- Call `Hover::dismiss` to close a reading and suppress it while the logical target stays the same. A target change starts a fresh dwell. `Hover::rearm` also lets an explicit activation clear suppression and start a fresh dwell ([Baseball Highlights #29](https://github.com/joeloverbeck/baseball-highlights-unfolded/issues/29)).
+
 - Call `pipeline::is_ready` with the render world's `PipelineCache` to make the same readiness decision as shared capture at your own sampling point (#103).
 
 - Use `card::TurningCard` to make matching print and paper meshes from one rounded footprint and place them around the existing front print or paper center. The game supplies the materials and attaches the meshes using the returned poses (#102).

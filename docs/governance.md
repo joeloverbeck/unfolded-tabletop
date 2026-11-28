@@ -61,6 +61,7 @@ For each extraction, identify the actual consuming paths, keep each game's polic
 | `slab` | Third-consumer waiver | #89 |
 | `seat`, `unfolded-seat-protocol` | Third-consumer waiver, read on 2026-11-13 as covering the seat as one mechanism | this file, #34 |
 | `unfolded-hover` | Cuba Libre extension | #18 |
+| `Hover::dismiss` and `Hover::rearm` | Baseball Highlights extension for dismissal shared by Cuba Libre’s card tags and the planned manager review in Baseball Highlights | [Baseball Highlights #29](https://github.com/joeloverbeck/baseball-highlights-unfolded/issues/29) |
 | `unfolded-seat-client` | Cuba Libre extension | #17, [Arkham #241](https://github.com/joeloverbeck/arkham-unfolded/issues/241) |
 | `label_anchor` | Cuba Libre extension, beside the two-consumer specialization | #35 |
 | `label_anchor::OtherView` | Cuba Libre extension, as the owner authorized on 2026-11-23: a marker on `label_anchor`, which Arkham, Netrunner and Cuba Libre use. No game marks a camera with it: its consumer is Cuba Libre's card tray, ticket [#143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) of its spec [#137](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/137), not yet built. If #137 ends without #143 using it, it is removed | [Cuba Libre #143](https://github.com/joeloverbeck/cuba-libre-unfolded/issues/143) |
